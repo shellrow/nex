@@ -1,0 +1,32 @@
+[package]
+name = "xenet"
+version = "0.1.0"
+edition = "2021"
+authors = ["shellrow <shellrow@protonmail.com>"]
+description = "Cross-platform networking library for Rust."
+repository = "https://github.com/shellrow/xenet"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+xenet-core = { path = "../xenet-core", version = "0.1.0" }
+xenet-sys = { path = "../xenet-sys", version = "0.1.0" }
+xenet-macro = { path = "../xenet-macro", version = "0.1.0" }
+xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.1.0" }
+xenet-packet = { path = "../xenet-packet", version = "0.1.0" }
+xenet-datalink = { path = "../xenet-datalink", version = "0.1.0" }
+xenet-socket = { path = "../xenet-socket", version = "0.1.0" }
+
+[features]
+pcap = ["xenet-datalink/pcap"]
+serde = ["xenet-core/serde", "xenet-packet/serde", "xenet-datalink/serde"]
+
+[[example]]
+name = "dump"
+path = "../examples/dump.rs"
+
+[[example]]
+name = "ip_to_mac"
+path = "../examples/ip_to_mac.rs"

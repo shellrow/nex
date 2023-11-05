@@ -1,0 +1,23 @@
+[package]
+name = "xenet-macro"
+version = "0.1.0"
+edition = "2021"
+authors = ["shellrow <shellrow@protonmail.com>"]
+description = "A macro for generating packet structures used by xenet-packet. Not intended for direct use."
+repository = "https://github.com/shellrow/xenet"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+regex = "1.9"
+
+[dev-dependencies]
+xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.1.0" }

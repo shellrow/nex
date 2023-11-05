@@ -1,0 +1,19 @@
+[package]
+name = "xenet-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["shellrow <shellrow@protonmail.com>"]
+description = "Core networking library for xenet."
+repository = "https://github.com/shellrow/xenet"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+default-net = { version = "0.20.0", optional = true }
+
+[features]
+default = ["dep:default-net"]
+serde = ["dep:serde", "default-net/serde"]

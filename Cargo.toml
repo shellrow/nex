@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = [
+    "xenet",
+    "xenet-core",
+    "xenet-datalink",
+    "xenet-macro",
+    "xenet-macro-helper",
+    "xenet-packet",
+    "xenet-socket",
+    "xenet-sys",
+    "xenet-packet-builder"
+]
