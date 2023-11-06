@@ -11,6 +11,17 @@ use xenet_macro::packet;
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
 
+/// Represents the Ethernet Header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EthernetHeader {
+    /// Destination MAC address
+    pub destination: MacAddr,
+    /// Source MAC address
+    pub source: MacAddr,
+    /// EtherType
+    pub ethertype: EtherType,
+}
+
 /// Represents an Ethernet packet.
 #[packet]
 pub struct Ethernet {

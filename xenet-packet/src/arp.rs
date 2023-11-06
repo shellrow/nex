@@ -14,6 +14,20 @@ pub const ARP_HEADER_LEN: usize = 28;
 /// ARP Minimum Packet Length.
 pub const ARP_PACKET_LEN: usize = ETHERNET_HEADER_LEN + ARP_HEADER_LEN;
 
+/// Represents the ARP header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArpHeader {
+    pub hardware_type: ArpHardwareType,
+    pub protocol_type: EtherType,
+    pub hw_addr_len: u8,
+    pub proto_addr_len: u8,
+    pub operation: ArpOperation,
+    pub sender_hw_addr: MacAddr,
+    pub sender_proto_addr: Ipv4Addr,
+    pub target_hw_addr: MacAddr,
+    pub target_proto_addr: Ipv4Addr,
+}
+
 /// Represents the ARP operation types.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

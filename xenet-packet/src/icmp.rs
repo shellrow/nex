@@ -16,6 +16,14 @@ pub const ICMPV4_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV4_HEADER_LEN + ICM
 /// ICMPv4 IP Packet Length.
 pub const ICMPV4_IP_PACKET_LEN: usize = IPV4_HEADER_LEN + ICMPV4_HEADER_LEN;
 
+/// Represents the ICMPv4 header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IcmpHeader {
+    pub icmp_type: IcmpType,
+    pub icmp_code: IcmpCode,
+    pub checksum: u16be,
+}
+
 /// Represents the "ICMP type" header field.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

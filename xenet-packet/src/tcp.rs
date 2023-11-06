@@ -22,6 +22,29 @@ pub const TCP_OPTION_MAX_LEN: usize = 40;
 /// Maximum TCP Header Length (with options)
 pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
 
+/// Represents the TCP option header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TcpOptionHeader {
+    kind: TcpOptionKind,
+    length: Option<u8>,
+}
+
+/// Represents the TCP header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TcpHeader {
+    pub source: u16be,
+    pub destination: u16be,
+    pub sequence: u32be,
+    pub acknowledgement: u32be,
+    pub data_offset: u4,
+    pub reserved: u4,
+    pub flags: u8,
+    pub window: u16be,
+    pub checksum: u16be,
+    pub urgent_ptr: u16be,
+    pub options: Vec<TcpOptionHeader>,
+}
+
 /// Represents the TCP Flags
 /// <https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-header-flags>
 #[allow(non_snake_case)]

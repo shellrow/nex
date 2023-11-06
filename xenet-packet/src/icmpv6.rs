@@ -18,6 +18,14 @@ pub const ICMPV6_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ICM
 /// ICMPv6 IP Packet Length.
 pub const ICMPV6_IP_PACKET_LEN: usize = IPV6_HEADER_LEN + ICMPV6_HEADER_LEN;
 
+/// Represents the ICMPv6 header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Icmpv6Header {
+    pub icmpv6_type: Icmpv6Type,
+    pub icmpv6_code: Icmpv6Code,
+    pub checksum: u16be,
+}
+
 /// Represents the ICMPv6 types.
 /// <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml>
 #[repr(u8)]

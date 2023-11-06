@@ -15,6 +15,34 @@ pub const IPV4_HEADER_LEN: usize = MutableIpv4Packet::minimum_packet_size();
 /// IPv4 Header Byte Unit (32 bits)
 pub const IPV4_HEADER_LENGTH_BYTE_UNITS: usize = 4;
 
+/// Represents the IPv4 option header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ipv4OptionHeader {
+    copied: u1,
+    class: u2,
+    number: Ipv4OptionType,
+    length: Option<u8>,
+}
+
+/// Represents the IPv4 header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ipv4Header {
+    pub version: u4,
+    pub header_length: u4,
+    pub dscp: u6,
+    pub ecn: u2,
+    pub total_length: u16be,
+    pub identification: u16be,
+    pub flags: u3,
+    pub fragment_offset: u13be,
+    pub ttl: u8,
+    pub next_level_protocol: IpNextLevelProtocol,
+    pub checksum: u16be,
+    pub source: Ipv4Addr,
+    pub destination: Ipv4Addr,
+    pub options: Vec<Ipv4OptionHeader>,
+}
+
 /// Represents the IPv4 header flags.
 #[allow(non_snake_case)]
 #[allow(non_upper_case_globals)]

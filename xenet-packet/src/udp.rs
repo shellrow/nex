@@ -14,6 +14,15 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 /// UDP Header Length
 pub const UDP_HEADER_LEN: usize = 8;
 
+/// Represents the UDP header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UdpHeader {
+    pub source: u16be,
+    pub destination: u16be,
+    pub length: u16be,
+    pub checksum: u16be,
+}
+
 /// Represents a UDP Packet.
 #[packet]
 pub struct Udp {

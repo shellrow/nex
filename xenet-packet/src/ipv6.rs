@@ -12,6 +12,19 @@ use std::net::Ipv6Addr;
 /// IPv6 Header Length.
 pub const IPV6_HEADER_LEN: usize = MutableIpv6Packet::minimum_packet_size();
 
+/// Represents the IPv6 header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ipv6Header {
+    pub version: u4,
+    pub traffic_class: u8,
+    pub flow_label: u20be,
+    pub payload_length: u16be,
+    pub next_header: IpNextLevelProtocol,
+    pub hop_limit: u8,
+    pub source: Ipv6Addr,
+    pub destination: Ipv6Addr,
+}
+
 /// Represents an IPv6 Packet.
 #[packet]
 pub struct Ipv6 {
