@@ -19,6 +19,17 @@ pub mod socket {
     pub use xenet_socket::*;
 }
 
+/// Utilities for working with Packet with high-level APIs.
+/// For more low-level APIs, use `packet`, `datalink`, and `socket` modules instead
+pub mod util {
+    pub mod packet_builder {
+        pub use xenet_packet_builder::*;
+    }
+    pub mod packet_capture {
+        pub use xenet_cap::*;
+    }
+}
+
 pub fn is_supported_os() -> bool {
     cfg!(target_os = "linux")
         || cfg!(target_os = "windows")

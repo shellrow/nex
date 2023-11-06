@@ -9,5 +9,6 @@ members = [
     "xenet-packet",
     "xenet-socket",
     "xenet-sys",
-    "xenet-packet-builder"
+    "xenet-packet-builder",
+    "xenet-cap"
 ]

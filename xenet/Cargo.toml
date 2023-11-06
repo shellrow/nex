@@ -18,6 +18,8 @@ xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.1.0" }
 xenet-packet = { path = "../xenet-packet", version = "0.1.0" }
 xenet-datalink = { path = "../xenet-datalink", version = "0.1.0" }
 xenet-socket = { path = "../xenet-socket", version = "0.1.0" }
+xenet-packet-builder = { path = "../xenet-packet-builder", version = "0.1.0" }
+xenet-cap = { path = "../xenet-cap", version = "0.1.0" }
 
 [features]
 pcap = ["xenet-datalink/pcap"]
