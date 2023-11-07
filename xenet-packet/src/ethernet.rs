@@ -22,6 +22,31 @@ pub struct EthernetHeader {
     pub ethertype: EtherType,
 }
 
+impl EthernetHeader {
+    /// Construct an Ethernet header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<EthernetHeader, String> {
+        if packet.len() < ETHERNET_HEADER_LEN {
+            return Err("Packet is too small for Ethernet header".to_string());
+        }
+        match EthernetPacket::new(packet) {
+            Some(ethernet_packet) => Ok(EthernetHeader {
+                destination: ethernet_packet.get_destination(),
+                source: ethernet_packet.get_source(),
+                ethertype: ethernet_packet.get_ethertype(),
+            }),
+            None => Err("Failed to parse Ethernet packet".to_string()),
+        }
+    }
+    /// Construct an Ethernet header from a EthernetPacket.
+    pub(crate) fn from_packet(ethernet_packet: &EthernetPacket) -> EthernetHeader {
+        EthernetHeader {
+            destination: ethernet_packet.get_destination(),
+            source: ethernet_packet.get_source(),
+            ethertype: ethernet_packet.get_ethertype(),
+        }
+    }
+}
+
 /// Represents an Ethernet packet.
 #[packet]
 pub struct Ethernet {

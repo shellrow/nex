@@ -28,6 +28,43 @@ pub struct ArpHeader {
     pub target_proto_addr: Ipv4Addr,
 }
 
+impl ArpHeader {
+    /// Construct an ARP header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<ArpHeader, String> {
+        if packet.len() < ARP_HEADER_LEN {
+            return Err("Packet is too small for ARP header".to_string());
+        }
+        match ArpPacket::new(packet) {
+            Some(arp_packet) => Ok(ArpHeader {
+                hardware_type: arp_packet.get_hardware_type(),
+                protocol_type: arp_packet.get_protocol_type(),
+                hw_addr_len: arp_packet.get_hw_addr_len(),
+                proto_addr_len: arp_packet.get_proto_addr_len(),
+                operation: arp_packet.get_operation(),
+                sender_hw_addr: arp_packet.get_sender_hw_addr(),
+                sender_proto_addr: arp_packet.get_sender_proto_addr(),
+                target_hw_addr: arp_packet.get_target_hw_addr(),
+                target_proto_addr: arp_packet.get_target_proto_addr(),
+            }),
+            None => Err("Failed to parse ARP packet".to_string()),
+        }
+    }
+    /// Construct an ARP header from an ArpPacket.
+    pub(crate) fn from_packet(packet: &ArpPacket) -> ArpHeader {
+        ArpHeader {
+            hardware_type: packet.get_hardware_type(),
+            protocol_type: packet.get_protocol_type(),
+            hw_addr_len: packet.get_hw_addr_len(),
+            proto_addr_len: packet.get_proto_addr_len(),
+            operation: packet.get_operation(),
+            sender_hw_addr: packet.get_sender_hw_addr(),
+            sender_proto_addr: packet.get_sender_proto_addr(),
+            target_hw_addr: packet.get_target_hw_addr(),
+            target_proto_addr: packet.get_target_proto_addr(),
+        }
+    }
+}
+
 /// Represents the ARP operation types.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

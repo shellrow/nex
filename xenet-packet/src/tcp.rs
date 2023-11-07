@@ -45,6 +45,59 @@ pub struct TcpHeader {
     pub options: Vec<TcpOptionHeader>,
 }
 
+impl TcpHeader {
+    /// Construct a TCP header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<TcpHeader, String> {
+        if packet.len() < TCP_HEADER_LEN {
+            return Err("Packet is too small for TCP header".to_string());
+        }
+        match TcpPacket::new(packet) {
+            Some(tcp_packet) => Ok(TcpHeader {
+                source: tcp_packet.get_source(),
+                destination: tcp_packet.get_destination(),
+                sequence: tcp_packet.get_sequence(),
+                acknowledgement: tcp_packet.get_acknowledgement(),
+                data_offset: tcp_packet.get_data_offset(),
+                reserved: tcp_packet.get_reserved(),
+                flags: tcp_packet.get_flags(),
+                window: tcp_packet.get_window(),
+                checksum: tcp_packet.get_checksum(),
+                urgent_ptr: tcp_packet.get_urgent_ptr(),
+                options: tcp_packet
+                    .get_options_iter()
+                    .map(|opt| TcpOptionHeader {
+                        kind: opt.get_kind(),
+                        length: opt.get_length_raw().first().cloned(),
+                    })
+                    .collect(),
+            }),
+            None => Err("Failed to parse TCP packet".to_string()),
+        }
+    }
+    /// Construct a TCP header from a TcpPacket.
+    pub(crate) fn from_packet(tcp_packet: &TcpPacket) -> TcpHeader {
+        TcpHeader {
+            source: tcp_packet.get_source(),
+            destination: tcp_packet.get_destination(),
+            sequence: tcp_packet.get_sequence(),
+            acknowledgement: tcp_packet.get_acknowledgement(),
+            data_offset: tcp_packet.get_data_offset(),
+            reserved: tcp_packet.get_reserved(),
+            flags: tcp_packet.get_flags(),
+            window: tcp_packet.get_window(),
+            checksum: tcp_packet.get_checksum(),
+            urgent_ptr: tcp_packet.get_urgent_ptr(),
+            options: tcp_packet
+                .get_options_iter()
+                .map(|opt| TcpOptionHeader {
+                    kind: opt.get_kind(),
+                    length: opt.get_length_raw().first().cloned(),
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Represents the TCP Flags
 /// <https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-header-flags>
 #[allow(non_snake_case)]

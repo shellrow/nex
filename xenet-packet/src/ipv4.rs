@@ -43,6 +43,67 @@ pub struct Ipv4Header {
     pub options: Vec<Ipv4OptionHeader>,
 }
 
+impl Ipv4Header {
+    /// Construct an IPv4 header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<Ipv4Header, String> {
+        if packet.len() < IPV4_HEADER_LEN {
+            return Err("Packet is too small for IPv4 header".to_string());
+        }
+        match Ipv4Packet::new(packet) {
+            Some(ipv4_packet) => Ok(Ipv4Header {
+                version: ipv4_packet.get_version(),
+                header_length: ipv4_packet.get_header_length(),
+                dscp: ipv4_packet.get_dscp(),
+                ecn: ipv4_packet.get_ecn(),
+                total_length: ipv4_packet.get_total_length(),
+                identification: ipv4_packet.get_identification(),
+                flags: ipv4_packet.get_flags(),
+                fragment_offset: ipv4_packet.get_fragment_offset(),
+                ttl: ipv4_packet.get_ttl(),
+                next_level_protocol: ipv4_packet.get_next_level_protocol(),
+                checksum: ipv4_packet.get_checksum(),
+                source: ipv4_packet.get_source(),
+                destination: ipv4_packet.get_destination(),
+                options: ipv4_packet.get_options_iter().map(|o| {
+                    Ipv4OptionHeader {
+                        copied: o.get_copied(),
+                        class: o.get_class(),
+                        number: o.get_number(),
+                        length: o.get_length().first().cloned(),
+                    }
+                }).collect(),
+            }),
+            None => Err("Failed to parse IPv4 packet".to_string()),
+        }
+    }
+    /// Construct an IPv4 header from a Ipv4Packet.
+    pub(crate) fn from_packet(ipv4_packet: &Ipv4Packet) -> Ipv4Header {
+        Ipv4Header {
+            version: ipv4_packet.get_version(),
+            header_length: ipv4_packet.get_header_length(),
+            dscp: ipv4_packet.get_dscp(),
+            ecn: ipv4_packet.get_ecn(),
+            total_length: ipv4_packet.get_total_length(),
+            identification: ipv4_packet.get_identification(),
+            flags: ipv4_packet.get_flags(),
+            fragment_offset: ipv4_packet.get_fragment_offset(),
+            ttl: ipv4_packet.get_ttl(),
+            next_level_protocol: ipv4_packet.get_next_level_protocol(),
+            checksum: ipv4_packet.get_checksum(),
+            source: ipv4_packet.get_source(),
+            destination: ipv4_packet.get_destination(),
+            options: ipv4_packet.get_options_iter().map(|o| {
+                Ipv4OptionHeader {
+                    copied: o.get_copied(),
+                    class: o.get_class(),
+                    number: o.get_number(),
+                    length: o.get_length().first().cloned(),
+                }
+            }).collect(),
+        }
+    }
+}
+
 /// Represents the IPv4 header flags.
 #[allow(non_snake_case)]
 #[allow(non_upper_case_globals)]

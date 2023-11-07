@@ -25,6 +25,41 @@ pub struct Ipv6Header {
     pub destination: Ipv6Addr,
 }
 
+impl Ipv6Header {
+    /// Construct an IPv6 header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<Ipv6Header, String> {
+        if packet.len() < IPV6_HEADER_LEN {
+            return Err("Packet is too small for IPv6 header".to_string());
+        }
+        match Ipv6Packet::new(packet) {
+            Some(ipv6_packet) => Ok(Ipv6Header {
+                version: ipv6_packet.get_version(),
+                traffic_class: ipv6_packet.get_traffic_class(),
+                flow_label: ipv6_packet.get_flow_label(),
+                payload_length: ipv6_packet.get_payload_length(),
+                next_header: ipv6_packet.get_next_header(),
+                hop_limit: ipv6_packet.get_hop_limit(),
+                source: ipv6_packet.get_source(),
+                destination: ipv6_packet.get_destination(),
+            }),
+            None => Err("Failed to parse IPv6 packet".to_string()),
+        }
+    }
+    /// Construct an IPv6 header from a Ipv6Packet.
+    pub(crate) fn from_packet(ipv6_packet: &Ipv6Packet) -> Ipv6Header {
+        Ipv6Header {
+            version: ipv6_packet.get_version(),
+            traffic_class: ipv6_packet.get_traffic_class(),
+            flow_label: ipv6_packet.get_flow_label(),
+            payload_length: ipv6_packet.get_payload_length(),
+            next_header: ipv6_packet.get_next_header(),
+            hop_limit: ipv6_packet.get_hop_limit(),
+            source: ipv6_packet.get_source(),
+            destination: ipv6_packet.get_destination(),
+        }
+    }
+}
+
 /// Represents an IPv6 Packet.
 #[packet]
 pub struct Ipv6 {

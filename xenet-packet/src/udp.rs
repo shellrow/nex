@@ -23,6 +23,33 @@ pub struct UdpHeader {
     pub checksum: u16be,
 }
 
+impl UdpHeader {
+    /// Construct a UDP header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<UdpHeader, String> {
+        if packet.len() < UDP_HEADER_LEN {
+            return Err("Packet is too small for UDP header".to_string());
+        }
+        match UdpPacket::new(packet) {
+            Some(udp_packet) => Ok(UdpHeader {
+                source: udp_packet.get_source(),
+                destination: udp_packet.get_destination(),
+                length: udp_packet.get_length(),
+                checksum: udp_packet.get_checksum(),
+            }),
+            None => Err("Failed to parse UDP packet".to_string()),
+        }
+    }
+    /// Construct a UDP header from a UdpPacket.
+    pub(crate) fn from_packet(udp_packet: &UdpPacket) -> UdpHeader {
+        UdpHeader {
+            source: udp_packet.get_source(),
+            destination: udp_packet.get_destination(),
+            length: udp_packet.get_length(),
+            checksum: udp_packet.get_checksum(),
+        }
+    }
+}
+
 /// Represents a UDP Packet.
 #[packet]
 pub struct Udp {

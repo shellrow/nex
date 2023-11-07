@@ -24,6 +24,31 @@ pub struct IcmpHeader {
     pub checksum: u16be,
 }
 
+impl IcmpHeader {
+    /// Construct an ICMPv4 header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<IcmpHeader, String> {
+        if packet.len() < ICMPV4_HEADER_LEN {
+            return Err("Packet is too small for ICMPv4 header".to_string());
+        }
+        match IcmpPacket::new(packet) {
+            Some(icmp_packet) => Ok(IcmpHeader {
+                icmp_type: icmp_packet.get_icmp_type(),
+                icmp_code: icmp_packet.get_icmp_code(),
+                checksum: icmp_packet.get_checksum(),
+            }),
+            None => Err("Failed to parse ICMPv4 packet".to_string()),
+        }
+    }
+    /// Construct an ICMPv4 header from a IcmpPacket.
+    pub(crate) fn from_packet(icmp_packet: &IcmpPacket) -> IcmpHeader {
+        IcmpHeader {
+            icmp_type: icmp_packet.get_icmp_type(),
+            icmp_code: icmp_packet.get_icmp_code(),
+            checksum: icmp_packet.get_checksum(),
+        }
+    }
+}
+
 /// Represents the "ICMP type" header field.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

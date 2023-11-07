@@ -26,6 +26,31 @@ pub struct Icmpv6Header {
     pub checksum: u16be,
 }
 
+impl Icmpv6Header {
+    /// Construct an ICMPv6 header from a byte slice.
+    pub fn from_bytes(packet: &[u8]) -> Result<Icmpv6Header, String> {
+        if packet.len() < ICMPV6_HEADER_LEN {
+            return Err("Packet is too small for ICMPv6 header".to_string());
+        }
+        match Icmpv6Packet::new(packet) {
+            Some(icmpv6_packet) => Ok(Icmpv6Header {
+                icmpv6_type: icmpv6_packet.get_icmpv6_type(),
+                icmpv6_code: icmpv6_packet.get_icmpv6_code(),
+                checksum: icmpv6_packet.get_checksum(),
+            }),
+            None => Err("Failed to parse ICMPv6 packet".to_string()),
+        }
+    }
+    /// Construct an ICMPv6 header from a Icmpv6Packet.
+    pub(crate) fn from_packet(icmpv6_packet: &Icmpv6Packet) -> Icmpv6Header {
+        Icmpv6Header {
+            icmpv6_type: icmpv6_packet.get_icmpv6_type(),
+            icmpv6_code: icmpv6_packet.get_icmpv6_code(),
+            checksum: icmpv6_packet.get_checksum(),
+        }
+    }
+}
+
 /// Represents the ICMPv6 types.
 /// <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml>
 #[repr(u8)]
