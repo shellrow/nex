@@ -192,12 +192,10 @@ pub trait DataLinkSender: Send {
     /// Send a packet.
     ///
     /// This may require an additional copy compared to `build_and_send`, depending on the
-    /// operating system being used. The second parameter is currently ignored, however
-    /// `None` should be passed.
-    fn send_to(
+    /// operating system being used.
+    fn send(
         &mut self,
-        packet: &[u8],
-        dst: Option<interface::Interface>,
+        packet: &[u8]
     ) -> Option<io::Result<()>>;
 }
 

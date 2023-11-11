@@ -200,7 +200,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 
     #[inline]
-    fn send_to(&mut self, packet: &[u8], _dst: Option<Interface>) -> Option<io::Result<()>> {
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         self.build_and_send(1, packet.len(), &mut |eh: &mut [u8]| {
             eh.copy_from_slice(packet);
         })

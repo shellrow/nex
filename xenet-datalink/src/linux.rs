@@ -226,7 +226,6 @@ struct DataLinkSenderImpl {
 }
 
 impl DataLinkSender for DataLinkSenderImpl {
-    // FIXME Layer 3
     #[inline]
     fn build_and_send(
         &mut self,
@@ -283,7 +282,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 
     #[inline]
-    fn send_to(&mut self, packet: &[u8], _dst: Option<Interface>) -> Option<io::Result<()>> {
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         unsafe {
             libc::FD_ZERO(&mut self.fd_set as *mut libc::fd_set);
             libc::FD_SET(self.socket.fd, &mut self.fd_set as *mut libc::fd_set);

@@ -299,7 +299,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 
     #[inline]
-    fn send_to(&mut self, packet: &[u8], _dst: Option<Interface>) -> Option<io::Result<()>> {
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         // If we're sending on the loopback device, discard the ethernet header.
         // The OS will prepend the packet with 4 bytes set to AF_INET.
         let offset = if self.loopback {
@@ -322,7 +322,6 @@ impl DataLinkSender for DataLinkSenderImpl {
             )
         };
         if ret == -1 {
-            // Error occurred!
             return Some(Err(io::Error::last_os_error()));
         } else if ret == 0 {
             return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));

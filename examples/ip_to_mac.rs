@@ -37,22 +37,42 @@ const PKT_NDP_OFFSET: usize = PKT_IP6_OFFSET + PKT_IP6_SIZE;
 const PKT_MIN_ARP_RESP_SIZE: usize = PKT_ETH_SIZE + PKT_ARP_SIZE;
 const PKT_MIN_NDP_RESP_SIZE: usize = PKT_ETH_SIZE + PKT_IP6_SIZE + PKT_NDP_ADV_SIZE;
 
-const USAGE: &str = "USAGE: arp_packet <NETWORK INTERFACE> <TARGET IP>";
+const USAGE: &str = "USAGE: ip_to_mac <TARGET IP> <NETWORK INTERFACE>";
 
 fn main() {
-    let mut args = env::args().skip(1);
-    let Some(iface_name) = args.next() else {
-        eprintln!("{USAGE}");
-        process::exit(1);
+    let mut args = env::args();
+    let interface: Interface = match args.nth(2) {
+        Some(n) => {
+            // Use interface specified by user
+            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interface: Interface = interfaces
+                .into_iter()
+                .find(|interface| interface.name == n)
+                .expect("Failed to get interface information");
+            interface
+        }
+        None => {
+            // Use default interface
+            match Interface::default() {
+                Ok(interface) => interface,
+                Err(e) => {
+                    println!("Failed to get default interface: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
     };
-
-    let Some(target_ip) = args.next() else {
-        eprintln!("{USAGE}");
-        process::exit(1);
-    };
-
-    let target_mac = get_mac(&iface_name, target_ip.parse().unwrap()).unwrap();
-    println!("Target MAC address: {}", target_mac);
+    match env::args().nth(1) {
+        Some(target_ip) => {
+            let mac = get_mac(&interface, target_ip.parse().unwrap()).unwrap();
+            println!("Target MAC address: {}", mac);
+        },
+        None => {
+            println!("Failed to get target ip");
+            eprintln!("{USAGE}");
+            process::exit(1);
+        }
+    }
 }
 
 /// Simple error types for this demo
@@ -65,16 +85,8 @@ pub enum Error {
 }
 
 /// Given an IPv4 or IPv6 address and an interface name
-pub fn get_mac(ifname: &str, ip: IpAddr) -> Result<MacAddr, Error> {
-    let interfaces = xenet::net::interface::get_interfaces();
-
-    let interface = interfaces
-        .into_iter()
-        .find(|iface| iface.name == ifname)
-        .ok_or_else(|| Error::Interface(ifname.into()))?;
-
+pub fn get_mac(interface: &Interface, ip: IpAddr) -> Result<MacAddr, Error> {
     println!("Source MAC address: {}", interface.mac_addr.unwrap());
-
     match ip {
         IpAddr::V4(ipv4) => get_mac_via_arp(&interface, ipv4),
         IpAddr::V6(ipv6) => get_mac_via_ndp(&interface, ipv6),
@@ -121,7 +133,7 @@ fn get_mac_via_arp(interface: &Interface, target_ipv4: Ipv4Addr) -> Result<MacAd
     let start = Instant::now();
 
     // Send to the broadcast address
-    sender.send_to(&pkt_buf, None).unwrap().unwrap();
+    sender.send(&pkt_buf).unwrap().unwrap();
     eprintln!("Sent ARP request");
 
     // Zero buffer for sanity check
@@ -213,7 +225,7 @@ fn get_mac_via_ndp(interface: &Interface, target_ipv6: Ipv6Addr) -> Result<MacAd
     let start = Instant::now();
 
     // Send to the broadcast address
-    sender.send_to(&pkt_buf, None).unwrap().unwrap();
+    sender.send(&pkt_buf).unwrap().unwrap();
     eprintln!("Sent NDP request");
 
     // Zero buffer for sanity check

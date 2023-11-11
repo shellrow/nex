@@ -111,7 +111,7 @@ impl DataLinkSender for MockDataLinkSender {
         Some(Ok(()))
     }
 
-    fn send_to(&mut self, packet: &[u8], _dst: Option<Interface>) -> Option<io::Result<()>> {
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         let buffer = packet.to_vec();
         self.sender.send(buffer.into_boxed_slice()).unwrap_or(());
         Some(Ok(()))
@@ -238,7 +238,7 @@ mod tests {
         buffer[1] = 34;
         buffer[18] = 76;
 
-        tx.send_to(&buffer, None).unwrap().unwrap();
+        tx.send(&buffer).unwrap().unwrap();
         let pkg = read_handle
             .try_recv()
             .expect("Expected one packet to be sent");

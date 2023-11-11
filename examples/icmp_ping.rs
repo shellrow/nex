@@ -15,8 +15,10 @@ use xenet::packet::ip::IpNextLevelProtocol;
 use xenet::packet::icmp::IcmpType;
 use xenet::util::packet_builder::icmp::IcmpPacketBuilder;
 
+const USAGE: &str = "USAGE: icmp_ping <TARGET IP> <NETWORK INTERFACE>";
+
 fn main() {
-    let interface: Interface = match env::args().nth(1) {
+    let interface: Interface = match env::args().nth(2) {
         Some(n) => {
             // Use interface specified by user
             let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
@@ -37,9 +39,26 @@ fn main() {
             }
         }
     };
+    let dst_ip: Ipv4Addr = match env::args().nth(1) {
+        Some(target_ip) => {
+            match target_ip.parse::<Ipv4Addr>() {
+                Ok(ip) => ip,
+                Err(e) => {
+                    println!("Failed to parse target ip: {}", e);
+                    eprintln!("{USAGE}");
+                    process::exit(1);
+                }
+            }
+        },
+        None => {
+            println!("Failed to get target ip");
+            eprintln!("{USAGE}");
+            process::exit(1);
+        }
+    };
     let use_tun: bool = interface.is_tun();
     let src_ip: Ipv4Addr = interface.ipv4[0].addr;
-    let dst_ip: Ipv4Addr = Ipv4Addr::new(1, 1, 1, 1);
+    //let dst_ip: Ipv4Addr = Ipv4Addr::new(1, 1, 1, 1);
     // Create a channel to sned/receive packet
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
@@ -63,7 +82,7 @@ fn main() {
 
     // Send ICMP Echo Request packets to 1.1.1.1
     let packet: Vec<u8> = if use_tun {packet_builder.ip_packet()} else {packet_builder.packet()};
-    match tx.send_to(&packet, None) {
+    match tx.send(&packet) {
         Some(_) => println!("Packet sent"),
         None => println!("Failed to send packet"),
     }

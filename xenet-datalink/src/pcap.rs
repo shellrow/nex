@@ -151,10 +151,9 @@ impl DataLinkSender for InvalidDataLinkSenderImpl {
     }
 
     #[inline]
-    fn send_to(
+    fn send(
         &mut self,
-        _packet: &[u8],
-        _dst: Option<NetworkInterface>,
+        _packet: &[u8]
     ) -> Option<io::Result<()>> {
         None
     }
