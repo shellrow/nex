@@ -44,3 +44,7 @@ path = "../examples/icmp_ping.rs"
 [[example]]
 name = "tcp_ping"
 path = "../examples/tcp_ping.rs"
+
+[[example]]
+name = "udp_ping"
+path = "../examples/udp_ping.rs"
