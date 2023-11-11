@@ -36,3 +36,7 @@ path = "../examples/ip_to_mac.rs"
 [[example]]
 name = "parse_frame"
 path = "../examples/parse_frame.rs"
+
+[[example]]
+name = "icmp_ping"
+path = "../examples/icmp_ping.rs"
