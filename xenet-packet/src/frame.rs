@@ -1,6 +1,7 @@
+use xenet_core::mac::MacAddr;
 use xenet_macro_helper::packet::Packet;
 
-use crate::ethernet::{EthernetPacket, EtherType};
+use crate::ethernet::{MutableEthernetPacket, EthernetPacket, EtherType};
 use crate::ethernet::EthernetHeader;
 use crate::arp::{ArpHeader, ArpPacket};
 use crate::ip::IpNextLevelProtocol;
@@ -34,6 +35,35 @@ pub struct TransportLayer {
     pub udp: Option<UdpHeader>,
 }
 
+/// Parse options.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseOption {
+    /// Parse from IP packet.
+    pub from_ip_packet: bool,
+    /// Offset of the packet.
+    /// If `from_ip_packet` is true, this value is the offset of the IP packet.
+    pub offset: usize,
+}
+
+impl ParseOption {
+    /// Construct a new ParseOption.
+    pub fn new(from_ip_packet: bool, offset: usize) -> ParseOption {
+        ParseOption {
+            from_ip_packet,
+            offset,
+        }
+    }
+}
+
+impl Default for ParseOption {
+    fn default() -> Self {
+        ParseOption {
+            from_ip_packet: false,
+            offset: 0,
+        }
+    }
+}
+
 /// Represents a packet frame.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame<'a> {
@@ -50,8 +80,8 @@ pub struct Frame<'a> {
 
 impl Frame<'_> {
     /// Construct a frame from a byte slice.
-    pub fn from_bytes(packet: &[u8]) -> Frame {
-        parse_packet(packet)
+    pub fn from_bytes(packet: &[u8], option: ParseOption) -> Frame {
+        parse_packet(packet, option)
     }
     /// Return packet as a byte array.
     pub fn packet(&self) -> Vec<u8> {
@@ -63,7 +93,27 @@ impl Frame<'_> {
     }
 }
 
-fn parse_packet(packet: &[u8]) -> Frame {
+fn create_dummy_ethernet_packet(packet: &[u8], offset: usize) -> Vec<u8> {
+    let mut buf: Vec<u8> = Vec::with_capacity(packet.len() - offset + 14);
+    let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
+    let version = Ipv4Packet::new(&packet[offset..])
+                            .unwrap()
+                            .get_version();
+    if version == 4 {
+        fake_ethernet_frame.set_destination(MacAddr(0, 0, 0, 0, 0, 0));
+        fake_ethernet_frame.set_source(MacAddr(0, 0, 0, 0, 0, 0));
+        fake_ethernet_frame.set_ethertype(EtherType::Ipv4);
+        fake_ethernet_frame.set_payload(&packet[offset..]);
+    } else if version == 6 {
+        fake_ethernet_frame.set_destination(MacAddr(0, 0, 0, 0, 0, 0));
+        fake_ethernet_frame.set_source(MacAddr(0, 0, 0, 0, 0, 0));
+        fake_ethernet_frame.set_ethertype(EtherType::Ipv6);
+        fake_ethernet_frame.set_payload(&packet[offset..]);
+    }
+    fake_ethernet_frame.packet().to_vec()
+}
+
+fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
     let mut frame = Frame {
         datalink: None,
         ip: None,
@@ -71,7 +121,13 @@ fn parse_packet(packet: &[u8]) -> Frame {
         payload: &[],
         packet: packet,
     };
-    let ethernet_packet = EthernetPacket::new(packet).unwrap();
+    let dummy_ethernet_packet: Vec<u8>;
+    let ethernet_packet = if option.from_ip_packet {
+        dummy_ethernet_packet = create_dummy_ethernet_packet(packet, option.offset);
+        EthernetPacket::new(&dummy_ethernet_packet).unwrap()
+    } else { 
+        EthernetPacket::new(packet).unwrap()
+    };
     let ethernet_header = EthernetHeader::from_packet(&ethernet_packet);
     frame.datalink = Some(DatalinkLayer{
         ethernet: Some(ethernet_header),
