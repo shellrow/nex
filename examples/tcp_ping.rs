@@ -1,3 +1,11 @@
+//! This example sends TCP SYN packet to the target socket and waits for TCP SYN+ACK or RST+ACK packet.
+//! 
+//! e.g.
+//! 
+//! IPv4: tcp_ping 1.1.1.1:80 eth0
+//! 
+//! IPv6: tcp_ping "[2606:4700:4700::1111]:80" eth0
+
 use std::env;
 use std::net::{IpAddr, SocketAddr};
 use std::process;
@@ -14,7 +22,7 @@ use xenet::util::packet_builder::tcp::TcpPacketBuilder;
 use xenet::datalink::Channel::Ethernet;
 use xenet::net::mac::MacAddr;
 
-const USAGE: &str = "USAGE: tcp_ping <TARGET IP> <NETWORK INTERFACE>";
+const USAGE: &str = "USAGE: tcp_ping <TARGET SOCKETADDR> <NETWORK INTERFACE>";
 
 fn main() {
     let interface: Interface = match env::args().nth(2) {
@@ -39,19 +47,19 @@ fn main() {
         }
     };
     let use_tun: bool = interface.is_tun();
-    let dst_ip: IpAddr = match env::args().nth(1) {
-        Some(target_ip) => {
-            match target_ip.parse::<IpAddr>() {
-                Ok(ip) => ip,
+    let target_socket: SocketAddr = match env::args().nth(1) {
+        Some(target_socket_str) => {
+            match target_socket_str.parse() {
+                Ok(socket) => socket,
                 Err(e) => {
-                    println!("Failed to parse target ip: {}", e);
+                    println!("Failed to parse target socket: {}", e);
                     eprintln!("{USAGE}");
                     process::exit(1);
                 }
             }
         }
         None => {
-            println!("Failed to get target ip");
+            println!("Failed to get target socket");
             eprintln!("{USAGE}");
             process::exit(1);
         }
@@ -69,14 +77,14 @@ fn main() {
     let ethernet_packet_builder = EthernetPacketBuilder {
         src_mac: if use_tun { MacAddr::zero() } else { interface.mac_addr.clone().unwrap() },
         dst_mac: if use_tun { MacAddr::zero() } else { interface.gateway.clone().unwrap().mac_addr },
-        ether_type: match dst_ip {
+        ether_type: match target_socket.ip() {
             IpAddr::V4(_) => EtherType::Ipv4,
             IpAddr::V6(_) => EtherType::Ipv6,
         },
     };
     packet_builder.set_ethernet(ethernet_packet_builder);
 
-    match dst_ip {
+    match target_socket.ip() {
         IpAddr::V4(dst_ipv4) => {
             match interface.ipv4.get(0) {
                 Some(src_ipv4) => {
@@ -111,13 +119,13 @@ fn main() {
         }
     }
 
-    match dst_ip {
-        IpAddr::V4(dst_ipv4) => {
+    match target_socket.ip() {
+        IpAddr::V4(_dst_ipv4) => {
             match interface.ipv4.get(0) {
                 Some(src_ipv4) => {
                     let mut tcp_packet_builder = TcpPacketBuilder::new(
                         SocketAddr::new(IpAddr::V4(src_ipv4.addr), 53443),
-                        SocketAddr::new(IpAddr::V4(dst_ipv4), 80),
+                        target_socket,
                     );
                     tcp_packet_builder.flags = TcpFlags::SYN;
                     tcp_packet_builder.options = vec![
@@ -135,12 +143,12 @@ fn main() {
                 }
             }
         }
-        IpAddr::V6(dst_ipv6) => {
+        IpAddr::V6(_dst_ipv6) => {
             match interface.ipv6.iter().find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr)) {
                 Some(src_ipv6) => {
                     let mut tcp_packet_builder = TcpPacketBuilder::new(
                         SocketAddr::new(IpAddr::V6(src_ipv6.addr), 53443),
-                        SocketAddr::new(IpAddr::V6(dst_ipv6), 80),
+                        target_socket,
                     );
                     tcp_packet_builder.flags = TcpFlags::SYN;
                     tcp_packet_builder.options = vec![
@@ -168,12 +176,12 @@ fn main() {
     }
 
     // Receive TCP SYN+ACK
-    println!("Waiting for TCP SYN+ACK... ");
+    println!("Waiting for TCP SYN+ACK or RST+ACK packet...");
     loop {
         match rx.next() {
             Ok(packet) => {
                 let frame = xenet::packet::frame::Frame::from_bytes(&packet, Default::default());
-                // Check each layer. If the packet is TCP SYN+ACK, print it out
+                // Check each layer. If the packet is TCP SYN+ACK or RST+ACK, print it out
                 if let Some(ip_layer) = &frame.ip {
                     if let Some(transport_layer) = &frame.transport {
                         if let Some(tcp_packet) = &transport_layer.tcp {
@@ -182,6 +190,15 @@ fn main() {
                                     println!("Received TCP SYN+ACK packet from {}:{}", ipv4.source, tcp_packet.source);
                                 } else if let Some(ipv6) = &ip_layer.ipv6 {
                                     println!("Received TCP SYN+ACK packet from {}:{}", ipv6.source, tcp_packet.source);
+                                }
+                                println!("---- Interface: {}, Total Length: {} bytes ----", interface.name, packet.len());
+                                println!("Packet Frame: {:?}", frame);
+                                break;
+                            }else if tcp_packet.flags == TcpFlags::RST | TcpFlags::ACK {
+                                if let Some(ipv4) = &ip_layer.ipv4 {
+                                    println!("Received TCP RST+ACK packet from {}:{}", ipv4.source, tcp_packet.source);
+                                } else if let Some(ipv6) = &ip_layer.ipv6 {
+                                    println!("Received TCP RST+ACK packet from {}:{}", ipv6.source, tcp_packet.source);
                                 }
                                 println!("---- Interface: {}, Total Length: {} bytes ----", interface.name, packet.len());
                                 println!("Packet Frame: {:?}", frame);
