@@ -25,9 +25,6 @@ pub mod util {
     pub mod packet_builder {
         pub use xenet_packet_builder::*;
     }
-    pub mod packet_capture {
-        pub use xenet_cap::*;
-    }
 }
 
 pub fn is_supported_os() -> bool {
