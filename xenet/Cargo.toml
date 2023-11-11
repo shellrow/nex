@@ -32,3 +32,7 @@ path = "../examples/dump.rs"
 [[example]]
 name = "ip_to_mac"
 path = "../examples/ip_to_mac.rs"
+
+[[example]]
+name = "parse_frame"
+path = "../examples/parse_frame.rs"
