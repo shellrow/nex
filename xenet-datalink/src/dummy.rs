@@ -1,4 +1,4 @@
-//! Support for sending and receiving data link layer packets on a fake network managed
+//! Support for sending and receiving data link layer packets on a dummy network managed
 //! by in memory FIFO queues. Useful for writing tests.
 
 use xenet_core::interface::{Interface, InterfaceType};
@@ -11,7 +11,7 @@ use std::thread;
 use std::time;
 
 /// Configuration for the dummy datalink backend. Contains `std::sync::mpsc`
-/// channels that are used to communicate with the fake network.
+/// channels that are used to communicate with the dummy network.
 #[derive(Debug)]
 pub struct Config {
     receiver: Receiver<io::Result<Box<[u8]>>>,
@@ -42,13 +42,13 @@ impl Config {
         }
     }
 
-    /// Get the `Sender` handle that can inject packets in the fake network.
+    /// Get the `Sender` handle that can inject packets in the dummy network.
     /// Only usable with `Config`s generated from `default()`.
     pub fn inject_handle(&mut self) -> Option<Sender<io::Result<Box<[u8]>>>> {
         self.inject_handle.take()
     }
 
-    /// Get the `Receiver` handle where packets sent to the fake network can be read.
+    /// Get the `Receiver` handle where packets sent to the dummy network can be read.
     /// Only usable with `Config`s generated from `default()`.
     pub fn read_handle(&mut self) -> Option<Receiver<Box<[u8]>>> {
         self.read_handle.take()
@@ -78,7 +78,7 @@ impl Default for Config {
 }
 
 /// Create a data link channel backed by FIFO queues. Useful for debugging and testing.
-/// See `Config` for how to inject and read packets on this fake network.
+/// See `Config` for how to inject and read packets on this dummy network.
 pub fn channel(_: &Interface, config: Config) -> io::Result<super::Channel> {
     let sender = Box::new(MockDataLinkSender {
         sender: config.sender,
@@ -138,7 +138,7 @@ impl DataLinkReceiver for MockDataLinkReceiver {
                 }
             }
             Err(_) => {
-                // The channel supplying fake packets is broken. The user lost/destroyed their
+                // The channel supplying dummy packets is broken. The user lost/destroyed their
                 // inject_handle. This means there will never be any more packets sent to this
                 // dummy network. To simulate an idle network we block and sleep forever here.
                 loop {
@@ -149,12 +149,12 @@ impl DataLinkReceiver for MockDataLinkReceiver {
     }
 }
 
-/// Get three fake interfaces generated with `dummy_interface(0..3)`.
+/// Get three dummy interfaces generated with `dummy_interface(0..3)`.
 pub fn interfaces() -> Vec<Interface> {
     (0..3).map(|i| dummy_interface(i)).collect()
 }
 
-/// Generates a fake `NetworkInterface`.
+/// Generates a dummy `NetworkInterface`.
 /// The name of the interface will be `ethX` where X is the integer `i`.
 /// The index will be `i`.
 /// The MAC will be `01:02:03:04:05:i`.
