@@ -37,7 +37,7 @@ impl Drop for WinPcapPacket {
     }
 }
 
-/// The WinPcap's specific configuration.
+/// The Npcap / WinPcap's specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
@@ -65,7 +65,7 @@ impl Default for Config {
     }
 }
 
-/// Create a datalink channel using the WinPcap library.
+/// Create a datalink channel using the Npcap / WinPcap library.
 #[inline]
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let mut read_buffer = Vec::new();
