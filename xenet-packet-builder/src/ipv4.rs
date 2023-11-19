@@ -1,10 +1,10 @@
+use std::net::Ipv4Addr;
+use xenet_packet::ip::IpNextLevelProtocol;
 use xenet_packet::ipv4::Ipv4Flags;
 use xenet_packet::ipv4::MutableIpv4Packet;
 use xenet_packet::ipv4::IPV4_HEADER_LEN;
 use xenet_packet::ipv4::IPV4_HEADER_LENGTH_BYTE_UNITS;
 use xenet_packet::Packet;
-use xenet_packet::ip::IpNextLevelProtocol;
-use std::net::Ipv4Addr;
 
 /// Build IPv4 packet.
 pub(crate) fn build_ipv4_packet(

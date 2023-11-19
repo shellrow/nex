@@ -5,11 +5,11 @@ use crate::PrimitiveValues;
 
 use alloc::vec::Vec;
 
+use crate::ethernet::ETHERNET_HEADER_LEN;
+use crate::ipv6::IPV6_HEADER_LEN;
 use std::net::Ipv6Addr;
 use xenet_macro::packet;
 use xenet_macro_helper::types::*;
-use crate::ethernet::ETHERNET_HEADER_LEN;
-use crate::ipv6::IPV6_HEADER_LEN;
 
 /// ICMPv6 Header Length.
 pub const ICMPV6_HEADER_LEN: usize = echo_request::MutableEchoRequestPacket::minimum_packet_size();

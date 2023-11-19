@@ -1,13 +1,11 @@
-use xenet_packet::Packet;
+use std::net::Ipv4Addr;
 use xenet_packet::icmp::echo_request::MutableEchoRequestPacket;
 use xenet_packet::icmp::IcmpType;
 use xenet_packet::icmp::ICMPV4_HEADER_LEN;
-use std::net::Ipv4Addr;
+use xenet_packet::Packet;
 
 /// Build ICMP packet.
-pub(crate) fn build_icmp_echo_packet(
-    icmp_packet: &mut MutableEchoRequestPacket,
-) {
+pub(crate) fn build_icmp_echo_packet(icmp_packet: &mut MutableEchoRequestPacket) {
     icmp_packet.set_icmp_type(IcmpType::EchoRequest);
     icmp_packet.set_sequence_number(rand::random::<u16>());
     icmp_packet.set_identifier(rand::random::<u16>());

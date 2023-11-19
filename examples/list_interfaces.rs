@@ -1,7 +1,7 @@
 //! This example shows all interfaces and their properties.
-//! 
-//! If you want to focus on network interfaces, 
-//! you can use the default-net 
+//!
+//! If you want to focus on network interfaces,
+//! you can use the default-net
 //! https://github.com/shellrow/default-net
 
 fn main() {

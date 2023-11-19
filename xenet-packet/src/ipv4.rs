@@ -64,14 +64,15 @@ impl Ipv4Header {
                 checksum: ipv4_packet.get_checksum(),
                 source: ipv4_packet.get_source(),
                 destination: ipv4_packet.get_destination(),
-                options: ipv4_packet.get_options_iter().map(|o| {
-                    Ipv4OptionHeader {
+                options: ipv4_packet
+                    .get_options_iter()
+                    .map(|o| Ipv4OptionHeader {
                         copied: o.get_copied(),
                         class: o.get_class(),
                         number: o.get_number(),
                         length: o.get_length().first().cloned(),
-                    }
-                }).collect(),
+                    })
+                    .collect(),
             }),
             None => Err("Failed to parse IPv4 packet".to_string()),
         }
@@ -92,14 +93,15 @@ impl Ipv4Header {
             checksum: ipv4_packet.get_checksum(),
             source: ipv4_packet.get_source(),
             destination: ipv4_packet.get_destination(),
-            options: ipv4_packet.get_options_iter().map(|o| {
-                Ipv4OptionHeader {
+            options: ipv4_packet
+                .get_options_iter()
+                .map(|o| Ipv4OptionHeader {
                     copied: o.get_copied(),
                     class: o.get_class(),
                     number: o.get_number(),
                     length: o.get_length().first().cloned(),
-                }
-            }).collect(),
+                })
+                .collect(),
         }
     }
 }

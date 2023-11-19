@@ -1,10 +1,10 @@
-use xenet_packet::Packet;
 use std::net::{IpAddr, SocketAddr};
 use xenet_packet::ethernet::ETHERNET_HEADER_LEN;
 use xenet_packet::ipv4::IPV4_HEADER_LEN;
 use xenet_packet::ipv6::IPV6_HEADER_LEN;
-use xenet_packet::udp::UDP_HEADER_LEN;
 use xenet_packet::udp::MutableUdpPacket;
+use xenet_packet::udp::UDP_HEADER_LEN;
+use xenet_packet::Packet;
 
 /// UDP BASE Destination Port. Usually used for traceroute.
 pub const UDP_BASE_DST_PORT: u16 = 33435;
@@ -32,7 +32,7 @@ pub(crate) fn build_udp_packet(
         IpAddr::V4(src_ip) => match dst_ip {
             IpAddr::V4(dst_ip) => {
                 let checksum =
-                xenet_packet::udp::ipv4_checksum(&udp_packet.to_immutable(), &src_ip, &dst_ip);
+                    xenet_packet::udp::ipv4_checksum(&udp_packet.to_immutable(), &src_ip, &dst_ip);
                 udp_packet.set_checksum(checksum);
             }
             IpAddr::V6(_) => {}
@@ -41,7 +41,7 @@ pub(crate) fn build_udp_packet(
             IpAddr::V4(_) => {}
             IpAddr::V6(dst_ip) => {
                 let checksum =
-                xenet_packet::udp::ipv6_checksum(&udp_packet.to_immutable(), &src_ip, &dst_ip);
+                    xenet_packet::udp::ipv6_checksum(&udp_packet.to_immutable(), &src_ip, &dst_ip);
                 udp_packet.set_checksum(checksum);
             }
         },

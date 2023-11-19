@@ -1,5 +1,5 @@
 use xenet_core::mac::MacAddr;
-use xenet_packet::ethernet::{ETHERNET_HEADER_LEN, EtherType, MutableEthernetPacket};
+use xenet_packet::ethernet::{EtherType, MutableEthernetPacket, ETHERNET_HEADER_LEN};
 use xenet_packet::ipv4::Ipv4Packet;
 use xenet_packet::Packet;
 
@@ -29,10 +29,7 @@ pub(crate) fn build_ethernet_packet(
 }
 
 /// Build Ethernet ARP packet.
-pub(crate) fn build_ethernet_arp_packet(
-    eth_packet: &mut MutableEthernetPacket,
-    src_mac: MacAddr,
-) {
+pub(crate) fn build_ethernet_arp_packet(eth_packet: &mut MutableEthernetPacket, src_mac: MacAddr) {
     eth_packet.set_source(src_mac);
     eth_packet.set_destination(MacAddr::broadcast());
     eth_packet.set_ethertype(EtherType::Arp);
@@ -61,8 +58,7 @@ impl EthernetPacketBuilder {
     /// Build Ethernet packet and return bytes.
     pub fn build(&self) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![0; ETHERNET_HEADER_LEN];
-        let mut eth_packet =
-            MutableEthernetPacket::new(&mut buffer).unwrap();
+        let mut eth_packet = MutableEthernetPacket::new(&mut buffer).unwrap();
         build_ethernet_packet(
             &mut eth_packet,
             self.src_mac.clone(),
@@ -75,10 +71,7 @@ impl EthernetPacketBuilder {
 
 /// Create Dummy Ethernet Frame.
 #[allow(dead_code)]
-pub(crate) fn create_dummy_ethernet_frame(
-    payload_offset: usize,
-    packet: &[u8],
-) -> Vec<u8> {
+pub(crate) fn create_dummy_ethernet_frame(payload_offset: usize, packet: &[u8]) -> Vec<u8> {
     if packet.len() <= payload_offset {
         return packet.to_vec();
     }
@@ -88,12 +81,11 @@ pub(crate) fn create_dummy_ethernet_frame(
     let dst_mac: MacAddr = MacAddr::zero();
     let mut ether_type: EtherType = EtherType::Unknown(0);
     let mut eth_packet = MutableEthernetPacket::new(&mut buffer).unwrap();
-    if let Some (ip_packet) = Ipv4Packet::new(&packet[payload_offset..]) {
+    if let Some(ip_packet) = Ipv4Packet::new(&packet[payload_offset..]) {
         let version = ip_packet.get_version();
         if version == 4 {
             ether_type = EtherType::Ipv4;
-        }
-        else if version == 6 {
+        } else if version == 6 {
             ether_type = EtherType::Ipv6;
         }
     }

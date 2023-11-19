@@ -1,11 +1,11 @@
+use std::net::Ipv4Addr;
 use xenet_core::mac::MacAddr;
-use xenet_packet::Packet;
-use xenet_packet::arp::MutableArpPacket;
 use xenet_packet::arp::ArpHardwareType;
 use xenet_packet::arp::ArpOperation;
+use xenet_packet::arp::MutableArpPacket;
 use xenet_packet::arp::ARP_HEADER_LEN;
 use xenet_packet::ethernet::EtherType;
-use std::net::Ipv4Addr;
+use xenet_packet::Packet;
 
 /// Build ARP packet.
 pub(crate) fn build_arp_packet(

@@ -193,10 +193,7 @@ pub trait DataLinkSender: Send {
     ///
     /// This may require an additional copy compared to `build_and_send`, depending on the
     /// operating system being used.
-    fn send(
-        &mut self,
-        packet: &[u8]
-    ) -> Option<io::Result<()>>;
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>>;
 }
 
 /// Structure for receiving packets at the data link layer. Should be constructed using

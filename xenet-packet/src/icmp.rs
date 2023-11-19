@@ -4,10 +4,10 @@ use crate::PrimitiveValues;
 
 use alloc::vec::Vec;
 
-use xenet_macro::packet;
-use xenet_macro_helper::types::*;
 use crate::ethernet::ETHERNET_HEADER_LEN;
 use crate::ipv4::IPV4_HEADER_LEN;
+use xenet_macro::packet;
+use xenet_macro_helper::types::*;
 
 /// ICMPv4 Header Length.
 pub const ICMPV4_HEADER_LEN: usize = echo_request::MutableEchoRequestPacket::minimum_packet_size();

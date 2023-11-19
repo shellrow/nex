@@ -1,10 +1,10 @@
-use xenet_packet::Packet;
+use std::net::{IpAddr, SocketAddr};
 use xenet_packet::ethernet::ETHERNET_HEADER_LEN;
 use xenet_packet::ipv4::IPV4_HEADER_LEN;
 use xenet_packet::ipv6::IPV6_HEADER_LEN;
-use xenet_packet::tcp::{TCP_HEADER_LEN, TcpFlags, TcpOption, MutableTcpPacket};
-use std::net::{IpAddr, SocketAddr};
 use xenet_packet::tcp::TCP_MIN_DATA_OFFSET;
+use xenet_packet::tcp::{MutableTcpPacket, TcpFlags, TcpOption, TCP_HEADER_LEN};
+use xenet_packet::Packet;
 
 /// Default TCP Option Length.
 pub const TCP_DEFAULT_OPTION_LEN: usize = 12;
@@ -13,19 +13,23 @@ pub const DEFAULT_SRC_PORT: u16 = 53443;
 /// TCP (IPv4) Minimum Packet Length.
 pub const TCPV4_MINIMUM_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV4_HEADER_LEN + TCP_HEADER_LEN;
 /// TCP (IPv4) Default Packet Length.
-pub const TCPV4_DEFAULT_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV4_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
+pub const TCPV4_DEFAULT_PACKET_LEN: usize =
+    ETHERNET_HEADER_LEN + IPV4_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
 /// TCP (IPv4) Minimum IP Packet Length.
 pub const TCPV4_MINIMUM_IP_PACKET_LEN: usize = IPV4_HEADER_LEN + TCP_HEADER_LEN;
 /// TCP (IPv4) Default IP Packet Length.
-pub const TCPV4_DEFAULT_IP_PACKET_LEN: usize = IPV4_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
+pub const TCPV4_DEFAULT_IP_PACKET_LEN: usize =
+    IPV4_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
 /// TCP (IPv6) Minimum Packet Length.
 pub const TCPV6_MINIMUM_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + TCP_HEADER_LEN;
 /// TCP (IPv6) Default Packet Length.
-pub const TCPV6_DEFAULT_PACKET_LEN: usize = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
+pub const TCPV6_DEFAULT_PACKET_LEN: usize =
+    ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
 /// TCP (IPv6) Minimum IP Packet Length.
 pub const TCPV6_MINIMUM_IP_PACKET_LEN: usize = IPV6_HEADER_LEN + TCP_HEADER_LEN;
 /// TCP (IPv6) Default IP Packet Length.
-pub const TCPV6_DEFAULT_IP_PACKET_LEN: usize = IPV6_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
+pub const TCPV6_DEFAULT_IP_PACKET_LEN: usize =
+    IPV6_HEADER_LEN + TCP_HEADER_LEN + TCP_DEFAULT_OPTION_LEN;
 
 /// Get the length of TCP options from TCP data offset.
 pub fn get_tcp_options_length(data_offset: u8) -> usize {
@@ -83,7 +87,7 @@ pub(crate) fn build_tcp_packet(
             IpAddr::V4(_) => {}
             IpAddr::V6(dst_ip) => {
                 let checksum =
-                xenet_packet::tcp::ipv6_checksum(&tcp_packet.to_immutable(), &src_ip, &dst_ip);
+                    xenet_packet::tcp::ipv6_checksum(&tcp_packet.to_immutable(), &src_ip, &dst_ip);
                 tcp_packet.set_checksum(checksum);
             }
         },

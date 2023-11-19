@@ -1,13 +1,13 @@
 //! Basic packet capture using xenet
-//! 
+//!
 //! Parse packet as Frame and print it
 
 use std::env;
 use std::process;
 use xenet::datalink;
 use xenet::net::interface::Interface;
-use xenet::packet::frame::ParseOption;
 use xenet::packet::frame::Frame;
+use xenet::packet::frame::ParseOption;
 
 fn main() {
     use xenet::datalink::Channel::Ethernet;

@@ -1,8 +1,8 @@
-use xenet_packet::ip::IpNextLevelProtocol;
-use xenet_packet::ipv6::IPV6_HEADER_LEN;
-use xenet_packet::ipv6::MutableIpv6Packet;
-use xenet_packet::Packet;
 use std::net::Ipv6Addr;
+use xenet_packet::ip::IpNextLevelProtocol;
+use xenet_packet::ipv6::MutableIpv6Packet;
+use xenet_packet::ipv6::IPV6_HEADER_LEN;
+use xenet_packet::Packet;
 
 pub(crate) fn build_ipv6_packet(
     ipv6_packet: &mut MutableIpv6Packet,

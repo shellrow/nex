@@ -11,8 +11,11 @@ use std::env;
 use std::net::{IpAddr, SocketAddr};
 use std::process;
 use xenet::datalink;
+use xenet::datalink::Channel::Ethernet;
 use xenet::net::interface::Interface;
+use xenet::net::mac::MacAddr;
 use xenet::packet::ethernet::EtherType;
+use xenet::packet::frame::{Frame, ParseOption};
 use xenet::packet::icmp::IcmpType;
 use xenet::packet::icmpv6::Icmpv6Type;
 use xenet::packet::ip::IpNextLevelProtocol;
@@ -21,9 +24,6 @@ use xenet::util::packet_builder::ethernet::EthernetPacketBuilder;
 use xenet::util::packet_builder::ipv4::Ipv4PacketBuilder;
 use xenet::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use xenet::util::packet_builder::udp::UdpPacketBuilder;
-use xenet::datalink::Channel::Ethernet;
-use xenet::net::mac::MacAddr;
-use xenet::packet::frame::{ParseOption, Frame};
 
 const USAGE: &str = "USAGE: udp_ping <TARGET IP> <NETWORK INTERFACE>";
 
@@ -53,16 +53,14 @@ fn main() {
     };
     let use_tun: bool = interface.is_tun();
     let target_ip: IpAddr = match env::args().nth(1) {
-        Some(target_ip_str) => {
-            match target_ip_str.parse() {
-                Ok(ip) => ip,
-                Err(e) => {
-                    println!("Failed to parse the target IP: {}", e);
-                    eprintln!("{USAGE}");
-                    process::exit(1);
-                }
+        Some(target_ip_str) => match target_ip_str.parse() {
+            Ok(ip) => ip,
+            Err(e) => {
+                println!("Failed to parse the target IP: {}", e);
+                eprintln!("{USAGE}");
+                process::exit(1);
             }
-        }
+        },
         None => {
             println!("Failed to get the target IP");
             eprintln!("{USAGE}");
@@ -98,31 +96,26 @@ fn main() {
     packet_builder.set_ethernet(ethernet_packet_builder);
 
     match target_ip {
-        IpAddr::V4(dst_ipv4) => {
-            match interface.ipv4.get(0) {
-                Some(src_ipv4) => {
-                    let ipv4_packet_builder = Ipv4PacketBuilder::new(
-                        src_ipv4.addr,
-                        dst_ipv4,
-                        IpNextLevelProtocol::Udp,
-                    );
-                    packet_builder.set_ipv4(ipv4_packet_builder);
-                }
-                None => {
-                    println!("No IPv4 address on the interface");
-                    process::exit(1);
-                }
+        IpAddr::V4(dst_ipv4) => match interface.ipv4.get(0) {
+            Some(src_ipv4) => {
+                let ipv4_packet_builder =
+                    Ipv4PacketBuilder::new(src_ipv4.addr, dst_ipv4, IpNextLevelProtocol::Udp);
+                packet_builder.set_ipv4(ipv4_packet_builder);
             }
-        }
+            None => {
+                println!("No IPv4 address on the interface");
+                process::exit(1);
+            }
+        },
         IpAddr::V6(dst_ipv6) => {
-            match interface.ipv6.iter().find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
+            match interface
+                .ipv6
+                .iter()
+                .find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
-                    let ipv6_packet_builder = Ipv6PacketBuilder::new(
-                        src_ipv6.addr,
-                        dst_ipv6,
-                        IpNextLevelProtocol::Udp,
-                    );
+                    let ipv6_packet_builder =
+                        Ipv6PacketBuilder::new(src_ipv6.addr, dst_ipv6, IpNextLevelProtocol::Udp);
                     packet_builder.set_ipv6(ipv6_packet_builder);
                 }
                 None => {
@@ -134,23 +127,24 @@ fn main() {
     }
 
     match target_ip {
-        IpAddr::V4(_dst_ipv4) => {
-            match interface.ipv4.get(0) {
-                Some(src_ipv4) => {
-                    let udp_packet_builder = UdpPacketBuilder::new(
-                        SocketAddr::new(IpAddr::V4(src_ipv4.addr), TARGET_PORT),
-                        SocketAddr::new(target_ip, TARGET_PORT),
-                    );
-                    packet_builder.set_udp(udp_packet_builder);
-                }
-                None => {
-                    println!("No IPv4 address on the interface");
-                    process::exit(1);
-                }
+        IpAddr::V4(_dst_ipv4) => match interface.ipv4.get(0) {
+            Some(src_ipv4) => {
+                let udp_packet_builder = UdpPacketBuilder::new(
+                    SocketAddr::new(IpAddr::V4(src_ipv4.addr), TARGET_PORT),
+                    SocketAddr::new(target_ip, TARGET_PORT),
+                );
+                packet_builder.set_udp(udp_packet_builder);
             }
-        }
+            None => {
+                println!("No IPv4 address on the interface");
+                process::exit(1);
+            }
+        },
         IpAddr::V6(_dst_ipv6) => {
-            match interface.ipv6.iter().find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
+            match interface
+                .ipv6
+                .iter()
+                .find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
                     let udp_packet_builder = UdpPacketBuilder::new(
@@ -195,10 +189,7 @@ fn main() {
                     if let Some(icmp_header) = &ip_layer.icmp {
                         if icmp_header.icmp_type == IcmpType::DestinationUnreachable {
                             if let Some(ipv4) = &ip_layer.ipv4 {
-                                println!(
-                                    "Received ICMP Port Unreachable from {}",
-                                    ipv4.source
-                                );
+                                println!("Received ICMP Port Unreachable from {}", ipv4.source);
                                 println!(
                                     "---- Interface: {}, Total Length: {} bytes ----",
                                     interface.name,
@@ -208,13 +199,10 @@ fn main() {
                                 break;
                             }
                         }
-                    }else if let Some(icmpv6_header) = &ip_layer.icmpv6 {
+                    } else if let Some(icmpv6_header) = &ip_layer.icmpv6 {
                         if icmpv6_header.icmpv6_type == Icmpv6Type::DestinationUnreachable {
                             if let Some(ipv6) = &ip_layer.ipv6 {
-                                println!(
-                                    "Received ICMP Port Unreachable from {}",
-                                    ipv6.source
-                                );
+                                println!("Received ICMP Port Unreachable from {}", ipv6.source);
                                 println!(
                                     "---- Interface: {}, Total Length: {} bytes ----",
                                     interface.name,

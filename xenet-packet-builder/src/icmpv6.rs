@@ -1,9 +1,9 @@
-use xenet_packet::Packet;
 use std::net::Ipv6Addr;
-use xenet_packet::icmpv6::ICMPV6_HEADER_LEN;
+use xenet_packet::icmpv6::echo_request::MutableEchoRequestPacket;
 use xenet_packet::icmpv6::Icmpv6Packet;
 use xenet_packet::icmpv6::Icmpv6Type;
-use xenet_packet::icmpv6::echo_request::MutableEchoRequestPacket;
+use xenet_packet::icmpv6::ICMPV6_HEADER_LEN;
+use xenet_packet::Packet;
 
 /// Build ICMPv6 packet.
 pub(crate) fn build_icmpv6_echo_packet(

@@ -1,4 +1,4 @@
-use std::net::{Ipv6Addr, Ipv4Addr};
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 pub use default_net::ip::*;
 
