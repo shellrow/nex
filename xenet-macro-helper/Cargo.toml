@@ -11,4 +11,4 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-xenet-core = { path = "../xenet-core" }
+xenet-core = { path = "../xenet-core", version = "0.1.0" }
