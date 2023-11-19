@@ -175,7 +175,7 @@ fn main() {
         None => println!("Failed to send packet"),
     }
 
-    // Receive TCP SYN+ACK
+    // Receive TCP SYN+ACK or RST+ACK
     println!("Waiting for TCP SYN+ACK or RST+ACK packet...");
     loop {
         match rx.next() {

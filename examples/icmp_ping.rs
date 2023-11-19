@@ -1,3 +1,11 @@
+//! This example sends ICMP Echo request packet to the target socket and waits for ICMP Echo reply packet.
+//! 
+//! e.g.
+//! 
+//! IPv4: icmp_ping 1.1.1.1 eth0
+//! 
+//! IPv6: icmp_ping "2606:4700:4700::1111" eth0
+
 use std::env;
 use std::net::IpAddr;
 use std::net::Ipv6Addr;

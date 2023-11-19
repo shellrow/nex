@@ -4,6 +4,7 @@ use std::env;
 use std::net::IpAddr;
 use std::process;
 use xenet::datalink;
+use xenet::datalink::Channel::Ethernet;
 use xenet::net::interface::Interface;
 use xenet::net::mac::MacAddr;
 use xenet::packet::arp::ArpPacket;
@@ -18,7 +19,6 @@ use xenet::packet::udp::UdpPacket;
 use xenet::packet::Packet;
 
 fn main() {
-    use xenet::datalink::Channel::Ethernet;
     let interface: Interface = match env::args().nth(1) {
         Some(n) => {
             // Use interface specified by user

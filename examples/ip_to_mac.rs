@@ -1,6 +1,10 @@
 //! Retrieve a MAC address from an IP address
 //!
 //! This uses ARP for IPv4 and NDP for IPv6
+//! 
+//! e.g.
+//! 
+//! IPv4: ip_to_mac 192.168.1.1 eth0
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::{Duration, Instant};
