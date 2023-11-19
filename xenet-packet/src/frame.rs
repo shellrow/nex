@@ -94,7 +94,7 @@ impl Frame<'_> {
 }
 
 fn create_dummy_ethernet_packet(packet: &[u8], offset: usize) -> Vec<u8> {
-    let mut buf: Vec<u8> = Vec::with_capacity(packet.len() - offset + 14);
+    let mut buf: Vec<u8> = vec![0u8; packet.len() - offset + 14];
     match MutableEthernetPacket::new(&mut buf[..]) {
         Some(mut fake_ethernet_frame) => {
             match Ipv4Packet::new(&packet[offset..]) {
