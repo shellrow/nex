@@ -23,6 +23,7 @@ use xenet::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use xenet::util::packet_builder::udp::UdpPacketBuilder;
 use xenet::datalink::Channel::Ethernet;
 use xenet::net::mac::MacAddr;
+use xenet::packet::frame::{ParseOption, Frame};
 
 const USAGE: &str = "USAGE: udp_ping <TARGET IP> <NETWORK INTERFACE>";
 
@@ -182,7 +183,13 @@ fn main() {
     loop {
         match rx.next() {
             Ok(packet) => {
-                let frame = xenet::packet::frame::Frame::from_bytes(&packet, Default::default());
+                let mut parse_option: ParseOption = ParseOption::default();
+                if interface.is_tun() {
+                    let payload_offset = if interface.is_loopback() { 14 } else { 0 };
+                    parse_option.from_ip_packet = true;
+                    parse_option.offset = payload_offset;
+                }
+                let frame: Frame = Frame::from_bytes(&packet, parse_option);
                 // Check each layer. If the packet is a ICMP Port Unreachable, print it out
                 if let Some(ip_layer) = &frame.ip {
                     if let Some(icmp_header) = &ip_layer.icmp {
