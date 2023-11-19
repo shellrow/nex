@@ -1,4 +1,5 @@
-//! Provides interfaces for interacting with packets and headers.
+//! Support for packet parsing and manipulation. Enables users to work with packets at a granular level.
+
 #![allow(missing_docs)]
 #![deny(warnings)]
 #![macro_use]

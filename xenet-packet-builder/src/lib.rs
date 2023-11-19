@@ -1,3 +1,5 @@
+//! Utilities designed to work with packets through high-level APIs.
+
 pub mod arp;
 pub mod builder;
 pub mod ethernet;

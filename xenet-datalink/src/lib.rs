@@ -1,4 +1,4 @@
-//! Support for sending and receiving data link layer packets.
+//! Provides functionality for interacting with the data link layer, support for sending and receiving packets.
 
 #![deny(warnings)]
 extern crate libc;
