@@ -27,7 +27,8 @@ use xenet::util::packet_builder::udp::UdpPacketBuilder;
 
 const USAGE: &str = "USAGE: udp_ping <TARGET IP> <NETWORK INTERFACE>";
 
-const TARGET_PORT: u16 = 33435;
+const SRC_PORT: u16 = 53443;
+const DST_PORT: u16 = 33435;
 
 fn main() {
     let interface: Interface = match env::args().nth(2) {
@@ -130,8 +131,8 @@ fn main() {
         IpAddr::V4(_dst_ipv4) => match interface.ipv4.get(0) {
             Some(src_ipv4) => {
                 let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V4(src_ipv4.addr), TARGET_PORT),
-                    SocketAddr::new(target_ip, TARGET_PORT),
+                    SocketAddr::new(IpAddr::V4(src_ipv4.addr), SRC_PORT),
+                    SocketAddr::new(target_ip, DST_PORT),
                 );
                 packet_builder.set_udp(udp_packet_builder);
             }
@@ -148,8 +149,8 @@ fn main() {
             {
                 Some(src_ipv6) => {
                     let udp_packet_builder = UdpPacketBuilder::new(
-                        SocketAddr::new(IpAddr::V6(src_ipv6.addr), TARGET_PORT),
-                        SocketAddr::new(target_ip, TARGET_PORT),
+                        SocketAddr::new(IpAddr::V6(src_ipv6.addr), SRC_PORT),
+                        SocketAddr::new(target_ip, DST_PORT),
                     );
                     packet_builder.set_udp(udp_packet_builder);
                 }
