@@ -6,27 +6,27 @@ use crate::PrimitiveValues;
 pub enum IpNextLevelProtocol {
     /// IPv6 Hop-by-Hop Option \[RFC2460\]
     Hopopt = 0,
-    /// Internet Control Message [RFC792]
+    /// Internet Control Message \[RFC792\]
     Icmp = 1,
-    /// Internet Group Management [RFC1112]
+    /// Internet Group Management \[RFC1112\]
     Igmp = 2,
-    /// Gateway-to-Gateway [RFC823]
+    /// Gateway-to-Gateway \[RFC823\]
     Ggp = 3,
-    /// IPv4 encapsulation [RFC2003]
+    /// IPv4 encapsulation \[RFC2003\]
     Ipv4 = 4,
-    /// Stream [RFC1190][RFC1819]
+    /// Stream \[RFC1190\]\[RFC1819\]
     St = 5,
-    /// Transmission Control [RFC793]
+    /// Transmission Control \[RFC793\]
     Tcp = 6,
     /// CBT
     Cbt = 7,
-    /// Exterior Gateway Protocol [RFC888]
+    /// Exterior Gateway Protocol \[RFC888\]
     Egp = 8,
     /// any private interior gateway (used by Cisco for their IGRP)
     Igp = 9,
     /// BBN RCC Monitoring
     BbnRccMon = 10,
-    /// Network Voice Protocol [RFC741]
+    /// Network Voice Protocol \[RFC741\]
     NvpII = 11,
     /// PUP
     Pup = 12,
@@ -38,13 +38,13 @@ pub enum IpNextLevelProtocol {
     Xnet = 15,
     /// Chaos
     Chaos = 16,
-    /// User Datagram [RFC768]
+    /// User Datagram \[RFC768\]
     Udp = 17,
     /// Multiplexing
     Mux = 18,
     /// DCN Measurement Subsystems
     DcnMeas = 19,
-    /// Host Monitoring [RFC869]
+    /// Host Monitoring \[RFC869\]
     Hmp = 20,
     /// Packet Radio Measurement
     Prm = 21,
@@ -58,19 +58,19 @@ pub enum IpNextLevelProtocol {
     Leaf1 = 25,
     /// Leaf-2
     Leaf2 = 26,
-    /// Reliable Data Protocol [RFC908]
+    /// Reliable Data Protocol \[RFC908\]
     Rdp = 27,
-    /// Internet Reliable Transaction [RFC938]
+    /// Internet Reliable Transaction \[RFC938\]
     Irtp = 28,
-    /// ISO Transport Protocol Class 4 [RFC905]
+    /// ISO Transport Protocol Class 4 \[RFC905\]
     IsoTp4 = 29,
-    /// Bulk Data Transfer Protocol [RFC969]
+    /// Bulk Data Transfer Protocol \[RFC969\]
     Netblt = 30,
     /// MFE Network Services Protocol
     MfeNsp = 31,
     /// MERIT Internodal Protocol
     MeritInp = 32,
-    /// Datagram Congestion Control Protocol [RFC4340]
+    /// Datagram Congestion Control Protocol \[RFC4340\]
     Dccp = 33,
     /// Third Party Connect Protocol
     ThreePc = 34,
@@ -86,7 +86,7 @@ pub enum IpNextLevelProtocol {
     TpPlusPlus = 39,
     /// IL Transport Protocol
     Il = 40,
-    /// IPv6 encapsulation [RFC2473]
+    /// IPv6 encapsulation \[RFC2473\]
     Ipv6 = 41,
     /// Source Demand Routing Protocol
     Sdrp = 42,
@@ -96,23 +96,23 @@ pub enum IpNextLevelProtocol {
     Ipv6Frag = 44,
     /// Inter-Domain Routing Protocol
     Idrp = 45,
-    /// Reservation Protocol [RFC2205][RFC3209]
+    /// Reservation Protocol \[RFC2205\]\[RFC3209\]
     Rsvp = 46,
-    /// Generic Routing Encapsulation [RFC1701]
+    /// Generic Routing Encapsulation \[RFC1701\]
     Gre = 47,
-    /// Dynamic Source Routing Protocol [RFC4728]
+    /// Dynamic Source Routing Protocol \[RFC4728\]
     Dsr = 48,
     /// BNA
     Bna = 49,
-    /// Encap Security Payload [RFC4303]
+    /// Encap Security Payload \[RFC4303\]
     Esp = 50,
-    /// Authentication Header [RFC4302]
+    /// Authentication Header \[RFC4302\]
     Ah = 51,
     /// Integrated Net Layer Security TUBA
     INlsp = 52,
     /// IP with Encryption
     Swipe = 53,
-    /// NBMA Address Resolution Protocol [RFC1735]
+    /// NBMA Address Resolution Protocol \[RFC1735\]
     Narp = 54,
     /// IP Mobility
     Mobile = 55,
@@ -120,11 +120,11 @@ pub enum IpNextLevelProtocol {
     Tlsp = 56,
     /// SKIP
     Skip = 57,
-    /// ICMPv6 [RFC4443]
+    /// ICMPv6 \[RFC4443\]
     Icmpv6 = 58,
-    /// No Next Header for IPv6 [RFC2460]
+    /// No Next Header for IPv6 \[RFC2460\]
     Ipv6NoNxt = 59,
-    /// Destination Options for IPv6 [RFC2460]
+    /// Destination Options for IPv6 \[RFC2460\]
     Ipv6Opts = 60,
     /// any host internal protocol
     HostInternal = 61,
@@ -182,7 +182,7 @@ pub enum IpNextLevelProtocol {
     Tcf = 87,
     /// EIGRP
     Eigrp = 88,
-    /// OSPFIGP [RFC1583][RFC2328][RFC5340]
+    /// OSPFIGP \[RFC1583\]\[RFC2328\]\[RFC5340\]
     OspfigP = 89,
     /// Sprite RPC Protocol
     SpriteRpc = 90,
@@ -198,9 +198,9 @@ pub enum IpNextLevelProtocol {
     Micp = 95,
     /// Semaphore Communications Sec. Pro.
     SccSp = 96,
-    /// Ethernet-within-IP Encapsulation [RFC3378]
+    /// Ethernet-within-IP Encapsulation \[RFC3378\]
     Etherip = 97,
-    /// Encapsulation Header [RFC1241]
+    /// Encapsulation Header \[RFC1241\]
     Encap = 98,
     /// any private encryption scheme
     PrivEncryption = 99,
@@ -210,7 +210,7 @@ pub enum IpNextLevelProtocol {
     Ifmp = 101,
     /// PNNI over IP
     Pnni = 102,
-    /// Protocol Independent Multicast [RFC4601]
+    /// Protocol Independent Multicast \[RFC4601\]
     Pim = 103,
     /// ARIS
     Aris = 104,
@@ -220,7 +220,7 @@ pub enum IpNextLevelProtocol {
     Qnx = 106,
     /// Active Networks
     AN = 107,
-    /// IP Payload Compression Protocol [RFC2393]
+    /// IP Payload Compression Protocol \[RFC2393\]
     IpComp = 108,
     /// Sitara Networks Protocol
     Snp = 109,
@@ -228,13 +228,13 @@ pub enum IpNextLevelProtocol {
     CompaqPeer = 110,
     /// IPX in IP
     IpxInIp = 111,
-    /// Virtual Router Redundancy Protocol [RFC5798]
+    /// Virtual Router Redundancy Protocol \[RFC5798\]
     Vrrp = 112,
     /// PGM Reliable Transport Protocol
     Pgm = 113,
     /// any 0-hop protocol
     ZeroHop = 114,
-    /// Layer Two Tunneling Protocol [RFC3931]
+    /// Layer Two Tunneling Protocol \[RFC3931\]
     L2tp = 115,
     /// D-II Data Exchange (DDX)
     Ddx = 116,
@@ -270,29 +270,29 @@ pub enum IpNextLevelProtocol {
     Pipe = 131,
     /// Stream Control Transmission Protocol
     Sctp = 132,
-    /// Fibre Channel [RFC6172]
+    /// Fibre Channel \[RFC6172\]
     Fc = 133,
-    /// [RFC3175]
+    /// \[RFC3175\]
     RsvpE2eIgnore = 134,
-    /// [RFC6275]
+    /// \[RFC6275\]
     MobilityHeader = 135,
-    /// [RFC3828]
+    /// \[RFC3828\]
     UdpLite = 136,
-    /// [RFC4023]
+    /// \[RFC4023\]
     MplsInIp = 137,
-    /// MANET Protocols [RFC5498]
+    /// MANET Protocols \[RFC5498\]
     Manet = 138,
-    /// Host Identity Protocol [RFC5201]
+    /// Host Identity Protocol \[RFC5201\]
     Hip = 139,
-    /// Shim6 Protocol [RFC5533]
+    /// Shim6 Protocol \[RFC5533\]
     Shim6 = 140,
-    /// Wrapped Encapsulating Security Payload [RFC5840]
+    /// Wrapped Encapsulating Security Payload \[RFC5840\]
     Wesp = 141,
-    /// Robust Header Compression [RFC5858]
+    /// Robust Header Compression \[RFC5858\]
     Rohc = 142,
-    /// Use for experimentation and testing [RFC3692]
+    /// Use for experimentation and testing \[RFC3692\]
     Test1 = 253,
-    /// Use for experimentation and testing [RFC3692]
+    /// Use for experimentation and testing \[RFC3692\]
     Test2 = 254,
     /// Reserved
     Reserved = 255,
