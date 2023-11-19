@@ -47,3 +47,7 @@ path = "../examples/tcp_ping.rs"
 [[example]]
 name = "udp_ping"
 path = "../examples/udp_ping.rs"
+
+[[example]]
+name = "list_interfaces"
+path = "../examples/list_interfaces.rs"
