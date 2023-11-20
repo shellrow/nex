@@ -74,7 +74,7 @@ pub struct Frame<'a> {
     /// The transport layer.
     pub transport: Option<TransportLayer>,
     /// Rest of the packet that could not be parsed as a header. (Usually payload)
-    pub payload: &'a [u8],
+    pub payload: Vec<u8>,
     packet: &'a [u8],
 }
 
@@ -127,7 +127,7 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         datalink: None,
         ip: None,
         transport: None,
-        payload: &[],
+        payload: Vec::new(),
         packet: packet,
     };
     let dummy_ethernet_packet: Vec<u8>;
@@ -170,6 +170,7 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
                 if let Some(datalink) = &mut frame.datalink {
                     datalink.arp = None;
                 }
+                frame.payload = ethernet_packet.payload().to_vec();
             }
         },
         _ => {}
@@ -197,7 +198,9 @@ fn parse_ipv4_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {
                 IpNextLevelProtocol::Icmp => {
                     parse_icmp_packet(&ipv4_packet, frame);
                 }
-                _ => {}
+                _ => {
+                    frame.payload = ipv4_packet.payload().to_vec();
+                }
             }
         }
         None => {
@@ -231,7 +234,9 @@ fn parse_ipv6_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {
                 IpNextLevelProtocol::Icmpv6 => {
                     parse_icmpv6_packet(&ipv6_packet, frame);
                 }
-                _ => {}
+                _ => {
+                    frame.payload = ipv6_packet.payload().to_vec();
+                }
             }
         }
         None => {
@@ -253,12 +258,14 @@ fn parse_ipv4_tcp_packet(ipv4_packet: &Ipv4Packet, frame: &mut Frame) {
                 tcp: Some(tcp_header),
                 udp: None,
             });
+            frame.payload = tcp_packet.payload().to_vec();
         }
         None => {
             frame.transport = Some(TransportLayer {
                 tcp: None,
                 udp: None,
             });
+            frame.payload = ipv4_packet.payload().to_vec();
         }
     }
 }
@@ -271,12 +278,14 @@ fn parse_ipv6_tcp_packet(ipv6_packet: &Ipv6Packet, frame: &mut Frame) {
                 tcp: Some(tcp_header),
                 udp: None,
             });
+            frame.payload = tcp_packet.payload().to_vec();
         }
         None => {
             frame.transport = Some(TransportLayer {
                 tcp: None,
                 udp: None,
             });
+            frame.payload = ipv6_packet.payload().to_vec();
         }
     }
 }
@@ -289,12 +298,14 @@ fn parse_ipv4_udp_packet(ipv4_packet: &Ipv4Packet, frame: &mut Frame) {
                 tcp: None,
                 udp: Some(udp_header),
             });
+            frame.payload = udp_packet.payload().to_vec();
         }
         None => {
             frame.transport = Some(TransportLayer {
                 tcp: None,
                 udp: None,
             });
+            frame.payload = ipv4_packet.payload().to_vec();
         }
     }
 }
@@ -307,12 +318,14 @@ fn parse_ipv6_udp_packet(ipv6_packet: &Ipv6Packet, frame: &mut Frame) {
                 tcp: None,
                 udp: Some(udp_header),
             });
+            frame.payload = udp_packet.payload().to_vec();
         }
         None => {
             frame.transport = Some(TransportLayer {
                 tcp: None,
                 udp: None,
             });
+            frame.payload = ipv6_packet.payload().to_vec();
         }
     }
 }
@@ -324,11 +337,13 @@ fn parse_icmp_packet(ipv4_packet: &Ipv4Packet, frame: &mut Frame) {
             if let Some(ip) = &mut frame.ip {
                 ip.icmp = Some(icmp_header);
             }
+            frame.payload = icmp_packet.payload().to_vec();
         }
         None => {
             if let Some(ip) = &mut frame.ip {
                 ip.icmp = None;
             }
+            frame.payload = ipv4_packet.payload().to_vec();
         }
     }
 }
@@ -340,11 +355,13 @@ fn parse_icmpv6_packet(ipv6_packet: &Ipv6Packet, frame: &mut Frame) {
             if let Some(ip) = &mut frame.ip {
                 ip.icmpv6 = Some(icmpv6_header);
             }
+            frame.payload = icmpv6_packet.payload().to_vec();
         }
         None => {
             if let Some(ip) = &mut frame.ip {
                 ip.icmpv6 = None;
             }
+            frame.payload = ipv6_packet.payload().to_vec();
         }
     }
 }
