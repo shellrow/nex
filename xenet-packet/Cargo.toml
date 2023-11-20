@@ -1,6 +1,6 @@
 [package]
 name = "xenet-packet"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Cross-platform packet parsing and building library. Provides low-level packet handling. Part of xenet project."
@@ -13,6 +13,6 @@ license = "MIT"
 [dependencies]
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"], optional = true }
-xenet-core = { path = "../xenet-core", version = "0.1.0" }
-xenet-macro = { path = "../xenet-macro", version = "0.1.0" }
-xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.1.0" }
+xenet-core = { path = "../xenet-core", version = "0.2.0" }
+xenet-macro = { path = "../xenet-macro", version = "0.2.0" }
+xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.2.0" }

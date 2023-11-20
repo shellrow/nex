@@ -1,6 +1,6 @@
 [package]
 name = "xenet-packet-builder"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Provides high-level packet building on top of xenet-packet. Part of xenet project. "
@@ -11,6 +11,6 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-xenet-core = { path = "../xenet-core", version = "0.1.0" }
-xenet-packet = { path = "../xenet-packet", version = "0.1.0" }
+xenet-core = { path = "../xenet-core", version = "0.2.0" }
+xenet-packet = { path = "../xenet-packet", version = "0.2.0" }
 rand = "0.8"

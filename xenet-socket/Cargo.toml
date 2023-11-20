@@ -1,6 +1,6 @@
 [package]
 name = "xenet-socket"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Cross-platform socket library. Part of xenet project. Offers socket-related functionality."
@@ -13,7 +13,7 @@ license = "MIT"
 [dependencies]
 socket2 = { version = "0.5", features = ["all"] }
 async-io = "1.13"
-xenet-packet = { path = "../xenet-packet", version = "0.1.0" }
+xenet-packet = { path = "../xenet-packet", version = "0.2.0" }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.48.0"

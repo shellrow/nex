@@ -1,6 +1,6 @@
 [package]
 name = "xenet-sys"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Provides network-related system function and call support for xenet. Used for low-level system interactions."
