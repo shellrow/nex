@@ -66,8 +66,6 @@ pub mod netmap;
 #[cfg(feature = "pcap")]
 pub mod pcap;
 
-pub mod dummy;
-
 /// Type alias for an `EtherType`.
 pub type EtherType = u16;
 
