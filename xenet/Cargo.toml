@@ -20,6 +20,9 @@ xenet-datalink = { path = "../xenet-datalink", version = "0.2.0" }
 xenet-socket = { path = "../xenet-socket", version = "0.2.0" }
 xenet-packet-builder = { path = "../xenet-packet-builder", version = "0.2.0" }
 
+[dev-dependencies]
+serde_json = "1.0"
+
 [features]
 pcap = ["xenet-datalink/pcap"]
 serde = ["xenet-core/serde", "xenet-packet/serde", "xenet-datalink/serde"]
@@ -51,3 +54,8 @@ path = "../examples/udp_ping.rs"
 [[example]]
 name = "list_interfaces"
 path = "../examples/list_interfaces.rs"
+
+[[example]]
+name = "serialize"
+path = "../examples/serialize.rs"
+required-features = ["serde"]
