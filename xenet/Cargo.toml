@@ -32,8 +32,12 @@ name = "dump"
 path = "../examples/dump.rs"
 
 [[example]]
-name = "ip_to_mac"
-path = "../examples/ip_to_mac.rs"
+name = "arp"
+path = "../examples/arp.rs"
+
+[[example]]
+name = "ndp"
+path = "../examples/ndp.rs"
 
 [[example]]
 name = "parse_frame"
