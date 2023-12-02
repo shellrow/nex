@@ -61,17 +61,31 @@ impl Ipv6PacketBuilder {
     pub fn build(&self) -> Vec<u8> {
         let mut buffer: Vec<u8> = vec![0; IPV6_HEADER_LEN];
         let mut ipv6_packet = MutableIpv6Packet::new(&mut buffer).unwrap();
-        build_ipv6_packet(
-            &mut ipv6_packet,
-            self.src_ip,
-            self.dst_ip,
-            self.next_protocol,
-        );
-        if let Some(payload_length) = self.payload_length {
-            ipv6_packet.set_payload_length(payload_length);
-        }
+        ipv6_packet.set_source(self.src_ip);
+        ipv6_packet.set_destination(self.dst_ip);
+        ipv6_packet.set_version(6);
         if let Some(hop_limit) = self.hop_limit {
             ipv6_packet.set_hop_limit(hop_limit);
+        } else {
+            ipv6_packet.set_hop_limit(64);
+        }
+        match self.next_protocol {
+            IpNextLevelProtocol::Tcp => {
+                ipv6_packet.set_next_header(IpNextLevelProtocol::Tcp);
+                ipv6_packet.set_payload_length(32);
+            }
+            IpNextLevelProtocol::Udp => {
+                ipv6_packet.set_next_header(IpNextLevelProtocol::Udp);
+                ipv6_packet.set_payload_length(8);
+            }
+            IpNextLevelProtocol::Icmpv6 => {
+                ipv6_packet.set_next_header(IpNextLevelProtocol::Icmpv6);
+                ipv6_packet.set_payload_length(8);
+            }
+            _ => {}
+        }
+        if let Some(payload_length) = self.payload_length {
+            ipv6_packet.set_payload_length(payload_length);
         }
         ipv6_packet.packet().to_vec()
     }

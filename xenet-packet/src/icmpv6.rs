@@ -297,6 +297,13 @@ pub mod ndp {
     use xenet_macro::packet;
     use xenet_macro_helper::types::*;
 
+    /// NDP SOL Packet Length.
+    pub const NDP_SOL_PACKET_LEN: usize = NeighborSolicitPacket::minimum_packet_size();
+    /// NDP ADV Packet Length.
+    pub const NDP_ADV_PACKET_LEN: usize = NeighborAdvertPacket::minimum_packet_size();
+    /// NDP OPT Packet Length.
+    pub const NDP_OPT_PACKET_LEN: usize = NdpOptionPacket::minimum_packet_size();
+
     #[allow(non_snake_case)]
     #[allow(non_upper_case_globals)]
     pub mod Icmpv6Codes {

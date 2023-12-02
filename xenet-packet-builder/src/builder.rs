@@ -8,6 +8,7 @@ use crate::icmp::IcmpPacketBuilder;
 use crate::icmpv6::Icmpv6PacketBuilder;
 use crate::ipv4::Ipv4PacketBuilder;
 use crate::ipv6::Ipv6PacketBuilder;
+use crate::ndp::NdpPacketBuilder;
 use crate::tcp::TcpPacketBuilder;
 use crate::udp::UdpPacketBuilder;
 
@@ -93,6 +94,17 @@ impl PacketBuilder {
         self.packet[ETHERNET_HEADER_LEN + IPV6_HEADER_LEN
             ..ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + icmpv6_packet.len()]
             .copy_from_slice(&icmpv6_packet);
+    }
+    /// Set NDP header.
+    pub fn set_ndp(&mut self, packet_builder: NdpPacketBuilder) {
+        let ndp_packet = packet_builder.build();
+        if self.packet.len() < ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ndp_packet.len() {
+            self.packet
+                .resize(ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ndp_packet.len(), 0);
+        }
+        self.packet[ETHERNET_HEADER_LEN + IPV6_HEADER_LEN
+            ..ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + ndp_packet.len()]
+            .copy_from_slice(&ndp_packet);
     }
     /// Set TCP header and payload.
     pub fn set_tcp(&mut self, packet_builder: TcpPacketBuilder) {

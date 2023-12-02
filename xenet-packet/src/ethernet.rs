@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
 
+/// Represents the MAC address length.
+pub const MAC_ADDR_LEN: usize = 6;
+
 /// Represents the Ethernet Header.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

@@ -44,7 +44,7 @@ impl ArpPacketBuilder {
     pub fn new() -> ArpPacketBuilder {
         ArpPacketBuilder {
             src_mac: MacAddr::zero(),
-            dst_mac: MacAddr::zero(),
+            dst_mac: MacAddr::broadcast(),
             src_ip: Ipv4Addr::UNSPECIFIED,
             dst_ip: Ipv4Addr::UNSPECIFIED,
         }
