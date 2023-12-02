@@ -12,8 +12,12 @@ use crate::ipv6::{Ipv6Header, Ipv6Packet};
 use crate::tcp::{TcpHeader, TcpPacket};
 use crate::udp::{UdpHeader, UdpPacket};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Represents a data link layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DatalinkLayer {
     pub ethernet: Option<EthernetHeader>,
     pub arp: Option<ArpHeader>,
@@ -21,6 +25,7 @@ pub struct DatalinkLayer {
 
 /// Represents an IP layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IpLayer {
     pub ipv4: Option<Ipv4Header>,
     pub ipv6: Option<Ipv6Header>,
@@ -30,6 +35,7 @@ pub struct IpLayer {
 
 /// Represents a transport layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TransportLayer {
     pub tcp: Option<TcpHeader>,
     pub udp: Option<UdpHeader>,
@@ -37,6 +43,7 @@ pub struct TransportLayer {
 
 /// Parse options.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ParseOption {
     /// Parse from IP packet.
     pub from_ip_packet: bool,
@@ -66,6 +73,7 @@ impl Default for ParseOption {
 
 /// Represents a packet frame.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Frame {
     /// The datalink layer.
     pub datalink: Option<DatalinkLayer>,

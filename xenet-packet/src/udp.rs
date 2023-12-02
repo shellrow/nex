@@ -11,11 +11,15 @@ use xenet_macro_helper::types::*;
 use crate::util;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// UDP Header Length
 pub const UDP_HEADER_LEN: usize = 8;
 
 /// Represents the UDP header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct UdpHeader {
     pub source: u16be,
     pub destination: u16be,

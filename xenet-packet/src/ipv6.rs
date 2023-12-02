@@ -9,11 +9,15 @@ use xenet_macro_helper::types::*;
 
 use std::net::Ipv6Addr;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// IPv6 Header Length.
 pub const IPV6_HEADER_LEN: usize = MutableIpv6Packet::minimum_packet_size();
 
 /// Represents the IPv6 header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv6Header {
     pub version: u4,
     pub traffic_class: u8,

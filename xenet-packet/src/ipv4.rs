@@ -10,6 +10,9 @@ use xenet_macro_helper::types::*;
 
 use std::net::Ipv4Addr;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// IPv4 Header Length
 pub const IPV4_HEADER_LEN: usize = MutableIpv4Packet::minimum_packet_size();
 /// IPv4 Header Byte Unit (32 bits)
@@ -17,6 +20,7 @@ pub const IPV4_HEADER_LENGTH_BYTE_UNITS: usize = 4;
 
 /// Represents the IPv4 option header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv4OptionHeader {
     copied: u1,
     class: u2,
@@ -26,6 +30,7 @@ pub struct Ipv4OptionHeader {
 
 /// Represents the IPv4 header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv4Header {
     pub version: u4,
     pub header_length: u4,
@@ -122,6 +127,7 @@ pub mod Ipv4Flags {
 /// <http://www.iana.org/assignments/ip-parameters/ip-parameters.xhtml>
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Ipv4OptionType {
     /// End of Options List
     EOL = 0,

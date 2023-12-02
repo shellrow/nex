@@ -8,11 +8,15 @@ use core::fmt;
 use xenet_core::mac::MacAddr;
 use xenet_macro::packet;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
 
 /// Represents the Ethernet Header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct EthernetHeader {
     /// Destination MAC address
     pub destination: MacAddr,
@@ -88,6 +92,7 @@ fn ethernet_header_test() {
 
 /// Represents the Ethernet types.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EtherType {
     Ipv4,
     Arp,

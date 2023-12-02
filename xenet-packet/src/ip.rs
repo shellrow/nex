@@ -1,8 +1,12 @@
 use crate::PrimitiveValues;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// IP Next Level Protocol
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum IpNextLevelProtocol {
     /// IPv6 Hop-by-Hop Option \[RFC2460\]
     Hopopt = 0,
