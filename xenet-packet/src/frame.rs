@@ -66,7 +66,7 @@ impl Default for ParseOption {
 
 /// Represents a packet frame.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Frame<'a> {
+pub struct Frame {
     /// The datalink layer.
     pub datalink: Option<DatalinkLayer>,
     /// The IP layer.
@@ -75,21 +75,14 @@ pub struct Frame<'a> {
     pub transport: Option<TransportLayer>,
     /// Rest of the packet that could not be parsed as a header. (Usually payload)
     pub payload: Vec<u8>,
-    packet: &'a [u8],
+    /// Packet length.
+    pub packet_len: usize,
 }
 
-impl Frame<'_> {
+impl Frame {
     /// Construct a frame from a byte slice.
     pub fn from_bytes(packet: &[u8], option: ParseOption) -> Frame {
         parse_packet(packet, option)
-    }
-    /// Return packet as a byte array.
-    pub fn packet(&self) -> Vec<u8> {
-        self.packet.to_vec()
-    }
-    /// Return packet length.
-    pub fn packet_len(&self) -> usize {
-        self.packet.len()
     }
 }
 
@@ -128,7 +121,7 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         ip: None,
         transport: None,
         payload: Vec::new(),
-        packet: packet,
+        packet_len: packet.len(),
     };
     let dummy_ethernet_packet: Vec<u8>;
     let ethernet_packet = if option.from_ip_packet {
