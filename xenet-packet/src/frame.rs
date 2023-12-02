@@ -160,23 +160,29 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         EtherType::Ipv6 => {
             parse_ipv6_packet(&ethernet_packet, &mut frame);
         }
-        EtherType::Arp => match ArpPacket::new(packet) {
-            Some(arp_packet) => {
-                let arp_header = ArpHeader::from_packet(&arp_packet);
-                if let Some(datalink) = &mut frame.datalink {
-                    datalink.arp = Some(arp_header);
-                }
-            }
-            None => {
-                if let Some(datalink) = &mut frame.datalink {
-                    datalink.arp = None;
-                }
-                frame.payload = ethernet_packet.payload().to_vec();
-            }
+        EtherType::Arp => {
+            parse_arp_packet(&ethernet_packet, &mut frame);
         },
         _ => {}
     }
     frame
+}
+
+fn parse_arp_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {
+    match ArpPacket::new(ethernet_packet.payload()) {
+        Some(arp_packet) => {
+            let arp_header = ArpHeader::from_packet(&arp_packet);
+            if let Some(datalink) = &mut frame.datalink {
+                datalink.arp = Some(arp_header);
+            }
+        }
+        None => {
+            if let Some(datalink) = &mut frame.datalink {
+                datalink.arp = None;
+            }
+            frame.payload = ethernet_packet.payload().to_vec();
+        }
+    }
 }
 
 fn parse_ipv4_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {
