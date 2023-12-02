@@ -13,7 +13,6 @@ license = "MIT"
 [dependencies]
 libc = "0.2"
 serde = { version = "1.0", features = ["derive"], optional = true }
-netmap_sys = { version = "0.1.4", optional = true, features = ["netmap_with_libs"] }
 pcap = { version = "1.1.0", optional = true }
 xenet-core = { path = "../xenet-core", version = "0.2.0" }
 xenet-sys = { path = "../xenet-sys", version = "0.2.0" }
@@ -32,3 +31,4 @@ features = [
 [features]
 default = ["dep:default-net"]
 serde = ["dep:serde", "default-net/serde"]
+pcap = ["dep:pcap"]
