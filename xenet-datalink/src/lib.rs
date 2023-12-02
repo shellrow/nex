@@ -22,7 +22,6 @@ mod backend;
 pub mod wpcap;
 
 #[cfg(all(
-    not(feature = "netmap"),
     any(target_os = "linux", target_os = "android")
 ))]
 #[path = "linux.rs"]
@@ -32,7 +31,6 @@ mod backend;
 pub mod linux;
 
 #[cfg(all(
-    not(feature = "netmap"),
     any(
         target_os = "freebsd",
         target_os = "openbsd",
@@ -55,13 +53,6 @@ mod backend;
     target_os = "ios"
 ))]
 pub mod bpf;
-
-#[cfg(feature = "netmap")]
-#[path = "netmap.rs"]
-mod backend;
-
-#[cfg(feature = "netmap")]
-pub mod netmap;
 
 #[cfg(feature = "pcap")]
 pub mod pcap;
