@@ -1,6 +1,6 @@
 [package]
 name = "xenet-npcap-helper"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the xenet"
