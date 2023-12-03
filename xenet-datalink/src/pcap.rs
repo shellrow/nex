@@ -10,7 +10,9 @@ use std::time::Duration;
 use pcap::{Activated, Active};
 
 use crate::Channel::Ethernet;
-use crate::{DataLinkReceiver, DataLinkSender, NetworkInterface};
+use crate::{DataLinkReceiver, DataLinkSender};
+use crate::interface::Interface;
+use crate::interface::InterfaceType;
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -56,7 +58,7 @@ impl Default for Config {
 
 /// Create a datalink channel from the provided pcap device.
 #[inline]
-pub fn channel(network_interface: &NetworkInterface, config: Config) -> io::Result<super::Channel> {
+pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let cap = match pcap::Capture::from_device(&*network_interface.name) {
         Ok(cap) => cap,
         Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
@@ -128,7 +130,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 
     #[inline]
-    fn send_to(&mut self, packet: &[u8], _dst: Option<NetworkInterface>) -> Option<io::Result<()>> {
+    fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         let mut cap = self.capture.lock().unwrap();
         Some(match cap.sendpacket(packet) {
             Ok(()) => Ok(()),
@@ -176,21 +178,28 @@ impl<T: Activated + Send + Sync> DataLinkReceiver for DataLinkReceiverImpl<T> {
 }
 
 /// Get a list of available network interfaces for the current machine.
-pub fn interfaces() -> Vec<NetworkInterface> {
+pub fn interfaces() -> Vec<Interface> {
     if let Ok(devices) = pcap::Device::list() {
         devices
             .iter()
             .enumerate()
-            .map(|(i, dev)| NetworkInterface {
+            .map(|(i, dev)| Interface {
                 name: dev.name.clone(),
-                description: dev.desc.clone().unwrap_or_else(|| "".to_string()),
                 index: i as u32,
-                mac: None,
-                ips: Vec::new(),
-                flags: 0,
+                friendly_name: None,
+                description: dev.desc.clone(),
+                if_type: InterfaceType::Unknown,
+                mac_addr: None,
+                ipv4: Vec::new(),
+                ipv6: Vec::new(),
+                flags: dev.flags.if_flags.bits(),
+                transmit_speed: None,
+                receive_speed: None,
+                gateway: None,
             })
             .collect()
     } else {
         vec![]
     }
 }
+

@@ -13,6 +13,9 @@ use crate::util::{self, Octets};
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Minimum TCP Header Length
 pub const TCP_HEADER_LEN: usize = MutableTcpPacket::minimum_packet_size();
 /// Minimum TCP Data Offset
@@ -24,6 +27,7 @@ pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
 
 /// Represents the TCP option header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TcpOptionHeader {
     kind: TcpOptionKind,
     length: Option<u8>,
@@ -31,6 +35,7 @@ pub struct TcpOptionHeader {
 
 /// Represents the TCP header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TcpHeader {
     pub source: u16be,
     pub destination: u16be,
@@ -153,6 +158,7 @@ pub struct Tcp {
 #[allow(non_camel_case_types)]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TcpOptionKind {
     EOL = 0,
     NOP = 1,
@@ -301,6 +307,14 @@ impl TcpOption {
     /// Get the TCP option kind.
     pub fn kind(&self) -> TcpOptionKind {
         self.kind
+    }
+    /// Get length of the TCP option.
+    pub fn length(&self) -> u8 {
+        if self.length.is_empty() {
+            0
+        } else {
+            self.length[0]
+        }
     }
 }
 

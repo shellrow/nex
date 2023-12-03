@@ -1,6 +1,6 @@
 [package]
 name = "xenet"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "Cross-platform networking library for Rust."
@@ -11,14 +11,17 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-xenet-core = { path = "../xenet-core", version = "0.2.0" }
-xenet-sys = { path = "../xenet-sys", version = "0.2.0" }
-xenet-macro = { path = "../xenet-macro", version = "0.2.0" }
-xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.2.0" }
-xenet-packet = { path = "../xenet-packet", version = "0.2.0" }
-xenet-datalink = { path = "../xenet-datalink", version = "0.2.0" }
-xenet-socket = { path = "../xenet-socket", version = "0.2.0" }
-xenet-packet-builder = { path = "../xenet-packet-builder", version = "0.2.0" }
+xenet-core = { path = "../xenet-core", version = "0.3.0" }
+xenet-sys = { path = "../xenet-sys", version = "0.3.0" }
+xenet-macro = { path = "../xenet-macro", version = "0.3.0" }
+xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.3.0" }
+xenet-packet = { path = "../xenet-packet", version = "0.3.0" }
+xenet-datalink = { path = "../xenet-datalink", version = "0.3.0" }
+xenet-socket = { path = "../xenet-socket", version = "0.3.0" }
+xenet-packet-builder = { path = "../xenet-packet-builder", version = "0.3.0" }
+
+[dev-dependencies]
+serde_json = "1.0"
 
 [features]
 pcap = ["xenet-datalink/pcap"]
@@ -29,8 +32,12 @@ name = "dump"
 path = "../examples/dump.rs"
 
 [[example]]
-name = "ip_to_mac"
-path = "../examples/ip_to_mac.rs"
+name = "arp"
+path = "../examples/arp.rs"
+
+[[example]]
+name = "ndp"
+path = "../examples/ndp.rs"
 
 [[example]]
 name = "parse_frame"
@@ -51,3 +58,8 @@ path = "../examples/udp_ping.rs"
 [[example]]
 name = "list_interfaces"
 path = "../examples/list_interfaces.rs"
+
+[[example]]
+name = "serialize"
+path = "../examples/serialize.rs"
+required-features = ["serde"]

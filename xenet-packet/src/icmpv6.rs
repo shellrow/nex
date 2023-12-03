@@ -11,6 +11,9 @@ use std::net::Ipv6Addr;
 use xenet_macro::packet;
 use xenet_macro_helper::types::*;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// ICMPv6 Header Length.
 pub const ICMPV6_HEADER_LEN: usize = echo_request::MutableEchoRequestPacket::minimum_packet_size();
 /// ICMPv6 Minimum Packet Length.
@@ -20,6 +23,7 @@ pub const ICMPV6_IP_PACKET_LEN: usize = IPV6_HEADER_LEN + ICMPV6_HEADER_LEN;
 
 /// Represents the ICMPv6 header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Icmpv6Header {
     pub icmpv6_type: Icmpv6Type,
     pub icmpv6_code: Icmpv6Code,
@@ -55,6 +59,7 @@ impl Icmpv6Header {
 /// <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml>
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Icmpv6Type {
     DestinationUnreachable,
     PacketTooBig,
@@ -192,6 +197,7 @@ impl PrimitiveValues for Icmpv6Type {
 
 /// Represents the "ICMPv6 code" header field.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Icmpv6Code(pub u8);
 
 impl Icmpv6Code {
@@ -290,6 +296,13 @@ pub mod ndp {
     use std::net::Ipv6Addr;
     use xenet_macro::packet;
     use xenet_macro_helper::types::*;
+
+    /// NDP SOL Packet Length.
+    pub const NDP_SOL_PACKET_LEN: usize = NeighborSolicitPacket::minimum_packet_size();
+    /// NDP ADV Packet Length.
+    pub const NDP_ADV_PACKET_LEN: usize = NeighborAdvertPacket::minimum_packet_size();
+    /// NDP OPT Packet Length.
+    pub const NDP_OPT_PACKET_LEN: usize = NdpOptionPacket::minimum_packet_size();
 
     #[allow(non_snake_case)]
     #[allow(non_upper_case_globals)]

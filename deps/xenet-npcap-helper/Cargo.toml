@@ -1,0 +1,38 @@
+[package]
+name = "xenet-npcap-helper"
+version = "0.3.0"
+edition = "2021"
+authors = ["shellrow <shellrow@protonmail.com>"]
+description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the xenet"
+repository = "https://github.com/shellrow/xenet"
+readme = "../../README.md"
+keywords = ["network", "windows"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+home = "0.5"
+winreg = "0.50"
+privilege = "0.3"
+sha2 = "0.10"
+zip = "0.6"
+reqwest = { version = "0.11", features = ["blocking"], optional = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+inquire = "0.6"
+
+[features]
+default = ["download"]
+download = ["reqwest"]
+
+[[example]]
+name = "setup"
+path = "examples/setup.rs"
+required-features = ["download"]
+
+[[example]]
+name = "setup_interactive"
+path = "examples/setup_interactive.rs"
+required-features = ["download"]

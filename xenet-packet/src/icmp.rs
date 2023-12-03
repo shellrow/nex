@@ -9,6 +9,9 @@ use crate::ipv4::IPV4_HEADER_LEN;
 use xenet_macro::packet;
 use xenet_macro_helper::types::*;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// ICMPv4 Header Length.
 pub const ICMPV4_HEADER_LEN: usize = echo_request::MutableEchoRequestPacket::minimum_packet_size();
 /// ICMPv4 Minimum Packet Length.
@@ -18,6 +21,7 @@ pub const ICMPV4_IP_PACKET_LEN: usize = IPV4_HEADER_LEN + ICMPV4_HEADER_LEN;
 
 /// Represents the ICMPv4 header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IcmpHeader {
     pub icmp_type: IcmpType,
     pub icmp_code: IcmpCode,
@@ -52,6 +56,7 @@ impl IcmpHeader {
 /// Represents the "ICMP type" header field.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum IcmpType {
     EchoReply,
     DestinationUnreachable,
@@ -186,6 +191,7 @@ impl PrimitiveValues for IcmpType {
 
 /// Represents the "ICMP code" header field.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IcmpCode(pub u8);
 
 impl IcmpCode {
@@ -430,7 +436,7 @@ pub mod destination_unreachable {
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     //! |     Type      |     Code      |          Checksum             |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    //! |                             unused                            |
+    //! |             unused            |        Next-Hop MTU           |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     //! |      Internet Header + 64 bits of Original Data Datagram      |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -490,7 +496,8 @@ pub mod destination_unreachable {
         #[construct_with(u8)]
         pub icmp_code: IcmpCode,
         pub checksum: u16be,
-        pub unused: u32be,
+        pub unused: u16be,
+        pub next_hop_mtu: u16be,
         #[payload]
         pub payload: Vec<u8>,
     }

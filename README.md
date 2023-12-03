@@ -28,7 +28,7 @@ To use `xenet`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-xenet = "0.2"
+xenet = "0.3"
 ```
 
 ## Using Specific Sub-crates

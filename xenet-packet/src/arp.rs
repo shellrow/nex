@@ -9,6 +9,9 @@ use std::net::Ipv4Addr;
 use xenet_core::mac::MacAddr;
 use xenet_macro::packet;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// ARP Header Length.
 pub const ARP_HEADER_LEN: usize = 28;
 /// ARP Minimum Packet Length.
@@ -16,6 +19,7 @@ pub const ARP_PACKET_LEN: usize = ETHERNET_HEADER_LEN + ARP_HEADER_LEN;
 
 /// Represents the ARP header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ArpHeader {
     pub hardware_type: ArpHardwareType,
     pub protocol_type: EtherType,
@@ -68,6 +72,7 @@ impl ArpHeader {
 /// Represents the ARP operation types.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ArpOperation {
     /// ARP request
     Request = 1,
@@ -122,6 +127,7 @@ impl PrimitiveValues for ArpOperation {
 /// Represents the ARP hardware types.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ArpHardwareType {
     /// Ethernet (10Mb)
     Ethernet = 1,

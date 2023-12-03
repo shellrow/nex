@@ -12,8 +12,12 @@ use crate::ipv6::{Ipv6Header, Ipv6Packet};
 use crate::tcp::{TcpHeader, TcpPacket};
 use crate::udp::{UdpHeader, UdpPacket};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Represents a data link layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DatalinkLayer {
     pub ethernet: Option<EthernetHeader>,
     pub arp: Option<ArpHeader>,
@@ -21,6 +25,7 @@ pub struct DatalinkLayer {
 
 /// Represents an IP layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IpLayer {
     pub ipv4: Option<Ipv4Header>,
     pub ipv6: Option<Ipv6Header>,
@@ -30,6 +35,7 @@ pub struct IpLayer {
 
 /// Represents a transport layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TransportLayer {
     pub tcp: Option<TcpHeader>,
     pub udp: Option<UdpHeader>,
@@ -37,6 +43,7 @@ pub struct TransportLayer {
 
 /// Parse options.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ParseOption {
     /// Parse from IP packet.
     pub from_ip_packet: bool,
@@ -66,7 +73,8 @@ impl Default for ParseOption {
 
 /// Represents a packet frame.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Frame<'a> {
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Frame {
     /// The datalink layer.
     pub datalink: Option<DatalinkLayer>,
     /// The IP layer.
@@ -75,21 +83,14 @@ pub struct Frame<'a> {
     pub transport: Option<TransportLayer>,
     /// Rest of the packet that could not be parsed as a header. (Usually payload)
     pub payload: Vec<u8>,
-    packet: &'a [u8],
+    /// Packet length.
+    pub packet_len: usize,
 }
 
-impl Frame<'_> {
+impl Frame {
     /// Construct a frame from a byte slice.
     pub fn from_bytes(packet: &[u8], option: ParseOption) -> Frame {
         parse_packet(packet, option)
-    }
-    /// Return packet as a byte array.
-    pub fn packet(&self) -> Vec<u8> {
-        self.packet.to_vec()
-    }
-    /// Return packet length.
-    pub fn packet_len(&self) -> usize {
-        self.packet.len()
     }
 }
 
@@ -128,7 +129,7 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         ip: None,
         transport: None,
         payload: Vec::new(),
-        packet: packet,
+        packet_len: packet.len(),
     };
     let dummy_ethernet_packet: Vec<u8>;
     let ethernet_packet = if option.from_ip_packet {
@@ -159,23 +160,29 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         EtherType::Ipv6 => {
             parse_ipv6_packet(&ethernet_packet, &mut frame);
         }
-        EtherType::Arp => match ArpPacket::new(packet) {
-            Some(arp_packet) => {
-                let arp_header = ArpHeader::from_packet(&arp_packet);
-                if let Some(datalink) = &mut frame.datalink {
-                    datalink.arp = Some(arp_header);
-                }
-            }
-            None => {
-                if let Some(datalink) = &mut frame.datalink {
-                    datalink.arp = None;
-                }
-                frame.payload = ethernet_packet.payload().to_vec();
-            }
+        EtherType::Arp => {
+            parse_arp_packet(&ethernet_packet, &mut frame);
         },
         _ => {}
     }
     frame
+}
+
+fn parse_arp_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {
+    match ArpPacket::new(ethernet_packet.payload()) {
+        Some(arp_packet) => {
+            let arp_header = ArpHeader::from_packet(&arp_packet);
+            if let Some(datalink) = &mut frame.datalink {
+                datalink.arp = Some(arp_header);
+            }
+        }
+        None => {
+            if let Some(datalink) = &mut frame.datalink {
+                datalink.arp = None;
+            }
+            frame.payload = ethernet_packet.payload().to_vec();
+        }
+    }
 }
 
 fn parse_ipv4_packet(ethernet_packet: &EthernetPacket, frame: &mut Frame) {

@@ -1,6 +1,6 @@
 [package]
 name = "xenet-macro"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "A macro for generating packet structures used by xenet-packet. Not intended for direct use."
@@ -20,4 +20,4 @@ syn = { version = "2.0", features = ["full"] }
 regex = "1.9"
 
 [dev-dependencies]
-xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.2.0" }
+xenet-macro-helper = { path = "../xenet-macro-helper", version = "0.3.0" }

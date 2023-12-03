@@ -11,3 +11,4 @@ members = [
     "xenet-sys",
     "xenet-packet-builder"
 ]
+exclude = ["deps/xenet-npcap-helper"]
