@@ -436,7 +436,7 @@ pub mod destination_unreachable {
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     //! |     Type      |     Code      |          Checksum             |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    //! |                             unused                            |
+    //! |             unused            |        Next-Hop MTU           |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     //! |      Internet Header + 64 bits of Original Data Datagram      |
     //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -496,7 +496,8 @@ pub mod destination_unreachable {
         #[construct_with(u8)]
         pub icmp_code: IcmpCode,
         pub checksum: u16be,
-        pub unused: u32be,
+        pub unused: u16be,
+        pub next_hop_mtu: u16be,
         #[payload]
         pub payload: Vec<u8>,
     }
