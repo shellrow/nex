@@ -1,19 +1,21 @@
+use super::sys;
+use privilege::runas::Command as RunasCommand;
+use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::fs::File;
-use sha2::{Sha256, Digest};
-use privilege::runas::Command as RunasCommand;
-use super::sys;
 
 pub(crate) const NPCAP_SOFTWARE_NAME: &str = "Npcap";
 pub(crate) const NPCAP_INSTALL_DIR_NAME: &str = "npcap";
 pub(crate) const NPCAP_SDK_DIR_NAME: &str = "npcap-sdk-1.13";
 pub const NPCAP_INSTALLER_FILENAME: &str = "npcap-1.76.exe";
 pub const NPCAP_SDK_FILENAME: &str = "npcap-sdk-1.13.zip";
-pub(crate) const NPCAP_INSTALLER_HASH: &str = "3C846F5F62A217E3CF2052749CDE159E946248022781097C58815386DA6B9C46";
-pub(crate) const NPCAP_SDK_HASH: &str = "DAD1F2BF1B02B787BE08CA4862F99E39A876C1F274BAC4AC0CEDC9BBC58F94FD";
+pub(crate) const NPCAP_INSTALLER_HASH: &str =
+    "3C846F5F62A217E3CF2052749CDE159E946248022781097C58815386DA6B9C46";
+pub(crate) const NPCAP_SDK_HASH: &str =
+    "DAD1F2BF1B02B787BE08CA4862F99E39A876C1F274BAC4AC0CEDC9BBC58F94FD";
 #[allow(dead_code)]
 pub(crate) const NPCAP_DIST_BASE_URL: &str = "https://npcap.com/dist/";
-pub(crate) const NPCAP_LIB_NAME : &str = "Packet.lib";
+pub(crate) const NPCAP_LIB_NAME: &str = "Packet.lib";
 
 /// Check if npcap is installed.
 /// This function only check if npcap is installed, not check version.
@@ -50,11 +52,16 @@ pub fn install_npcap() -> Result<(), Box<dyn Error>> {
     if !std::path::Path::new(&install_dir).exists() {
         std::fs::create_dir_all(&install_dir)?;
     }
-    let npcap_target_path: String = format!("{}\\{}", sys::get_install_path(NPCAP_INSTALL_DIR_NAME), NPCAP_INSTALLER_FILENAME);
+    let npcap_target_path: String = format!(
+        "{}\\{}",
+        sys::get_install_path(NPCAP_INSTALL_DIR_NAME),
+        NPCAP_INSTALLER_FILENAME
+    );
     // Download npcap installer if not exists
     // After download, wait for virus scan to complete.
     if !std::path::Path::new(&npcap_target_path).exists() {
-        let mut response: reqwest::blocking::Response = reqwest::blocking::get(&npcap_installer_url)?;
+        let mut response: reqwest::blocking::Response =
+            reqwest::blocking::get(&npcap_installer_url)?;
         let mut file: File = File::create(&npcap_target_path)?;
         response.copy_to(&mut file)?;
         //println!("Waiting for virus scan to complete (10 seconds) ...");
@@ -98,14 +105,15 @@ pub fn download_npcap(dst_dir_path: String) -> Result<(), Box<dyn Error>> {
     let npcap_target_path: std::path::PathBuf = dir_path.join(NPCAP_INSTALLER_FILENAME);
     // Download npcap installer if not exists
     if !std::path::Path::new(&npcap_target_path).exists() {
-        let mut response: reqwest::blocking::Response = reqwest::blocking::get(&npcap_installer_url)?;
+        let mut response: reqwest::blocking::Response =
+            reqwest::blocking::get(&npcap_installer_url)?;
         let mut file: File = File::create(&npcap_target_path)?;
         response.copy_to(&mut file)?;
     }
     Ok(())
 }
 
-/// Verify npcap installer SHA256 checksum 
+/// Verify npcap installer SHA256 checksum
 pub fn verify_installer_checksum(file_path: String) -> Result<(), Box<dyn Error>> {
     let mut file: File = File::open(&file_path)?;
     let mut hasher = Sha256::new();
@@ -120,9 +128,9 @@ pub fn verify_installer_checksum(file_path: String) -> Result<(), Box<dyn Error>
 }
 
 /// Run npcap installer.
-/// 
+///
 /// Warning: This function will run npcap installer with admin privileges.
-/// 
+///
 /// This function only run verified npcap installer.
 pub fn run_npcap_installer(file_path: String) -> Result<(), Box<dyn Error>> {
     // Check file exists
@@ -139,7 +147,7 @@ pub fn run_npcap_installer(file_path: String) -> Result<(), Box<dyn Error>> {
         return Err("Error: Npcap installation failed !".into());
     }
     Ok(())
-} 
+}
 
 #[cfg(feature = "download")]
 /// Download, extract and add npcap SDK to LIB env var
@@ -150,7 +158,11 @@ pub fn install_npcap_sdk() -> Result<(), Box<dyn Error>> {
     if !std::path::Path::new(&install_dir).exists() {
         std::fs::create_dir_all(&install_dir)?;
     }
-    let npcap_sdk_target_path: String = format!("{}\\{}", sys::get_install_path(NPCAP_INSTALL_DIR_NAME), NPCAP_SDK_FILENAME);
+    let npcap_sdk_target_path: String = format!(
+        "{}\\{}",
+        sys::get_install_path(NPCAP_INSTALL_DIR_NAME),
+        NPCAP_SDK_FILENAME
+    );
     // Download npcap sdk if not exists
     if !std::path::Path::new(&npcap_sdk_target_path).exists() {
         let mut response: reqwest::blocking::Response = reqwest::blocking::get(&npcap_sdk_url)?;
@@ -169,11 +181,17 @@ pub fn install_npcap_sdk() -> Result<(), Box<dyn Error>> {
     }
 
     // Extract npcap SDK
-    let npcap_sdk_extract_dir: String = format!("{}\\{}", sys::get_install_path(NPCAP_INSTALL_DIR_NAME), NPCAP_SDK_DIR_NAME);
-    let mut archive: zip::ZipArchive<File> = zip::ZipArchive::new(File::open(&npcap_sdk_target_path)?)?;
+    let npcap_sdk_extract_dir: String = format!(
+        "{}\\{}",
+        sys::get_install_path(NPCAP_INSTALL_DIR_NAME),
+        NPCAP_SDK_DIR_NAME
+    );
+    let mut archive: zip::ZipArchive<File> =
+        zip::ZipArchive::new(File::open(&npcap_sdk_target_path)?)?;
     for i in 0..archive.len() {
         let mut file: zip::read::ZipFile = archive.by_index(i)?;
-        let outpath: std::path::PathBuf = format!("{}\\{}", npcap_sdk_extract_dir, file.name()).into();
+        let outpath: std::path::PathBuf =
+            format!("{}\\{}", npcap_sdk_extract_dir, file.name()).into();
         if (&*file.name()).ends_with('/') {
             std::fs::create_dir_all(&outpath)?;
         } else {
@@ -191,12 +209,12 @@ pub fn install_npcap_sdk() -> Result<(), Box<dyn Error>> {
     let os_bit: String = sys::get_os_bit();
     let lib_dir_path: String = if os_bit == "32-bit" {
         format!("{}\\{}", npcap_sdk_extract_dir, "Lib")
-    }else {
+    } else {
         format!("{}\\{}", npcap_sdk_extract_dir, "Lib\\x64")
     };
     if !sys::check_env_lib_path(&lib_dir_path) {
         match sys::add_env_lib_path(&lib_dir_path) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => Err(e)?,
         }
     }
@@ -249,11 +267,16 @@ pub fn extract_npcap_sdk(file_path: String) -> Result<(), Box<dyn Error>> {
     // Verify checksum
     verify_sdk_checksum(file_path.clone())?;
     // Extract npcap SDK
-    let npcap_sdk_extract_dir: String = format!("{}\\{}", sys::get_install_path(NPCAP_INSTALL_DIR_NAME), NPCAP_SDK_DIR_NAME);
+    let npcap_sdk_extract_dir: String = format!(
+        "{}\\{}",
+        sys::get_install_path(NPCAP_INSTALL_DIR_NAME),
+        NPCAP_SDK_DIR_NAME
+    );
     let mut archive: zip::ZipArchive<File> = zip::ZipArchive::new(File::open(&file_path)?)?;
     for i in 0..archive.len() {
         let mut file: zip::read::ZipFile = archive.by_index(i)?;
-        let outpath: std::path::PathBuf = format!("{}\\{}", npcap_sdk_extract_dir, file.name()).into();
+        let outpath: std::path::PathBuf =
+            format!("{}\\{}", npcap_sdk_extract_dir, file.name()).into();
         if (&*file.name()).ends_with('/') {
             std::fs::create_dir_all(&outpath)?;
         } else {
@@ -277,7 +300,7 @@ pub fn add_npcap_sdk_to_lib(lib_dir_path: String) -> Result<(), Box<dyn Error>> 
     }
     if !sys::check_env_lib_path(&lib_dir_path) {
         match sys::add_env_lib_path(&lib_dir_path) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => Err(e)?,
         }
     }

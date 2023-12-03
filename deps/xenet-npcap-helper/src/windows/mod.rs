@@ -1,6 +1,6 @@
-mod sys;
 pub mod app;
 pub mod npcap;
+mod sys;
 
 #[cfg(feature = "interactive")]
 use inquire::Confirm;
@@ -40,8 +40,8 @@ pub fn setup_npcap_interactive() -> bool {
     // Check if npcap is installed
     if !npcap::npcap_installed() {
         let ans: bool = Confirm::new("Npcap is not installed, would you like to install it ?")
-        .prompt()
-        .unwrap();
+            .prompt()
+            .unwrap();
         if ans == false {
             println!("Exiting...");
             return false;
@@ -57,8 +57,8 @@ pub fn setup_npcap_interactive() -> bool {
     // Check if npcap sdk is installed
     if !npcap::npcap_sdk_installed() {
         let ans: bool = Confirm::new("Npcap SDK is not installed, would you like to install it ?")
-        .prompt()
-        .unwrap();
+            .prompt()
+            .unwrap();
         if ans == false {
             println!("Exiting...");
             return false;

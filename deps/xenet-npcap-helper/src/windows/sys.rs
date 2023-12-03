@@ -1,8 +1,8 @@
 use crate::app::AppInfo;
 use std::collections::HashMap;
+use winreg::enums::RegDisposition;
 use winreg::enums::HKEY_LOCAL_MACHINE;
 use winreg::RegKey;
-use winreg::enums::RegDisposition;
 
 pub fn get_os_bit() -> String {
     if cfg!(target_pointer_width = "32") {
@@ -19,10 +19,8 @@ pub fn get_install_path(install_dir_name: &str) -> String {
         Some(path) => {
             let path: String = format!("{}\\{}", path.display(), install_dir_name);
             path
-        },
-        None => {
-            String::new()
-        },
+        }
+        None => String::new(),
     }
 }
 
@@ -30,13 +28,12 @@ pub fn get_install_path(install_dir_name: &str) -> String {
 pub fn software_installed(software_name: String) -> bool {
     let hklm: RegKey = RegKey::predef(HKEY_LOCAL_MACHINE);
     let os_bit: String = get_os_bit();
-    let npcap_key: RegKey = 
-    if os_bit == "32-bit" {
+    let npcap_key: RegKey = if os_bit == "32-bit" {
         match hklm.open_subkey(format!("SOFTWARE\\{}", software_name)) {
             Ok(key) => key,
             Err(_) => return false,
         }
-    }else{
+    } else {
         match hklm.open_subkey(format!("SOFTWARE\\WOW6432Node\\{}", software_name)) {
             Ok(key) => key,
             Err(_) => return false,
@@ -110,7 +107,9 @@ pub fn check_env_path(dir_path: &str) -> bool {
 pub fn add_env_path(dir_path: &str) -> std::io::Result<()> {
     let hkcu: winreg::RegKey = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let (path, _): (winreg::RegKey, RegDisposition) = hkcu.create_subkey("Environment")?;
-    let mut path_value: String = path.get_value::<String, &str>("Path").unwrap_or(String::new());
+    let mut path_value: String = path
+        .get_value::<String, &str>("Path")
+        .unwrap_or(String::new());
     if !path_value.is_empty() {
         path_value.push(';');
     }
@@ -122,10 +121,10 @@ pub fn add_env_path(dir_path: &str) -> std::io::Result<()> {
 pub fn check_env_lib_path(dir_path: &str) -> bool {
     let reg_key: winreg::RegKey = match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
         .open_subkey_with_flags("Environment", winreg::enums::KEY_READ)
-        {
-            Ok(key) => key,
-            Err(_) => return false,
-        };
+    {
+        Ok(key) => key,
+        Err(_) => return false,
+    };
     let reg_value: String = reg_key.get_value("LIB").unwrap_or(String::new());
     reg_value.contains(dir_path)
 }
@@ -133,7 +132,9 @@ pub fn check_env_lib_path(dir_path: &str) -> bool {
 pub fn add_env_lib_path(dir_path: &str) -> std::io::Result<()> {
     let hkcu: winreg::RegKey = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let (path, _): (winreg::RegKey, RegDisposition) = hkcu.create_subkey("Environment")?;
-    let mut path_value: String = path.get_value::<String, &str>("LIB").unwrap_or(String::new());
+    let mut path_value: String = path
+        .get_value::<String, &str>("LIB")
+        .unwrap_or(String::new());
     if !path_value.is_empty() {
         path_value.push(';');
     }
@@ -151,7 +152,10 @@ pub fn get_env_lib() -> String {
         return reg_value;
     }
     let reg_key: winreg::RegKey = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
-        .open_subkey_with_flags("SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", winreg::enums::KEY_READ)
+        .open_subkey_with_flags(
+            "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+            winreg::enums::KEY_READ,
+        )
         .unwrap();
     let reg_value: String = reg_key.get_value("LIB").unwrap_or(String::new());
     reg_value
