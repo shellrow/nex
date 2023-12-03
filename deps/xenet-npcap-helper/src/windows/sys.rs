@@ -147,5 +147,12 @@ pub fn get_env_lib() -> String {
         .open_subkey_with_flags("Environment", winreg::enums::KEY_READ)
         .unwrap();
     let reg_value: String = reg_key.get_value("LIB").unwrap_or(String::new());
+    if !reg_value.is_empty() {
+        return reg_value;
+    }
+    let reg_key: winreg::RegKey = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
+        .open_subkey_with_flags("SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", winreg::enums::KEY_READ)
+        .unwrap();
+    let reg_value: String = reg_key.get_value("LIB").unwrap_or(String::new());
     reg_value
 }
