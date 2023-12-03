@@ -308,6 +308,14 @@ impl TcpOption {
     pub fn kind(&self) -> TcpOptionKind {
         self.kind
     }
+    /// Get length of the TCP option.
+    pub fn length(&self) -> u8 {
+        if self.length.is_empty() {
+            0
+        } else {
+            self.length[0]
+        }
+    }
 }
 
 /// This function gets the 'length' of the length field of the IPv4Option packet
