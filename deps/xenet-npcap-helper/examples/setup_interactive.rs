@@ -1,13 +1,16 @@
-pub mod app;
-pub mod npcap;
-mod sys;
+use xenet_npcap_helper::npcap;
+use inquire::Confirm;
 
-#[cfg(feature = "download")]
-/// Setup npcap and npcap SDK.
-/// This function will install npcap and npcap SDK if they are not installed.
-pub fn setup_npcap() -> Result<(), String> {
+fn main() {
     // Check if npcap is installed
     if !npcap::npcap_installed() {
+        let ans: bool = Confirm::new("Npcap is not installed, would you like to install it ?")
+            .prompt()
+            .unwrap();
+        if ans == false {
+            println!("Exiting...");
+            std::process::exit(0);
+        }
         println!("Installing Npcap...");
         match npcap::install_npcap() {
             Ok(_) => println!("Npcap installed successfully !"),
@@ -18,6 +21,13 @@ pub fn setup_npcap() -> Result<(), String> {
     }
     // Check if npcap sdk is installed
     if !npcap::npcap_sdk_installed() {
+        let ans: bool = Confirm::new("Npcap SDK is not installed, would you like to install it ?")
+            .prompt()
+            .unwrap();
+        if ans == false {
+            println!("Exiting...");
+            std::process::exit(0);
+        }
         println!("Installing Npcap SDK...");
         match npcap::install_npcap_sdk() {
             Ok(_) => println!("Npcap SDK installed successfully !"),
@@ -26,5 +36,4 @@ pub fn setup_npcap() -> Result<(), String> {
     } else {
         println!("Npcap SDK is already installed !");
     }
-    Ok(())
 }

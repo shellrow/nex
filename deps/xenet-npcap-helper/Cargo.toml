@@ -19,9 +19,20 @@ privilege = "0.3"
 sha2 = "0.10"
 zip = "0.6"
 reqwest = { version = "0.11", features = ["blocking"], optional = true }
-inquire = { version = "0.6", optional = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+inquire = "0.6"
 
 [features]
 default = ["download"]
 download = ["reqwest"]
-interactive = ["inquire"]
+
+[[example]]
+name = "setup"
+path = "examples/setup.rs"
+required-features = ["download"]
+
+[[example]]
+name = "setup_interactive"
+path = "examples/setup_interactive.rs"
+required-features = ["download"]

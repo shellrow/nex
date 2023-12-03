@@ -1,11 +1,6 @@
-pub mod app;
-pub mod npcap;
-mod sys;
+use xenet_npcap_helper::npcap;
 
-#[cfg(feature = "download")]
-/// Setup npcap and npcap SDK.
-/// This function will install npcap and npcap SDK if they are not installed.
-pub fn setup_npcap() -> Result<(), String> {
+fn main() {
     // Check if npcap is installed
     if !npcap::npcap_installed() {
         println!("Installing Npcap...");
@@ -26,5 +21,4 @@ pub fn setup_npcap() -> Result<(), String> {
     } else {
         println!("Npcap SDK is already installed !");
     }
-    Ok(())
 }
