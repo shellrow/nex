@@ -29,8 +29,42 @@ pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TcpOptionHeader {
-    kind: TcpOptionKind,
-    length: Option<u8>,
+    pub kind: TcpOptionKind,
+    pub length: Option<u8>,
+    pub data: Vec<u8>
+}
+
+impl TcpOptionHeader {
+    /// Get the timestamp of the TCP option
+    pub fn get_timestamp(&self) -> (u32, u32) {
+        if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
+            let mut my: [u8; 4] = [0; 4];
+            my.copy_from_slice(&self.data[0..4]);
+            let mut their: [u8; 4] = [0; 4];
+            their.copy_from_slice(&self.data[4..8]);
+            (u32::from_be_bytes(my), u32::from_be_bytes(their))
+        } else {
+            return (0, 0);
+        }
+    }
+    /// Get the MSS of the TCP option
+    pub fn get_mss(&self) -> u16 {
+        if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
+            let mut mss: [u8; 2] = [0; 2];
+            mss.copy_from_slice(&self.data[0..2]);
+            u16::from_be_bytes(mss)
+        } else {
+            0
+        }
+    }
+    /// Get the WSCALE of the TCP option
+    pub fn get_wscale(&self) -> u8 {
+        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+            self.data[0]
+        } else {
+            0
+        }
+    }
 }
 
 /// Represents the TCP header.
@@ -73,6 +107,7 @@ impl TcpHeader {
                     .map(|opt| TcpOptionHeader {
                         kind: opt.get_kind(),
                         length: opt.get_length_raw().first().cloned(),
+                        data: opt.payload().to_vec()
                     })
                     .collect(),
             }),
@@ -97,6 +132,7 @@ impl TcpHeader {
                 .map(|opt| TcpOptionHeader {
                     kind: opt.get_kind(),
                     length: opt.get_length_raw().first().cloned(),
+                    data: opt.payload().to_vec()
                 })
                 .collect(),
         }
@@ -314,6 +350,36 @@ impl TcpOption {
             0
         } else {
             self.length[0]
+        }
+    }
+    /// Get the timestamp of the TCP option
+    pub fn get_timestamp(&self) -> (u32, u32) {
+        if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
+            let mut my: [u8; 4] = [0; 4];
+            my.copy_from_slice(&self.data[0..4]);
+            let mut their: [u8; 4] = [0; 4];
+            their.copy_from_slice(&self.data[4..8]);
+            (u32::from_be_bytes(my), u32::from_be_bytes(their))
+        } else {
+            return (0, 0);
+        }
+    }
+    /// Get the MSS of the TCP option
+    pub fn get_mss(&self) -> u16 {
+        if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
+            let mut mss: [u8; 2] = [0; 2];
+            mss.copy_from_slice(&self.data[0..2]);
+            u16::from_be_bytes(mss)
+        } else {
+            0
+        }
+    }
+    /// Get the WSCALE of the TCP option
+    pub fn get_wscale(&self) -> u8 {
+        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+            self.data[0]
+        } else {
+            0
         }
     }
 }
