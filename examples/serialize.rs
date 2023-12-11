@@ -70,7 +70,6 @@ fn main() {
                         println!("Serialization Error: {}", e);
                     }
                 }
-                
             }
             Err(e) => panic!("parse_frame: unable to receive packet: {}", e),
         }

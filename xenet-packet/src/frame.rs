@@ -162,7 +162,7 @@ fn parse_packet(packet: &[u8], option: ParseOption) -> Frame {
         }
         EtherType::Arp => {
             parse_arp_packet(&ethernet_packet, &mut frame);
-        },
+        }
         _ => {}
     }
     frame

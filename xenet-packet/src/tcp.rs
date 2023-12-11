@@ -31,7 +31,7 @@ pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
 pub struct TcpOptionHeader {
     pub kind: TcpOptionKind,
     pub length: Option<u8>,
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 impl TcpOptionHeader {
@@ -107,7 +107,7 @@ impl TcpHeader {
                     .map(|opt| TcpOptionHeader {
                         kind: opt.get_kind(),
                         length: opt.get_length_raw().first().cloned(),
-                        data: opt.payload().to_vec()
+                        data: opt.payload().to_vec(),
                     })
                     .collect(),
             }),
@@ -132,7 +132,7 @@ impl TcpHeader {
                 .map(|opt| TcpOptionHeader {
                     kind: opt.get_kind(),
                     length: opt.get_length_raw().first().cloned(),
-                    data: opt.payload().to_vec()
+                    data: opt.payload().to_vec(),
                 })
                 .collect(),
         }

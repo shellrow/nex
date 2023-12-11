@@ -13,16 +13,16 @@ use xenet::datalink::Channel::Ethernet;
 use xenet::net::interface::Interface;
 use xenet::net::mac::MacAddr;
 use xenet::packet::ethernet::EtherType;
+use xenet::packet::ethernet::MAC_ADDR_LEN;
 use xenet::packet::frame::Frame;
 use xenet::packet::frame::ParseOption;
+use xenet::packet::icmpv6::ndp::{NDP_OPT_PACKET_LEN, NDP_SOL_PACKET_LEN};
+use xenet::packet::icmpv6::Icmpv6Type;
 use xenet::packet::ip::IpNextLevelProtocol;
 use xenet::util::packet_builder::builder::PacketBuilder;
 use xenet::util::packet_builder::ethernet::EthernetPacketBuilder;
 use xenet::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use xenet::util::packet_builder::ndp::NdpPacketBuilder;
-use xenet::packet::icmpv6::Icmpv6Type;
-use xenet::packet::ethernet::MAC_ADDR_LEN;
-use xenet::packet::icmpv6::ndp::{NDP_SOL_PACKET_LEN, NDP_OPT_PACKET_LEN};
 
 const USAGE: &str = "USAGE: ndp <TARGET IPv6 Addr> <NETWORK INTERFACE>";
 
@@ -57,7 +57,7 @@ fn main() {
                     process::exit(1);
                 }
                 IpAddr::V6(ipv6) => ipv6,
-            }
+            },
             Err(e) => {
                 println!("Failed to parse target ip: {}", e);
                 eprintln!("{USAGE}");
@@ -89,12 +89,15 @@ fn main() {
     };
     packet_builder.set_ethernet(ethernet_packet_builder);
 
-    let mut ipv6_packet_builder = Ipv6PacketBuilder::new(src_ip, dst_ip, IpNextLevelProtocol::Icmpv6);
-    ipv6_packet_builder.payload_length = Some((NDP_SOL_PACKET_LEN + NDP_OPT_PACKET_LEN + MAC_ADDR_LEN) as u16);
+    let mut ipv6_packet_builder =
+        Ipv6PacketBuilder::new(src_ip, dst_ip, IpNextLevelProtocol::Icmpv6);
+    ipv6_packet_builder.payload_length =
+        Some((NDP_SOL_PACKET_LEN + NDP_OPT_PACKET_LEN + MAC_ADDR_LEN) as u16);
     ipv6_packet_builder.hop_limit = Some(u8::MAX);
     packet_builder.set_ipv6(ipv6_packet_builder);
 
-    let ndp_packet_builder = NdpPacketBuilder::new(interface.mac_addr.clone().unwrap(), src_ip, dst_ip);
+    let ndp_packet_builder =
+        NdpPacketBuilder::new(interface.mac_addr.clone().unwrap(), src_ip, dst_ip);
     packet_builder.set_ndp(ndp_packet_builder);
 
     // Send NDP NeighborSolicitation packets
@@ -124,7 +127,15 @@ fn main() {
                             );
                             println!(
                                 "MAC address: {}",
-                                frame.datalink.as_ref().unwrap().ethernet.as_ref().unwrap().source.address()
+                                frame
+                                    .datalink
+                                    .as_ref()
+                                    .unwrap()
+                                    .ethernet
+                                    .as_ref()
+                                    .unwrap()
+                                    .source
+                                    .address()
                             );
                             println!(
                                 "---- Interface: {}, Total Length: {} bytes ----",

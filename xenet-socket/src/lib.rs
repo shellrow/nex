@@ -314,7 +314,7 @@ impl AsyncSocket {
     /// Set the value of the `SO_BROADCAST` option for this socket.
     ///
     /// When enabled, this socket is allowed to send packets to a broadcast address.
-    pub async fn set_broadcast(&self, broadcast: bool) -> io::Result<()>  {
+    pub async fn set_broadcast(&self, broadcast: bool) -> io::Result<()> {
         self.inner.writable().await?;
         self.inner
             .write_with(|inner| inner.set_broadcast(broadcast))
@@ -323,9 +323,7 @@ impl AsyncSocket {
     /// Get the value of the `SO_ERROR` option on this socket.
     pub async fn get_error(&self) -> io::Result<Option<io::Error>> {
         self.inner.readable().await?;
-        self.inner
-            .read_with(|inner| inner.take_error())
-            .await
+        self.inner.read_with(|inner| inner.take_error()).await
     }
     /// Set value for the `SO_KEEPALIVE` option on this socket.
     ///
@@ -347,7 +345,7 @@ impl AsyncSocket {
     }
     /// Set value for the `SO_REUSEADDR` option on this socket.
     ///
-    /// This indicates that futher calls to `bind` may allow reuse of local addresses. 
+    /// This indicates that futher calls to `bind` may allow reuse of local addresses.
     pub async fn set_reuse_address(&self, reuse: bool) -> io::Result<()> {
         self.inner.writable().await?;
         self.inner
@@ -364,7 +362,7 @@ impl AsyncSocket {
             .await
     }
     /// Set value for the `SO_SNDTIMEO` option on this socket.
-    /// 
+    ///
     /// If `timeout` is `None`, then `write` and `send` calls will block indefinitely.
     pub async fn set_send_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
         self.inner.writable().await?;
@@ -531,7 +529,7 @@ impl Socket {
     /// Set the value of the `SO_BROADCAST` option for this socket.
     ///
     /// When enabled, this socket is allowed to send packets to a broadcast address.
-    pub fn set_broadcast(&self, broadcast: bool) -> io::Result<()>  {
+    pub fn set_broadcast(&self, broadcast: bool) -> io::Result<()> {
         self.inner.set_broadcast(broadcast)
     }
     /// Get the value of the `SO_ERROR` option on this socket.
@@ -552,7 +550,7 @@ impl Socket {
     }
     /// Set value for the `SO_REUSEADDR` option on this socket.
     ///
-    /// This indicates that futher calls to `bind` may allow reuse of local addresses. 
+    /// This indicates that futher calls to `bind` may allow reuse of local addresses.
     pub fn set_reuse_address(&self, reuse: bool) -> io::Result<()> {
         self.inner.set_reuse_address(reuse)
     }
@@ -563,7 +561,7 @@ impl Socket {
         self.inner.set_send_buffer_size(size)
     }
     /// Set value for the `SO_SNDTIMEO` option on this socket.
-    /// 
+    ///
     /// If `timeout` is `None`, then `write` and `send` calls will block indefinitely.
     pub fn set_send_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
         self.inner.set_write_timeout(duration)
