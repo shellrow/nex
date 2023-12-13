@@ -53,7 +53,7 @@ fn main() {
                     eprintln!("{USAGE}");
                     process::exit(1);
                 }
-            }
+            },
             Err(e) => {
                 println!("Failed to parse target ip: {}", e);
                 eprintln!("{USAGE}");
@@ -110,7 +110,10 @@ fn main() {
                     if let Some(arp_packet) = &datalik_layer.arp {
                         if arp_packet.operation == ArpOperation::Reply {
                             println!("ARP Reply packet received");
-                            println!("Received ARP Reply packet from {}", arp_packet.sender_proto_addr);
+                            println!(
+                                "Received ARP Reply packet from {}",
+                                arp_packet.sender_proto_addr
+                            );
                             println!("MAC address: {}", arp_packet.sender_hw_addr);
                             println!(
                                 "---- Interface: {}, Total Length: {} bytes ----",

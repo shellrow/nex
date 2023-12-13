@@ -1,9 +1,11 @@
 use std::net::Ipv6Addr;
 use xenet_core::mac::MacAddr;
 use xenet_packet::ethernet::MAC_ADDR_LEN;
+use xenet_packet::icmpv6::ndp::{
+    MutableNdpOptionPacket, MutableNeighborSolicitPacket, NdpOptionTypes,
+};
+use xenet_packet::icmpv6::ndp::{NDP_OPT_PACKET_LEN, NDP_SOL_PACKET_LEN};
 use xenet_packet::icmpv6::{self, Icmpv6Type, MutableIcmpv6Packet};
-use xenet_packet::icmpv6::ndp::{NDP_SOL_PACKET_LEN, NDP_OPT_PACKET_LEN};
-use xenet_packet::icmpv6::ndp::{MutableNdpOptionPacket, MutableNeighborSolicitPacket, NdpOptionTypes};
 //use xenet_packet::Packet;
 
 /// Length in octets (8bytes)
@@ -39,8 +41,7 @@ impl NdpPacketBuilder {
     pub fn build(&self) -> Vec<u8> {
         let mut buffer = [0u8; NDP_SOL_PACKET_LEN + NDP_OPT_PACKET_LEN + MAC_ADDR_LEN];
         // Build the NDP packet
-        let mut ndp_packet =
-        MutableNeighborSolicitPacket::new(&mut buffer).unwrap();
+        let mut ndp_packet = MutableNeighborSolicitPacket::new(&mut buffer).unwrap();
         ndp_packet.set_target_addr(self.dst_ip);
         ndp_packet.set_icmpv6_type(Icmpv6Type::NeighborSolicitation);
         ndp_packet.set_checksum(0x3131);

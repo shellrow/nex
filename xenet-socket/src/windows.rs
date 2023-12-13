@@ -44,7 +44,7 @@ pub fn check_socket_option(socket_option: SocketOption) -> Result<(), String> {
                         _ => Err(String::from("Invalid protocol")),
                     }
                 }
-                SocketType::Dgram => {
+                SocketType::Datagram => {
                     match socket_option.protocol {
                         Some(IpNextLevelProtocol::Icmp) => Ok(()),
                         Some(IpNextLevelProtocol::Udp) => Ok(()),
@@ -69,7 +69,7 @@ pub fn check_socket_option(socket_option: SocketOption) -> Result<(), String> {
                         _ => Err(String::from("Invalid protocol")),
                     }
                 }
-                SocketType::Dgram => {
+                SocketType::Datagram => {
                     match socket_option.protocol {
                         Some(IpNextLevelProtocol::Icmpv6) => Ok(()),
                         Some(IpNextLevelProtocol::Udp) => Ok(()),

@@ -21,26 +21,22 @@ mod backend;
 #[cfg(windows)]
 pub mod wpcap;
 
-#[cfg(all(
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(any(target_os = "linux", target_os = "android")))]
 #[path = "linux.rs"]
 mod backend;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod linux;
 
-#[cfg(all(
-    any(
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "illumos",
-        target_os = "solaris",
-        target_os = "macos",
-        target_os = "ios"
-    )
-))]
+#[cfg(all(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "macos",
+    target_os = "ios"
+)))]
 #[path = "bpf.rs"]
 mod backend;
 

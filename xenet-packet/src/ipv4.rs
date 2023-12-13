@@ -22,10 +22,10 @@ pub const IPV4_HEADER_LENGTH_BYTE_UNITS: usize = 4;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv4OptionHeader {
-    copied: u1,
-    class: u2,
-    number: Ipv4OptionType,
-    length: Option<u8>,
+    pub copied: u1,
+    pub class: u2,
+    pub number: Ipv4OptionType,
+    pub length: Option<u8>,
 }
 
 /// Represents the IPv4 header.

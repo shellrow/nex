@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use pcap::{Activated, Active};
 
-use crate::Channel::Ethernet;
-use crate::{DataLinkReceiver, DataLinkSender};
 use crate::interface::Interface;
 use crate::interface::InterfaceType;
+use crate::Channel::Ethernet;
+use crate::{DataLinkReceiver, DataLinkSender};
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -202,4 +202,3 @@ pub fn interfaces() -> Vec<Interface> {
         vec![]
     }
 }
-
