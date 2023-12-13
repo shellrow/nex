@@ -1,6 +1,6 @@
 [package]
 name = "xenet-macro-helper"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "A helper crate for xenet-macro. Not intended for direct use."
@@ -11,4 +11,4 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-xenet-core = { path = "../xenet-core", version = "0.3.0" }
+xenet-core = { path = "../xenet-core", version = "0.4.0" }

@@ -8,7 +8,7 @@ Cross-platform networking library for Rust
 
 ## Overview
 
-`xenet` is a Rust library that provides cross-platform networking capabilities.   
+`xenet` is a Rust library that provides cross-platform low-level networking capabilities.   
 It includes a set of modules, each with a specific focus:
 
 - `datalink`: Datalink layer networking. 
@@ -28,7 +28,7 @@ To use `xenet`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-xenet = "0.3"
+xenet = "0.4"
 ```
 
 ## Using Specific Sub-crates
