@@ -1,9 +1,8 @@
 //! Support for sending and receiving data link layer packets using the /dev/bpf device.
 
 use crate::bindings::bpf;
-use crate::interface::Interface;
-use crate::{DataLinkReceiver, DataLinkSender};
-
+use crate::{FrameReceiver, FrameSender};
+use xenet_core::interface::Interface;
 use xenet_sys;
 
 use std::collections::VecDeque;
@@ -201,7 +200,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let fd = Arc::new(xenet_sys::FileDesc { fd: fd });
-    let mut sender = Box::new(DataLinkSenderImpl {
+    let mut sender = Box::new(FrameSenderImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
@@ -214,7 +213,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
         libc::FD_SET(fd.fd, &mut sender.fd_set as *mut libc::fd_set);
     }
-    let mut receiver = Box::new(DataLinkReceiverImpl {
+    let mut receiver = Box::new(FrameReceiverImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; allocated_read_buffer_size],
@@ -233,7 +232,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct DataLinkSenderImpl {
+struct FrameSenderImpl {
     fd: Arc<xenet_sys::FileDesc>,
     fd_set: libc::fd_set,
     write_buffer: Vec<u8>,
@@ -241,7 +240,7 @@ struct DataLinkSenderImpl {
     timeout: Option<libc::timespec>,
 }
 
-impl DataLinkSender for DataLinkSenderImpl {
+impl FrameSender for FrameSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -340,7 +339,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 }
 
-struct DataLinkReceiverImpl {
+struct FrameReceiverImpl {
     fd: Arc<xenet_sys::FileDesc>,
     fd_set: libc::fd_set,
     read_buffer: Vec<u8>,
@@ -349,7 +348,7 @@ struct DataLinkReceiverImpl {
     packets: VecDeque<(usize, usize)>,
 }
 
-impl DataLinkReceiver for DataLinkReceiverImpl {
+impl FrameReceiver for FrameReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         // Loopback packets arrive with a 4 byte header instead of normal ethernet header.
         // Discard that header and replace with zeroed out ethernet header.

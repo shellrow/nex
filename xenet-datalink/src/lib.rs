@@ -9,10 +9,8 @@ use std::io;
 use std::option::Option;
 use std::time::Duration;
 
-pub use xenet_core::mac::{MacAddr, ParseMacAddrError};
-
 mod bindings;
-pub use xenet_core::interface;
+use xenet_core::interface;
 
 #[cfg(windows)]
 #[path = "wpcap.rs"]
@@ -69,7 +67,7 @@ pub enum ChannelType {
 #[non_exhaustive]
 pub enum Channel {
     /// A datalink channel which sends and receives Ethernet packets.
-    Ethernet(Box<dyn DataLinkSender>, Box<dyn DataLinkReceiver>),
+    Ethernet(Box<dyn FrameSender>, Box<dyn FrameReceiver>),
 }
 
 /// Socket fanout type (Linux only).
@@ -160,7 +158,7 @@ pub fn channel(
 }
 
 /// Trait to enable sending `$packet` packets.
-pub trait DataLinkSender: Send {
+pub trait FrameSender: Send {
     /// Create and send a number of packets.
     ///
     /// This will call `func` `num_packets` times. The function will be provided with a
@@ -183,7 +181,7 @@ pub trait DataLinkSender: Send {
 
 /// Structure for receiving packets at the data link layer. Should be constructed using
 /// `datalink_channel()`.
-pub trait DataLinkReceiver: Send {
+pub trait FrameReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;
 }
