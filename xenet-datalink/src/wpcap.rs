@@ -1,7 +1,7 @@
 //! Support for sending and receiving data link layer packets using the npcap or winpcap library.
 
 use super::bindings::{bpf, windows};
-use super::{DataLinkReceiver, DataLinkSender};
+use super::{FrameReceiver, FrameSender};
 use xenet_core::interface::Interface;
 
 use libc::c_char;
@@ -134,14 +134,14 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let adapter = Arc::new(WinPcapAdapter { adapter: adapter });
-    let sender = Box::new(DataLinkSenderImpl {
+    let sender = Box::new(FrameSenderImpl {
         adapter: adapter.clone(),
         _write_buffer: write_buffer,
         packet: WinPcapPacket {
             packet: write_packet,
         },
     });
-    let receiver = Box::new(DataLinkReceiverImpl {
+    let receiver = Box::new(FrameReceiverImpl {
         adapter: adapter,
         _read_buffer: read_buffer,
         packet: WinPcapPacket {
@@ -153,13 +153,13 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct DataLinkSenderImpl {
+struct FrameSenderImpl {
     adapter: Arc<WinPcapAdapter>,
     _write_buffer: Vec<u8>,
     packet: WinPcapPacket,
 }
 
-impl DataLinkSender for DataLinkSenderImpl {
+impl FrameSender for FrameSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -207,20 +207,20 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 }
 
-unsafe impl Send for DataLinkSenderImpl {}
-unsafe impl Sync for DataLinkSenderImpl {}
+unsafe impl Send for FrameSenderImpl {}
+unsafe impl Sync for FrameSenderImpl {}
 
-struct DataLinkReceiverImpl {
+struct FrameReceiverImpl {
     adapter: Arc<WinPcapAdapter>,
     _read_buffer: Vec<u8>,
     packet: WinPcapPacket,
     packets: VecDeque<(usize, usize)>,
 }
 
-unsafe impl Send for DataLinkReceiverImpl {}
-unsafe impl Sync for DataLinkReceiverImpl {}
+unsafe impl Send for FrameReceiverImpl {}
+unsafe impl Sync for FrameReceiverImpl {}
 
-impl DataLinkReceiver for DataLinkReceiverImpl {
+impl FrameReceiver for FrameReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         // NOTE Most of the logic here is identical to FreeBSD/OS X
         while self.packets.is_empty() {
