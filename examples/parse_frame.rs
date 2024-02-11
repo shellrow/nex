@@ -51,7 +51,7 @@ fn main() {
                     packet.len()
                 );
                 let mut parse_option: ParseOption = ParseOption::default();
-                if interface.is_tun() {
+                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) || interface.is_loopback()) {
                     let payload_offset;
                     if interface.is_loopback() {
                         payload_offset = 14;
