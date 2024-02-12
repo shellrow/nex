@@ -61,7 +61,7 @@ fn main() {
                     packet.len()
                 );
                 let payload_offset;
-                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) || interface.is_loopback()) {
+                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
                     if interface.is_loopback() {
                         payload_offset = 14;
                     } else {
