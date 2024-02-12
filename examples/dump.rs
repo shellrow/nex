@@ -49,7 +49,7 @@ fn main() {
     };
     let mut capture_no: usize = 0;
     loop {
-        let mut buf: [u8; 2048] = [0u8; 2048];
+        let mut buf: [u8; 4096] = [0u8; 4096];
         let mut fake_ethernet_frame = MutableEthernetPacket::new(&mut buf[..]).unwrap();
         match rx.next() {
             Ok(packet) => {
@@ -61,7 +61,7 @@ fn main() {
                     packet.len()
                 );
                 let payload_offset;
-                if interface.is_tun() {
+                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
                     if interface.is_loopback() {
                         payload_offset = 14;
                     } else {

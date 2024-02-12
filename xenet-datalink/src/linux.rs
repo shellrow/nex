@@ -4,8 +4,8 @@ extern crate libc;
 
 use crate::bindings::linux;
 use crate::interface::Interface;
-use crate::{DataLinkReceiver, DataLinkSender, MacAddr};
-
+use crate::{FrameReceiver, FrameSender};
+use xenet_core::mac::MacAddr;
 use xenet_sys;
 
 use std::cmp;
@@ -191,7 +191,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let fd = Arc::new(xenet_sys::FileDesc { fd: socket });
-    let sender = Box::new(DataLinkSenderImpl {
+    let sender = Box::new(FrameSenderImpl {
         socket: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
@@ -202,7 +202,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             .write_timeout
             .map(|to| xenet_sys::duration_to_timespec(to)),
     });
-    let receiver = Box::new(DataLinkReceiverImpl {
+    let receiver = Box::new(FrameReceiverImpl {
         socket: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; config.read_buffer_size],
@@ -215,7 +215,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct DataLinkSenderImpl {
+struct FrameSenderImpl {
     socket: Arc<xenet_sys::FileDesc>,
     fd_set: libc::fd_set,
     write_buffer: Vec<u8>,
@@ -225,7 +225,7 @@ struct DataLinkSenderImpl {
     timeout: Option<libc::timespec>,
 }
 
-impl DataLinkSender for DataLinkSenderImpl {
+impl FrameSender for FrameSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -318,7 +318,7 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 }
 
-struct DataLinkReceiverImpl {
+struct FrameReceiverImpl {
     socket: Arc<xenet_sys::FileDesc>,
     fd_set: libc::fd_set,
     read_buffer: Vec<u8>,
@@ -326,7 +326,7 @@ struct DataLinkReceiverImpl {
     timeout: Option<libc::timespec>,
 }
 
-impl DataLinkReceiver for DataLinkReceiverImpl {
+impl FrameReceiver for FrameReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut caddr: libc::sockaddr_storage = unsafe { mem::zeroed() };
         unsafe {
