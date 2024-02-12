@@ -7,10 +7,10 @@ use std::fs::File;
 pub(crate) const NPCAP_SOFTWARE_NAME: &str = "Npcap";
 pub(crate) const NPCAP_INSTALL_DIR_NAME: &str = "npcap";
 pub(crate) const NPCAP_SDK_DIR_NAME: &str = "npcap-sdk-1.13";
-pub const NPCAP_INSTALLER_FILENAME: &str = "npcap-1.76.exe";
+pub const NPCAP_INSTALLER_FILENAME: &str = "npcap-1.79.exe";
 pub const NPCAP_SDK_FILENAME: &str = "npcap-sdk-1.13.zip";
 pub(crate) const NPCAP_INSTALLER_HASH: &str =
-    "3C846F5F62A217E3CF2052749CDE159E946248022781097C58815386DA6B9C46";
+    "A95577EBBC67FC45B319E2EF3A55F4E9B211FE82ED4CB9D8BE6B1A9E2425CE53";
 pub(crate) const NPCAP_SDK_HASH: &str =
     "DAD1F2BF1B02B787BE08CA4862F99E39A876C1F274BAC4AC0CEDC9BBC58F94FD";
 #[allow(dead_code)]
@@ -75,7 +75,7 @@ pub fn install_npcap() -> Result<(), Box<dyn Error>> {
     let hash_result: String = format!("{:X}", hash_result);
 
     if hash_result != NPCAP_INSTALLER_HASH {
-        return Err("Error: checksum failed...".into());
+        return Err(format!("Error: checksum failed... {}", hash_result).into());
     }
 
     // Run npcap installer
@@ -122,7 +122,7 @@ pub fn verify_installer_checksum(file_path: String) -> Result<(), Box<dyn Error>
     let hash_result: String = format!("{:X}", hash_result);
 
     if hash_result != NPCAP_INSTALLER_HASH {
-        return Err("Error: checksum failed...".into());
+        return Err(format!("Error: checksum failed... {}", hash_result).into());
     }
     Ok(())
 }
