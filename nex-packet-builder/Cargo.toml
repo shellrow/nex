@@ -1,0 +1,16 @@
+[package]
+name = "nex-packet-builder"
+version = "0.5.0"
+edition = "2021"
+authors = ["shellrow <shellrow@protonmail.com>"]
+description = "Provides high-level packet building on top of nex-packet. Part of nex project. "
+repository = "https://github.com/shellrow/nex"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+nex-core = { path = "../nex-core", version = "0.5.0" }
+nex-packet = { path = "../nex-packet", version = "0.5.0" }
+rand = "0.8"

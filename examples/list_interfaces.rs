@@ -5,7 +5,7 @@
 //! https://github.com/shellrow/default-net
 
 fn main() {
-    let interfaces = xenet::net::interface::get_interfaces();
+    let interfaces = nex::net::interface::get_interfaces();
     for interface in interfaces {
         println!("Interface:");
         println!("\tIndex: {}", interface.index);

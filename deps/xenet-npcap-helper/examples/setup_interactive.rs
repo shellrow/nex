@@ -1,4 +1,4 @@
-use xenet_npcap_helper::npcap;
+use nex_npcap_helper::npcap;
 use inquire::Confirm;
 
 fn main() {

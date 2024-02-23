@@ -8,17 +8,17 @@ use std::env;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::process;
-use xenet::datalink;
-use xenet::datalink::Channel::Ethernet;
-use xenet::net::interface::Interface;
-use xenet::net::mac::MacAddr;
-use xenet::packet::ethernet::EtherType;
-use xenet::packet::frame::Frame;
-use xenet::packet::frame::ParseOption;
-use xenet::util::packet_builder::builder::PacketBuilder;
-use xenet::util::packet_builder::ethernet::EthernetPacketBuilder;
-use xenet_packet::arp::ArpOperation;
-use xenet_packet_builder::arp::ArpPacketBuilder;
+use nex::datalink;
+use nex::datalink::Channel::Ethernet;
+use nex::net::interface::Interface;
+use nex::net::mac::MacAddr;
+use nex::packet::ethernet::EtherType;
+use nex::packet::frame::Frame;
+use nex::packet::frame::ParseOption;
+use nex::util::packet_builder::builder::PacketBuilder;
+use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
+use nex_packet::arp::ArpOperation;
+use nex_packet_builder::arp::ArpPacketBuilder;
 
 const USAGE: &str = "USAGE: arp <TARGET IPv4 Addr> <NETWORK INTERFACE>";
 
@@ -26,7 +26,7 @@ fn main() {
     let interface: Interface = match env::args().nth(2) {
         Some(n) => {
             // Use interface specified by the user
-            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interfaces: Vec<Interface> = nex::net::interface::get_interfaces();
             let interface: Interface = interfaces
                 .into_iter()
                 .find(|interface| interface.name == n)

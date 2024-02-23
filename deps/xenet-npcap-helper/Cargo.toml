@@ -1,10 +1,10 @@
 [package]
-name = "xenet-npcap-helper"
+name = "nex-npcap-helper"
 version = "0.5.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
-description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the xenet"
-repository = "https://github.com/shellrow/xenet"
+description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the nex"
+repository = "https://github.com/shellrow/nex"
 readme = "../../README.md"
 keywords = ["network", "windows"]
 categories = ["network-programming"]

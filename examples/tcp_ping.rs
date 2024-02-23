@@ -9,19 +9,19 @@
 use std::env;
 use std::net::{IpAddr, SocketAddr};
 use std::process;
-use xenet::datalink;
-use xenet::datalink::Channel::Ethernet;
-use xenet::net::interface::Interface;
-use xenet::net::mac::MacAddr;
-use xenet::packet::ethernet::EtherType;
-use xenet::packet::frame::{Frame, ParseOption};
-use xenet::packet::ip::IpNextLevelProtocol;
-use xenet::packet::tcp::{TcpFlags, TcpOption};
-use xenet::util::packet_builder::builder::PacketBuilder;
-use xenet::util::packet_builder::ethernet::EthernetPacketBuilder;
-use xenet::util::packet_builder::ipv4::Ipv4PacketBuilder;
-use xenet::util::packet_builder::ipv6::Ipv6PacketBuilder;
-use xenet::util::packet_builder::tcp::TcpPacketBuilder;
+use nex::datalink;
+use nex::datalink::Channel::Ethernet;
+use nex::net::interface::Interface;
+use nex::net::mac::MacAddr;
+use nex::packet::ethernet::EtherType;
+use nex::packet::frame::{Frame, ParseOption};
+use nex::packet::ip::IpNextLevelProtocol;
+use nex::packet::tcp::{TcpFlags, TcpOption};
+use nex::util::packet_builder::builder::PacketBuilder;
+use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
+use nex::util::packet_builder::ipv4::Ipv4PacketBuilder;
+use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
+use nex::util::packet_builder::tcp::TcpPacketBuilder;
 
 const USAGE: &str = "USAGE: tcp_ping <TARGET SOCKETADDR> <NETWORK INTERFACE>";
 
@@ -29,7 +29,7 @@ fn main() {
     let interface: Interface = match env::args().nth(2) {
         Some(n) => {
             // Use interface specified by user
-            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interfaces: Vec<Interface> = nex::net::interface::get_interfaces();
             let interface: Interface = interfaces
                 .into_iter()
                 .find(|interface| interface.name == n)
@@ -107,7 +107,7 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ipnet::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
                     let ipv6_packet_builder =
@@ -148,7 +148,7 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| xenet::net::ipnet::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ipnet::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
                     let mut tcp_packet_builder = TcpPacketBuilder::new(
