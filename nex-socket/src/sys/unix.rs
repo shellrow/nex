@@ -3,7 +3,7 @@ use std::{io, mem::MaybeUninit, net::SocketAddr, time::Duration};
 use socket2::{Domain, Protocol, Socket as SystemSocket, Type};
 use nex_packet::ip::IpNextLevelProtocol;
 
-use super::{IpVersion, SocketOption, SocketType};
+use crate::socket::{IpVersion, SocketOption, SocketType};
 
 pub(crate) fn check_socket_option(socket_option: SocketOption) -> Result<(), String> {
     match socket_option.ip_version {
@@ -45,18 +45,18 @@ pub(crate) fn check_socket_option(socket_option: SocketOption) -> Result<(), Str
 }
 
 /// Receive all IPv4 or IPv6 packets passing through a network interface.
-pub struct ListenerSocket {
+pub struct PacketReceiver {
     inner: SystemSocket,
 }
 
-impl ListenerSocket {
-    /// Constructs a new ListenerSocket.
+impl PacketReceiver {
+    /// Constructs a new PacketReceiver.
     pub fn new(
         _socket_addr: SocketAddr,
         ip_version: IpVersion,
         protocol: Option<IpNextLevelProtocol>,
         timeout: Option<Duration>,
-    ) -> io::Result<ListenerSocket> {
+    ) -> io::Result<PacketReceiver> {
         let socket = match ip_version {
             IpVersion::V4 => match protocol {
                 Some(IpNextLevelProtocol::Icmp) => {
@@ -87,7 +87,7 @@ impl ListenerSocket {
             socket.set_read_timeout(Some(timeout))?;
         }
         //socket.bind(&socket_addr.into())?;
-        Ok(ListenerSocket { inner: socket })
+        Ok(PacketReceiver { inner: socket })
     }
     /// Receive packet without source address.
     pub fn receive_from(&self, buf: &mut Vec<u8>) -> io::Result<(usize, SocketAddr)> {

@@ -217,17 +217,17 @@ pub(crate) fn recv_from(
 }
 
 /// Receive all IPv4 or IPv6 packets passing through a network interface.
-pub struct ListenerSocket {
+pub struct PacketReceiver {
     inner: SOCKET,
 }
 
-impl ListenerSocket {
+impl PacketReceiver {
     pub fn new(
         socket_addr: SocketAddr,
         ip_version: IpVersion,
         protocol: Option<IpNextLevelProtocol>,
         timeout: Option<Duration>,
-    ) -> io::Result<ListenerSocket> {
+    ) -> io::Result<PacketReceiver> {
         let socket = match ip_version {
             IpVersion::V4 => match protocol {
                 Some(IpNextLevelProtocol::Icmp) => {
@@ -258,7 +258,7 @@ impl ListenerSocket {
         bind(socket, &sock_addr)?;
         set_promiscuous(socket, true)?;
         set_timeout_opt(socket, sock::SOL_SOCKET, sock::SO_RCVTIMEO, timeout)?;
-        Ok(ListenerSocket { inner: socket })
+        Ok(PacketReceiver { inner: socket })
     }
     pub fn bind(&self, addr: &SockAddr) -> io::Result<()> {
         bind(self.inner, addr)
