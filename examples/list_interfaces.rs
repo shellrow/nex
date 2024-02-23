@@ -1,8 +1,8 @@
 //! This example shows all interfaces and their properties.
 //!
 //! If you want to focus on network interfaces,
-//! you can use the default-net
-//! https://github.com/shellrow/default-net
+//! you can use the netdev
+//! https://github.com/shellrow/netdev
 
 fn main() {
     let interfaces = nex::net::interface::get_interfaces();
@@ -32,7 +32,8 @@ fn main() {
         if let Some(gateway) = interface.gateway {
             println!("Gateway");
             println!("\tMAC Address: {}", gateway.mac_addr);
-            println!("\tIP Address: {}", gateway.ip_addr);
+            println!("\tIPv4 Address: {:?}", gateway.ipv4);
+            println!("\tIPv6 Address: {:?}", gateway.ipv6);
         } else {
             println!("Gateway: (Not found)");
         }

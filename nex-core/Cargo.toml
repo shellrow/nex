@@ -12,8 +12,8 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
-default-net = { version = "0.21.0", optional = true }
+netdev = { version = "0.23", optional = true }
 
 [features]
-default = ["dep:default-net"]
-serde = ["dep:serde", "default-net/serde"]
+default = ["dep:netdev"]
+serde = ["dep:serde", "netdev/serde"]

@@ -1,1 +1,1 @@
-pub use default_net::gateway::*;
+pub use netdev::gateway::*;

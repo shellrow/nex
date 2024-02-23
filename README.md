@@ -38,4 +38,4 @@ You can also directly use specific sub-crates by importing them individually.
 - `nex-packet-builder`
 - `nex-socket`
 
-If you want to focus on network interfaces, you can use the [default-net](https://github.com/shellrow/default-net).
+If you want to focus on network interfaces, you can use the [netdev](https://github.com/shellrow/netdev).
