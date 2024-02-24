@@ -65,6 +65,14 @@ impl SocketType {
             SocketType::Stream => Type::STREAM,
         }
     }
+    pub (crate) fn from_type(t: Type) -> SocketType {
+        match t {
+            Type::RAW => SocketType::Raw,
+            Type::DGRAM => SocketType::Datagram,
+            Type::STREAM => SocketType::Stream,
+            _ => SocketType::Stream,
+        }
+    }
 }
 
 /// Socket option.

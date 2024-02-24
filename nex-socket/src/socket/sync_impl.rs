@@ -100,9 +100,12 @@ impl Socket {
             Err(e) => Err(e),
         }
     }
-    /// Set receive timeout.
-    pub fn set_receive_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.inner.set_read_timeout(timeout)
+    /// Get TTL or Hop Limit.
+    pub fn ttl(&self, ip_version: IpVersion) -> io::Result<u32> {
+        match ip_version {
+            IpVersion::V4 => self.inner.ttl(),
+            IpVersion::V6 => self.inner.unicast_hops_v6(),
+        }
     }
     /// Set TTL or Hop Limit.
     pub fn set_ttl(&self, ttl: u32, ip_version: IpVersion) -> io::Result<()> {
@@ -110,6 +113,22 @@ impl Socket {
             IpVersion::V4 => self.inner.set_ttl(ttl),
             IpVersion::V6 => self.inner.set_unicast_hops_v6(ttl),
         }
+    }
+    /// Get the value of the IP_TOS option for this socket.
+    pub fn tos(&self) -> io::Result<u32> {
+        self.inner.tos()
+    }
+    /// Set the value of the IP_TOS option for this socket.
+    pub fn set_tos(&self, tos: u32) -> io::Result<()> {
+        self.inner.set_tos(tos)
+    }
+    /// Get the value of the IP_RECVTOS option for this socket.
+    pub fn receive_tos(&self) -> io::Result<bool> {
+        self.inner.recv_tos()
+    }
+    /// Set the value of the IP_RECVTOS option for this socket.
+    pub fn set_receive_tos(&self, receive_tos: bool) -> io::Result<()> {
+        self.inner.set_recv_tos(receive_tos)
     }
     /// Initiate TCP connection.
     pub fn connect(&self, addr: SocketAddr) -> io::Result<()> {
@@ -152,13 +171,37 @@ impl Socket {
             Err(e) => Err(e),
         }
     }
-    /// Shutdown TCP connection.
-    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
-        self.inner.shutdown(how)
+    /// Get type of the socket.
+    pub fn socket_type(&self) -> io::Result<crate::socket::SocketType> {
+        match self.inner.r#type() {
+            Ok(socktype) => Ok(crate::socket::SocketType::from_type(socktype)),
+            Err(e) => Err(e),
+        }
+    }
+    /// Create a new socket with the same configuration and bound to the same address.
+    pub fn try_clone(&self) -> io::Result<Socket> {
+        match self.inner.try_clone() {
+            Ok(socket) => Ok(Socket {
+                inner: Arc::new(socket),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    /// Returns true if this socket is set to nonblocking mode, false otherwise.
+    pub fn is_nonblocking(&self) -> io::Result<bool> {
+        self.inner.nonblocking()
     }
     /// Set non-blocking mode.
     pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
         self.inner.set_nonblocking(nonblocking)
+    }
+    /// Shutdown TCP connection.
+    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        self.inner.shutdown(how)
+    }
+    /// Get the value of the SO_BROADCAST option for this socket.
+    pub fn is_broadcast(&self) -> io::Result<bool> {
+        self.inner.broadcast()
     }
     /// Set the value of the `SO_BROADCAST` option for this socket.
     ///
@@ -170,11 +213,27 @@ impl Socket {
     pub fn get_error(&self) -> io::Result<Option<io::Error>> {
         self.inner.take_error()
     }
+    /// Get the value of the `SO_KEEPALIVE` option on this socket.
+    pub fn keepalive(&self) -> io::Result<bool> {
+        self.inner.keepalive()
+    }
     /// Set value for the `SO_KEEPALIVE` option on this socket.
     ///
     /// Enable sending of keep-alive messages on connection-oriented sockets.
     pub fn set_keepalive(&self, keepalive: bool) -> io::Result<()> {
         self.inner.set_keepalive(keepalive)
+    }
+    /// Get the value of the SO_LINGER option on this socket.
+    pub fn linger(&self) -> io::Result<Option<Duration>> {
+        self.inner.linger()
+    }
+    /// Set value for the SO_LINGER option on this socket.
+    pub fn set_linger(&self, dur: Option<Duration>) -> io::Result<()> {
+        self.inner.set_linger(dur)
+    }
+    /// Get the value of the `SO_RCVBUF` option on this socket.
+    pub fn receive_buffer_size(&self) -> io::Result<usize> {
+        self.inner.recv_buffer_size()
     }
     /// Set value for the `SO_RCVBUF` option on this socket.
     ///
@@ -182,11 +241,27 @@ impl Socket {
     pub fn set_receive_buffer_size(&self, size: usize) -> io::Result<()> {
         self.inner.set_recv_buffer_size(size)
     }
+    /// Get value for the SO_RCVTIMEO option on this socket.
+    pub fn receive_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.read_timeout()
+    }
+    /// Set value for the `SO_RCVTIMEO` option on this socket.
+    pub fn set_receive_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
+        self.inner.set_read_timeout(duration)
+    }
+    /// Get value for the `SO_REUSEADDR` option on this socket.
+    pub fn reuse_address(&self) -> io::Result<bool> {
+        self.inner.reuse_address()
+    }
     /// Set value for the `SO_REUSEADDR` option on this socket.
     ///
     /// This indicates that futher calls to `bind` may allow reuse of local addresses.
     pub fn set_reuse_address(&self, reuse: bool) -> io::Result<()> {
         self.inner.set_reuse_address(reuse)
+    }
+    /// Get value for the `SO_SNDBUF` option on this socket.
+    pub fn send_buffer_size(&self) -> io::Result<usize> {
+        self.inner.send_buffer_size()
     }
     /// Set value for the `SO_SNDBUF` option on this socket.
     ///
@@ -194,11 +269,27 @@ impl Socket {
     pub fn set_send_buffer_size(&self, size: usize) -> io::Result<()> {
         self.inner.set_send_buffer_size(size)
     }
+    /// Get value for the `SO_SNDTIMEO` option on this socket.
+    pub fn send_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.write_timeout()
+    }
     /// Set value for the `SO_SNDTIMEO` option on this socket.
     ///
     /// If `timeout` is `None`, then `write` and `send` calls will block indefinitely.
     pub fn set_send_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
         self.inner.set_write_timeout(duration)
+    }
+    /// Get the value of the IP_HDRINCL option on this socket.
+    pub fn is_ip_header_included(&self) -> io::Result<bool> {
+        self.inner.header_included()
+    }
+    /// Set the value of the `IP_HDRINCL` option on this socket.
+    pub fn set_ip_header_included(&self, include: bool) -> io::Result<()> {
+        self.inner.set_header_included(include)
+    }
+    /// Get the value of the TCP_NODELAY option on this socket.
+    pub fn nodelay(&self) -> io::Result<bool> {
+        self.inner.nodelay()
     }
     /// Set the value of the `TCP_NODELAY` option on this socket.
     ///

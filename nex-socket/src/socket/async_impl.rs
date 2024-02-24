@@ -121,12 +121,18 @@ impl AsyncSocket {
             }
         }
     }
-    /// Set receive timeout.
-    pub async fn set_receive_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        self.inner.writable().await?;
-        self.inner
-            .write_with(|inner| inner.set_read_timeout(timeout))
-            .await
+    /// Get TTL or Hop Limit.
+    pub async fn ttl(&self, ip_version: IpVersion) -> io::Result<u32> {
+        match ip_version {
+            IpVersion::V4 => {
+                self.inner.readable().await?;
+                self.inner.read_with(|inner| inner.ttl()).await
+            }
+            IpVersion::V6 => {
+                self.inner.readable().await?;
+                self.inner.read_with(|inner| inner.unicast_hops_v6()).await
+            }
+        }
     }
     /// Set TTL or Hop Limit.
     pub async fn set_ttl(&self, ttl: u32, ip_version: IpVersion) -> io::Result<()> {
@@ -139,6 +145,28 @@ impl AsyncSocket {
                     .await
             }
         }
+    }
+    /// Get the value of the IP_TOS option for this socket.
+    pub async fn tos(&self) -> io::Result<u32> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.tos()).await
+    }
+    /// Set the value of the IP_TOS option for this socket.
+    pub async fn set_tos(&self, tos: u32) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner.write_with(|inner| inner.set_tos(tos)).await
+    }
+    /// Get the value of the IP_RECVTOS option for this socket.
+    pub async fn receive_tos(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.recv_tos()).await
+    }
+    /// Set the value of the IP_RECVTOS option for this socket.
+    pub async fn set_receive_tos(&self, receive_tos: bool) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner
+            .write_with(|inner| inner.set_recv_tos(receive_tos))
+            .await
     }
     /// Initiate TCP connection.
     pub async fn connect(&self, addr: SocketAddr) -> io::Result<()> {
@@ -175,7 +203,7 @@ impl AsyncSocket {
     }
     /// Get local address.
     pub async fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.inner.writable().await?;
+        self.inner.readable().await?;
         match self.inner.read_with(|inner| inner.local_addr()).await {
             Ok(addr) => Ok(addr.as_socket().unwrap()),
             Err(e) => Err(e),
@@ -183,16 +211,34 @@ impl AsyncSocket {
     }
     /// Get peer address.
     pub async fn peer_addr(&self) -> io::Result<SocketAddr> {
-        self.inner.writable().await?;
+        self.inner.readable().await?;
         match self.inner.read_with(|inner| inner.peer_addr()).await {
             Ok(addr) => Ok(addr.as_socket().unwrap()),
             Err(e) => Err(e),
         }
     }
-    /// Shutdown TCP connection.
-    pub async fn shutdown(&self, how: Shutdown) -> io::Result<()> {
-        self.inner.writable().await?;
-        self.inner.write_with(|inner| inner.shutdown(how)).await
+    /// Get type of the socket.
+    pub async fn socket_type(&self) -> io::Result<crate::socket::SocketType> {
+        self.inner.readable().await?;
+        match self.inner.read_with(|inner| inner.r#type()).await {
+            Ok(socktype) => Ok(crate::socket::SocketType::from_type(socktype)),
+            Err(e) => Err(e),
+        }
+    }
+    /// Create a new socket with the same configuration and bound to the same address.
+    pub async fn try_clone(&self) -> io::Result<AsyncSocket> {
+        self.inner.readable().await?;
+        match self.inner.read_with(|inner| inner.try_clone()).await {
+            Ok(socket) => Ok(AsyncSocket {
+                inner: Arc::new(Async::new(socket)?),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    /// Returns true if this socket is set to nonblocking mode, false otherwise.
+    pub async fn is_nonblocking(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.nonblocking()).await
     }
     /// Set non-blocking mode.
     pub async fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
@@ -200,6 +246,16 @@ impl AsyncSocket {
         self.inner
             .write_with(|inner| inner.set_nonblocking(nonblocking))
             .await
+    }
+    /// Shutdown TCP connection.
+    pub async fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner.write_with(|inner| inner.shutdown(how)).await
+    }
+    /// Get the value of the SO_BROADCAST option for this socket.
+    pub async fn is_broadcast(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.broadcast()).await
     }
     /// Set the value of the `SO_BROADCAST` option for this socket.
     ///
@@ -215,6 +271,11 @@ impl AsyncSocket {
         self.inner.readable().await?;
         self.inner.read_with(|inner| inner.take_error()).await
     }
+    /// Get the value of the `SO_KEEPALIVE` option on this socket.
+    pub async fn is_keepalive(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.keepalive()).await
+    }
     /// Set value for the `SO_KEEPALIVE` option on this socket.
     ///
     /// Enable sending of keep-alive messages on connection-oriented sockets.
@@ -223,6 +284,21 @@ impl AsyncSocket {
         self.inner
             .write_with(|inner| inner.set_keepalive(keepalive))
             .await
+    }
+    /// Get the value of the SO_LINGER option on this socket.
+    pub async fn linger(&self) -> io::Result<Option<Duration>> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.linger()).await
+    }
+    /// Set value for the SO_LINGER option on this socket.
+    pub async fn set_linger(&self, dur: Option<Duration>) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner.write_with(|inner| inner.set_linger(dur)).await
+    }
+    /// Get the value of the `SO_RCVBUF` option on this socket.
+    pub async fn receive_buffer_size(&self) -> io::Result<usize> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.recv_buffer_size()).await
     }
     /// Set value for the `SO_RCVBUF` option on this socket.
     ///
@@ -233,6 +309,23 @@ impl AsyncSocket {
             .write_with(|inner| inner.set_recv_buffer_size(size))
             .await
     }
+    /// Get value for the SO_RCVTIMEO option on this socket.
+    pub async fn receive_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.read_timeout()).await
+    }
+    /// Set value for the `SO_RCVTIMEO` option on this socket.
+    pub async fn set_receive_timeout(&self, duration: Option<Duration>) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner
+            .write_with(|inner| inner.set_read_timeout(duration))
+            .await
+    }
+    /// Get value for the `SO_REUSEADDR` option on this socket.
+    pub async fn reuse_address(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.reuse_address()).await
+    }
     /// Set value for the `SO_REUSEADDR` option on this socket.
     ///
     /// This indicates that futher calls to `bind` may allow reuse of local addresses.
@@ -241,6 +334,11 @@ impl AsyncSocket {
         self.inner
             .write_with(|inner| inner.set_reuse_address(reuse))
             .await
+    }
+    /// Get value for the `SO_SNDBUF` option on this socket.
+    pub async fn send_buffer_size(&self) -> io::Result<usize> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.send_buffer_size()).await
     }
     /// Set value for the `SO_SNDBUF` option on this socket.
     ///
@@ -251,6 +349,11 @@ impl AsyncSocket {
             .write_with(|inner| inner.set_send_buffer_size(size))
             .await
     }
+    /// Get value for the `SO_SNDTIMEO` option on this socket.
+    pub async fn send_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.write_timeout()).await
+    }
     /// Set value for the `SO_SNDTIMEO` option on this socket.
     ///
     /// If `timeout` is `None`, then `write` and `send` calls will block indefinitely.
@@ -259,6 +362,23 @@ impl AsyncSocket {
         self.inner
             .write_with(|inner| inner.set_write_timeout(duration))
             .await
+    }
+    /// Get the value of the IP_HDRINCL option on this socket.
+    pub async fn is_ip_header_included(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.header_included()).await
+    }
+    /// Set the value of the `IP_HDRINCL` option on this socket.
+    pub async fn set_ip_header_included(&self, include: bool) -> io::Result<()> {
+        self.inner.writable().await?;
+        self.inner
+            .write_with(|inner| inner.set_header_included(include))
+            .await
+    }
+    /// Get the value of the TCP_NODELAY option on this socket.
+    pub async fn is_nodelay(&self) -> io::Result<bool> {
+        self.inner.readable().await?;
+        self.inner.read_with(|inner| inner.nodelay()).await
     }
     /// Set the value of the `TCP_NODELAY` option on this socket.
     ///
