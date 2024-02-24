@@ -84,10 +84,6 @@ pub struct SocketOption {
     pub socket_type: SocketType,
     /// Protocol. TCP, UDP, ICMP, etc.
     pub protocol: Option<IpNextLevelProtocol>,
-    /// Timeout
-    pub timeout: Option<u64>,
-    /// TTL or Hop Limit
-    pub ttl: Option<u32>,
     /// Non-blocking mode
     pub non_blocking: bool,
 }
@@ -103,8 +99,6 @@ impl SocketOption {
             ip_version,
             socket_type,
             protocol,
-            timeout: None,
-            ttl: None,
             non_blocking: false,
         }
     }

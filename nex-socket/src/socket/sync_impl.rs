@@ -131,8 +131,8 @@ impl Socket {
         self.inner.set_recv_tos(receive_tos)
     }
     /// Initiate TCP connection.
-    pub fn connect(&self, addr: SocketAddr) -> io::Result<()> {
-        let addr: SockAddr = SockAddr::from(addr);
+    pub fn connect(&self, addr: &SocketAddr) -> io::Result<()> {
+        let addr: SockAddr = SockAddr::from(*addr);
         self.inner.connect(&addr)
     }
     /// Initiate a connection on this socket to the specified address, only only waiting for a certain period of time for the connection to be established.
