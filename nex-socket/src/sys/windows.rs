@@ -29,7 +29,7 @@ use windows_sys::Win32::Networking::WinSock::{
 pub(crate) const NO_INHERIT: c_int = 1 << (c_int::BITS - 1);
 pub(crate) const MAX_BUF_LEN: usize = <c_int>::max_value() as usize;
 
-use super::{IpVersion, SocketOption, SocketType};
+use crate::socket::{IpVersion, SocketOption, SocketType};
 use nex_packet::ip::IpNextLevelProtocol;
 
 pub fn check_socket_option(socket_option: SocketOption) -> Result<(), String> {
