@@ -2,7 +2,7 @@ use async_io::Async;
 use socket2::{SockAddr, Socket as SystemSocket};
 use std::io;
 use std::mem::MaybeUninit;
-use std::net::{Shutdown, SocketAddr};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 use crate::socket::{IpVersion, SocketOption};
@@ -388,5 +388,32 @@ impl AsyncSocket {
         self.inner
             .write_with(|inner| inner.set_nodelay(nodelay))
             .await
+    }
+    /// Get TCP Stream
+    /// This function will consume the socket and return a new std::net::TcpStream.
+    pub fn into_tcp_stream(&self) -> io::Result<TcpStream> {
+        let socket = Arc::try_unwrap(self.inner.clone())
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to unwrap Arc"))?
+            .into_inner()?;
+        let tcp_stream = TcpStream::from(socket);
+        Ok(tcp_stream)
+    }
+    /// Get TCP Listener
+    /// This function will consume the socket and return a new std::net::TcpListener.
+    pub fn into_tcp_listener(&self) -> io::Result<TcpListener> {
+        let socket = Arc::try_unwrap(self.inner.clone())
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to unwrap Arc"))?
+            .into_inner()?;
+        let tcp_listener = TcpListener::from(socket);
+        Ok(tcp_listener)
+    }
+    /// Get UDP Socket
+    /// This function will consume the socket and return a new std::net::UdpSocket.
+    pub fn into_udp_socket(&self) -> io::Result<UdpSocket> {
+        let socket = Arc::try_unwrap(self.inner.clone())
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to unwrap Arc"))?
+            .into_inner()?;
+        let udp_socket = UdpSocket::from(socket);
+        Ok(udp_socket)
     }
 }

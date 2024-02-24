@@ -1,7 +1,7 @@
 use socket2::{SockAddr, Socket as SystemSocket};
 use std::io;
 use std::mem::MaybeUninit;
-use std::net::{Shutdown, SocketAddr};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
 use crate::socket::{IpVersion, SocketOption};
@@ -296,5 +296,38 @@ impl Socket {
     /// If set, segments are always sent as soon as possible, even if there is only a small amount of data.
     pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
         self.inner.set_nodelay(nodelay)
+    }
+    /// Get TCP Stream
+    /// This function will consume the socket and return a new std::net::TcpStream.
+    pub fn into_tcp_stream(self) -> io::Result<TcpStream> {
+        match Arc::try_unwrap(self.inner) {
+            Ok(socket) => Ok(socket.into()),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to unwrap socket",
+            )),
+        }
+    }
+    /// Get TCP Listener
+    /// This function will consume the socket and return a new std::net::TcpListener.
+    pub fn into_tcp_listener(self) -> io::Result<TcpListener> {
+        match Arc::try_unwrap(self.inner) {
+            Ok(socket) => Ok(socket.into()),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to unwrap socket",
+            )),
+        }
+    }
+    /// Get UDP Socket
+    /// This function will consume the socket and return a new std::net::UdpSocket.
+    pub fn into_udp_socket(self) -> io::Result<UdpSocket> {
+        match Arc::try_unwrap(self.inner) {
+            Ok(socket) => Ok(socket.into()),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to unwrap socket",
+            )),
+        }
     }
 }

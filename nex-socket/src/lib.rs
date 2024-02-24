@@ -1,5 +1,7 @@
 mod sys;
 mod socket;
+pub mod tls;
+
 pub use socket::IpVersion;
 pub use socket::SocketType;
 pub use socket::SocketOption;
