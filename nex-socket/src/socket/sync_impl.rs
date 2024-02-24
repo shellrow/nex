@@ -188,6 +188,7 @@ impl Socket {
         }
     }
     /// Returns true if this socket is set to nonblocking mode, false otherwise.
+    #[cfg(not(target_os = "windows"))]
     pub fn is_nonblocking(&self) -> io::Result<bool> {
         self.inner.nonblocking()
     }

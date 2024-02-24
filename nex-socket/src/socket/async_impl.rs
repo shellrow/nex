@@ -235,7 +235,9 @@ impl AsyncSocket {
             Err(e) => Err(e),
         }
     }
+
     /// Returns true if this socket is set to nonblocking mode, false otherwise.
+    #[cfg(not(target_os = "windows"))]
     pub async fn is_nonblocking(&self) -> io::Result<bool> {
         self.inner.readable().await?;
         self.inner.read_with(|inner| inner.nonblocking()).await
