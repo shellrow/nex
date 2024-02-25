@@ -1,15 +1,15 @@
 use std::{io::{Read, Write}, net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream}, time::Duration};
-
+use nex_socket::tls::socket::TlsClient;
 
 // connect to 1.1.1.1:443 using TLS and send a payload(HTTPS GET request)
 fn main() {
-    let native_certs = nex_socket::tls::get_native_certs().unwrap();
+    let native_certs = nex_socket::tls::certs::get_native_certs().unwrap();
     let config = rustls::ClientConfig::builder()
         .with_root_certificates(native_certs)
         .with_no_client_auth();
 
     // if you want to disable certificate verification
-    //nex_socket::tls::disable_certificate_verification(&mut config, rustls::crypto::ring::default_provider());
+    //nex_socket::tls::danger::disable_certificate_verification(&mut config, rustls::crypto::ring::default_provider());
 
     // connect to 1.1.1.1:443 and send a payload(HTTPS GET request) 
     let hostname = "1.1.1.1";
@@ -28,14 +28,13 @@ fn main() {
             return;
         },
     }
-    let mut tls_stream = nex_socket::tls::get_tls_stream(hostname.to_string(), stream, config).unwrap();
-    
+    let mut tls_client = TlsClient::new(hostname.to_string(), stream, config).unwrap();
     let req = format!(
         "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
         hostname
     );
 
-    match tls_stream.write_all(req.as_bytes()) {
+    match tls_client.write_all(req.as_bytes()) {
         Ok(_) => {
             println!("payload sent. {} bytes", req.len());
         }
@@ -46,7 +45,7 @@ fn main() {
     }
 
     let mut res = Vec::new();
-    match tls_stream.read_to_end(&mut res) {
+    match tls_client.read_to_end(&mut res) {
         Ok(_) => {}
         Err(e) => {
             println!("read_to_end error: {}", e);
