@@ -36,12 +36,12 @@ fn main() {
                                 println!("Connection closed ({} -> {})", local_socket_addr, remote_socket_addr);
                             }
                             Err(e) => {
-                                println!("shutdown error: {}", e);
+                                println!("shutdown error (for {}): {}", socket_addr, e);
                             }
                         }
                     }
                     Err(e) => {
-                        println!("connect error: {}", e);
+                        println!("connection error (for {}): {}", socket_addr, e);
                     }
                 }
             }
