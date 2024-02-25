@@ -6,9 +6,6 @@
 //!
 //! IPv6: tcp_ping "[2606:4700:4700::1111]:80" eth0
 
-use std::env;
-use std::net::{IpAddr, SocketAddr};
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -22,6 +19,9 @@ use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
 use nex::util::packet_builder::ipv4::Ipv4PacketBuilder;
 use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use nex::util::packet_builder::tcp::TcpPacketBuilder;
+use std::env;
+use std::net::{IpAddr, SocketAddr};
+use std::process;
 
 const USAGE: &str = "USAGE: tcp_ping <TARGET SOCKETADDR> <NETWORK INTERFACE>";
 

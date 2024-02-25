@@ -1,16 +1,16 @@
+use futures_io::{AsyncRead, AsyncWrite};
+use rustls::ServerConnection;
+use std::io;
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, RawSocket};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::io;
-use futures_io::{AsyncRead, AsyncWrite};
-use rustls::ServerConnection;
 
-use super::stream::Stream;
-use super::state::TlsState;
 use super::session::IoSession;
+use super::state::TlsState;
+use super::stream::Stream;
 
 /// A wrapper around an underlying raw stream which implements the TLS or SSL
 #[derive(Debug)]

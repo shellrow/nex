@@ -2,12 +2,12 @@
 //!
 //! Parse packet as Frame and print it
 
-use std::env;
-use std::process;
 use nex::datalink;
 use nex::net::interface::Interface;
 use nex::packet::frame::Frame;
 use nex::packet::frame::ParseOption;
+use std::env;
+use std::process;
 
 fn main() {
     use nex::datalink::Channel::Ethernet;
@@ -51,7 +51,10 @@ fn main() {
                     packet.len()
                 );
                 let mut parse_option: ParseOption = ParseOption::default();
-                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+                if interface.is_tun()
+                    || (cfg!(any(target_os = "macos", target_os = "ios"))
+                        && interface.is_loopback())
+                {
                     let payload_offset;
                     if interface.is_loopback() {
                         payload_offset = 14;

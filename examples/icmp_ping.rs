@@ -6,10 +6,6 @@
 //!
 //! IPv6: icmp_ping "2606:4700:4700::1111" eth0
 
-use std::env;
-use std::net::IpAddr;
-use std::net::Ipv6Addr;
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -26,6 +22,10 @@ use nex::util::packet_builder::icmpv6::Icmpv6PacketBuilder;
 use nex::util::packet_builder::ipv4::Ipv4PacketBuilder;
 use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use nex_packet::icmpv6::Icmpv6Type;
+use std::env;
+use std::net::IpAddr;
+use std::net::Ipv6Addr;
+use std::process;
 
 const USAGE: &str = "USAGE: icmp_ping <TARGET IP> <NETWORK INTERFACE>";
 

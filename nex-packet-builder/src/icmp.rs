@@ -1,8 +1,8 @@
-use std::net::Ipv4Addr;
 use nex_packet::icmp::echo_request::MutableEchoRequestPacket;
 use nex_packet::icmp::IcmpType;
 use nex_packet::icmp::ICMPV4_HEADER_LEN;
 use nex_packet::Packet;
+use std::net::Ipv4Addr;
 
 /// Build ICMP packet.
 pub(crate) fn build_icmp_echo_packet(icmp_packet: &mut MutableEchoRequestPacket) {

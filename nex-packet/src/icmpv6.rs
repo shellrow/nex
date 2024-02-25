@@ -7,9 +7,9 @@ use alloc::vec::Vec;
 
 use crate::ethernet::ETHERNET_HEADER_LEN;
 use crate::ipv6::IPV6_HEADER_LEN;
-use std::net::Ipv6Addr;
 use nex_macro::packet;
 use nex_macro_helper::types::*;
+use std::net::Ipv6Addr;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -293,9 +293,9 @@ pub mod ndp {
 
     use alloc::vec::Vec;
 
-    use std::net::Ipv6Addr;
     use nex_macro::packet;
     use nex_macro_helper::types::*;
+    use std::net::Ipv6Addr;
 
     /// NDP SOL Packet Length.
     pub const NDP_SOL_PACKET_LEN: usize = NeighborSolicitPacket::minimum_packet_size();

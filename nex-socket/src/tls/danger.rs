@@ -1,8 +1,10 @@
-use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::client::danger::{DangerousClientConfig, ServerCertVerifier, ServerCertVerified, HandshakeSignatureValid};
+use rustls::client::danger::{
+    DangerousClientConfig, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
-use rustls::DigitallySignedStruct;
 use rustls::ClientConfig;
+use rustls::DigitallySignedStruct;
+use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use std::sync::Arc;
 
 /// A certificate verifier that does not perform any verification.
@@ -56,9 +58,7 @@ impl ServerCertVerifier for NoCertificateVerification {
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.0
-            .signature_verification_algorithms
-            .supported_schemes()
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
@@ -77,10 +77,7 @@ pub fn get_dangerous_client_config(
 }
 
 /// Disable certificate verification
-pub fn disable_certificate_verification(
-    config: &mut ClientConfig,
-    provider: CryptoProvider,
-) {
+pub fn disable_certificate_verification(config: &mut ClientConfig, provider: CryptoProvider) {
     let mut dangerous_config: DangerousClientConfig = rustls::ClientConfig::dangerous(config);
     dangerous_config.set_certificate_verifier(Arc::new(NoCertificateVerification::new(provider)));
 }

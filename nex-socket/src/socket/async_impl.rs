@@ -1,3 +1,5 @@
+use crate::socket::to_socket_protocol;
+use crate::socket::{IpVersion, SocketOption};
 use async_io::{Async, Timer};
 use futures_lite::future::FutureExt;
 use socket2::{SockAddr, Socket as SystemSocket};
@@ -6,8 +8,6 @@ use std::mem::MaybeUninit;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::socket::{IpVersion, SocketOption};
-use crate::socket::to_socket_protocol;
 
 /// Async socket. Provides cross-platform async adapter for system socket.
 #[derive(Clone, Debug)]
@@ -37,9 +37,7 @@ impl AsyncSocket {
         })
     }
     /// Constructs a new AsyncSocket with async non-blocking TCP connect.
-    pub async fn new_with_async_connect(
-        addr: &SocketAddr
-    ) -> io::Result<AsyncSocket> {
+    pub async fn new_with_async_connect(addr: &SocketAddr) -> io::Result<AsyncSocket> {
         let stream = Async::<TcpStream>::connect(*addr).await?;
         // Once the connection is established, we can turn it into a SystemSocket(socket2::Socket).
         // And then we can turn it into a AsyncSocket for the rest of the operations.
@@ -52,14 +50,14 @@ impl AsyncSocket {
     /// Constructs a new AsyncSocket with async non-blocking TCP connect and timeout.
     pub async fn new_with_async_connect_timeout(
         addr: &SocketAddr,
-        timeout: Duration
+        timeout: Duration,
     ) -> io::Result<AsyncSocket> {
         let stream = Async::<TcpStream>::connect(*addr)
-                .or(async {
-                    Timer::after(timeout).await;
-                    Err(io::ErrorKind::TimedOut.into())
-                })
-                .await?;
+            .or(async {
+                Timer::after(timeout).await;
+                Err(io::ErrorKind::TimedOut.into())
+            })
+            .await?;
         // Once the connection is established, we can turn it into a SystemSocket(socket2::Socket).
         // And then we can turn it into a AsyncSocket for the rest of the operations.
         let socket = SystemSocket::from(stream.into_inner()?);
@@ -70,7 +68,10 @@ impl AsyncSocket {
     }
     /// Constructs a new AsyncSocket with TCP connect.
     /// If you want to async non-blocking connect, use `new_with_async_connect` instead.
-    pub fn new_with_connect(socket_option: SocketOption, addr: &SocketAddr) -> io::Result<AsyncSocket> {
+    pub fn new_with_connect(
+        socket_option: SocketOption,
+        addr: &SocketAddr,
+    ) -> io::Result<AsyncSocket> {
         let socket: SystemSocket = if let Some(protocol) = socket_option.protocol {
             SystemSocket::new(
                 socket_option.ip_version.to_domain(),
@@ -119,7 +120,10 @@ impl AsyncSocket {
         })
     }
     /// Constructs a new AsyncSocket with listener.
-    pub fn new_with_listener(socket_option: SocketOption, addr: &SocketAddr) -> io::Result<AsyncSocket> {
+    pub fn new_with_listener(
+        socket_option: SocketOption,
+        addr: &SocketAddr,
+    ) -> io::Result<AsyncSocket> {
         let socket: SystemSocket = if let Some(protocol) = socket_option.protocol {
             SystemSocket::new(
                 socket_option.ip_version.to_domain(),
@@ -142,7 +146,10 @@ impl AsyncSocket {
         })
     }
     /// Constructs a new AsyncSocket with bind.
-    pub fn new_with_bind(socket_option: SocketOption, addr: &SocketAddr) -> io::Result<AsyncSocket> {
+    pub fn new_with_bind(
+        socket_option: SocketOption,
+        addr: &SocketAddr,
+    ) -> io::Result<AsyncSocket> {
         let socket: SystemSocket = if let Some(protocol) = socket_option.protocol {
             SystemSocket::new(
                 socket_option.ip_version.to_domain(),
@@ -320,12 +327,8 @@ impl AsyncSocket {
     /// Get TTL or Hop Limit.
     pub async fn ttl(&self, ip_version: IpVersion) -> io::Result<u32> {
         match ip_version {
-            IpVersion::V4 => {
-                self.inner.read_with(|inner| inner.ttl()).await
-            }
-            IpVersion::V6 => {
-                self.inner.read_with(|inner| inner.unicast_hops_v6()).await
-            }
+            IpVersion::V4 => self.inner.read_with(|inner| inner.ttl()).await,
+            IpVersion::V6 => self.inner.read_with(|inner| inner.unicast_hops_v6()).await,
         }
     }
     /// Set TTL or Hop Limit.

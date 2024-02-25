@@ -1,11 +1,11 @@
+use crate::socket::to_socket_protocol;
+use crate::socket::{IpVersion, SocketOption};
 use socket2::{SockAddr, Socket as SystemSocket};
 use std::io;
 use std::mem::MaybeUninit;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::socket::{IpVersion, SocketOption};
-use crate::socket::to_socket_protocol;
 
 /// Socket. Provides cross-platform adapter for system socket.
 #[derive(Clone, Debug)]

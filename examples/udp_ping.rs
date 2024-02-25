@@ -7,9 +7,6 @@
 //!   IPv4: udp_ping 1.1.1.1 eth0
 //!   IPv6: udp_ping 2606:4700:4700::1111 eth0
 
-use std::env;
-use std::net::{IpAddr, SocketAddr};
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -24,6 +21,9 @@ use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
 use nex::util::packet_builder::ipv4::Ipv4PacketBuilder;
 use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use nex::util::packet_builder::udp::UdpPacketBuilder;
+use std::env;
+use std::net::{IpAddr, SocketAddr};
+use std::process;
 
 const USAGE: &str = "USAGE: udp_ping <TARGET IP> <NETWORK INTERFACE>";
 

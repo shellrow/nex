@@ -1,9 +1,9 @@
-use std::net::Ipv6Addr;
 use nex_packet::icmpv6::echo_request::MutableEchoRequestPacket;
 use nex_packet::icmpv6::Icmpv6Packet;
 use nex_packet::icmpv6::Icmpv6Type;
 use nex_packet::icmpv6::ICMPV6_HEADER_LEN;
 use nex_packet::Packet;
+use std::net::Ipv6Addr;
 
 /// Build ICMPv6 packet.
 pub(crate) fn build_icmpv6_echo_packet(

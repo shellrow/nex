@@ -1,4 +1,3 @@
-use std::net::Ipv6Addr;
 use nex_core::mac::MacAddr;
 use nex_packet::ethernet::MAC_ADDR_LEN;
 use nex_packet::icmpv6::ndp::{
@@ -6,6 +5,7 @@ use nex_packet::icmpv6::ndp::{
 };
 use nex_packet::icmpv6::ndp::{NDP_OPT_PACKET_LEN, NDP_SOL_PACKET_LEN};
 use nex_packet::icmpv6::{self, Icmpv6Type, MutableIcmpv6Packet};
+use std::net::Ipv6Addr;
 //use nex_packet::Packet;
 
 /// Length in octets (8bytes)

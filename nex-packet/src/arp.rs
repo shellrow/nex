@@ -5,9 +5,9 @@ use crate::PrimitiveValues;
 
 use alloc::vec::Vec;
 
-use std::net::Ipv4Addr;
 use nex_core::mac::MacAddr;
 use nex_macro::packet;
+use std::net::Ipv4Addr;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

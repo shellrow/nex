@@ -1,12 +1,12 @@
 use super::state::TlsState;
 use super::stream::Stream;
+use futures_io::{AsyncRead, AsyncWrite};
 use rustls::{ConnectionCommon, SideData};
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{io, mem};
-use futures_io::{AsyncRead, AsyncWrite};
 
 pub(crate) trait IoSession {
     type Io;

@@ -1,10 +1,10 @@
-use std::net::{IpAddr, SocketAddr};
 use nex_packet::ethernet::ETHERNET_HEADER_LEN;
 use nex_packet::ipv4::IPV4_HEADER_LEN;
 use nex_packet::ipv6::IPV6_HEADER_LEN;
 use nex_packet::udp::MutableUdpPacket;
 use nex_packet::udp::UDP_HEADER_LEN;
 use nex_packet::Packet;
+use std::net::{IpAddr, SocketAddr};
 
 /// UDP BASE Destination Port. Usually used for traceroute.
 pub const UDP_BASE_DST_PORT: u16 = 33435;

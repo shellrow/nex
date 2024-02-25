@@ -4,10 +4,6 @@
 //!
 //! arp 192.168.1.1 eth0
 
-use std::env;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -19,6 +15,10 @@ use nex::util::packet_builder::builder::PacketBuilder;
 use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
 use nex_packet::arp::ArpOperation;
 use nex_packet_builder::arp::ArpPacketBuilder;
+use std::env;
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::process;
 
 const USAGE: &str = "USAGE: arp <TARGET IPv4 Addr> <NETWORK INTERFACE>";
 

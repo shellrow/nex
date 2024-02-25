@@ -4,10 +4,6 @@
 //!
 //! ndp "fe80::6284:bdff:fe95:ca80" eth0
 
-use std::env;
-use std::net::IpAddr;
-use std::net::Ipv6Addr;
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -23,6 +19,10 @@ use nex::util::packet_builder::builder::PacketBuilder;
 use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
 use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
 use nex::util::packet_builder::ndp::NdpPacketBuilder;
+use std::env;
+use std::net::IpAddr;
+use std::net::Ipv6Addr;
+use std::process;
 
 const USAGE: &str = "USAGE: ndp <TARGET IPv6 Addr> <NETWORK INTERFACE>";
 

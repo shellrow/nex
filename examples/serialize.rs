@@ -2,12 +2,12 @@
 //!
 //! Parse packet as Frame and print it as JSON format
 
-use std::env;
-use std::process;
 use nex::datalink;
 use nex::net::interface::Interface;
 use nex::packet::frame::Frame;
 use nex::packet::frame::ParseOption;
+use std::env;
+use std::process;
 
 fn main() {
     use nex::datalink::Channel::Ethernet;

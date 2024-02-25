@@ -1,4 +1,3 @@
-use std::net::Ipv4Addr;
 use nex_core::mac::MacAddr;
 use nex_packet::arp::ArpHardwareType;
 use nex_packet::arp::ArpOperation;
@@ -6,6 +5,7 @@ use nex_packet::arp::MutableArpPacket;
 use nex_packet::arp::ARP_HEADER_LEN;
 use nex_packet::ethernet::EtherType;
 use nex_packet::Packet;
+use std::net::Ipv4Addr;
 
 /// Build ARP packet.
 pub(crate) fn build_arp_packet(

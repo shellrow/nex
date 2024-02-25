@@ -2,10 +2,10 @@ use crate::PrimitiveValues;
 
 use alloc::vec::Vec;
 
-use std::net::Ipv4Addr;
 use nex_core::mac::MacAddr;
 use nex_macro::packet;
 use nex_macro_helper::types::*;
+use std::net::Ipv4Addr;
 
 /// Represents an DHCP operation.
 #[repr(u8)]

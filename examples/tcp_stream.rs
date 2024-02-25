@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr};
 
-use nex_socket::{Socket, IpVersion, SocketOption, SocketType};
 use nex_packet::ip::IpNextLevelProtocol;
+use nex_socket::{IpVersion, Socket, SocketOption, SocketType};
 
 fn main() {
     let socket_option = SocketOption {
@@ -25,23 +25,23 @@ fn main() {
             }
             let mut res = vec![0; 1024];
             println!("Receiving data ...");
-            
+
             match socket.read(&mut res) {
                 Ok(n) => {
                     println!("{} bytes received (HTTP Response):", n);
                     println!("----------------------------------------");
                     println!("{}", String::from_utf8_lossy(&res[..n]));
                     println!("----------------------------------------");
-                },
+                }
                 Err(e) => println!("{}", e),
             }
-            
+
             println!("Closing socket ...");
             match socket.shutdown(Shutdown::Both) {
                 Ok(_) => println!("Socket closed"),
                 Err(e) => println!("{}", e),
             }
-        },
+        }
         Err(e) => println!("{}", e),
     }
 }

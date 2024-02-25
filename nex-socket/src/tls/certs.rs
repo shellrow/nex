@@ -8,7 +8,7 @@ pub fn get_native_certs() -> io::Result<rustls::RootCertStore> {
             for cert in certs {
                 match root_store.add(cert) {
                     Ok(_) => {}
-                    Err(_) => {},
+                    Err(_) => {}
                 }
             }
             Ok(root_store)

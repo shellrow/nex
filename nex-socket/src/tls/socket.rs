@@ -1,15 +1,16 @@
-use super::state;
-use super::session::MidHandshake;
 use super::client;
 use super::server;
+use super::session::MidHandshake;
+use super::state;
 use super::stream::SyncReadAdapter;
 
-use rustls::ConnectionCommon;
-use state::TlsState;
 use futures_io::{AsyncRead, AsyncWrite};
+use rustls::ConnectionCommon;
 use rustls::{ClientConfig, ClientConnection, CommonState, ServerConfig, ServerConnection};
+use state::TlsState;
 use std::future::Future;
 use std::io;
+use std::net::TcpStream;
 use std::ops::Deref;
 use std::ops::DerefMut;
 #[cfg(unix)]
@@ -19,7 +20,6 @@ use std::os::windows::io::{AsRawSocket, RawSocket};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::net::TcpStream;
 
 pub use rustls;
 pub use rustls_pki_types as pki_types;
@@ -29,7 +29,7 @@ fn get_tls_client(
     hostname: String,
     socket: TcpStream,
     config: ClientConfig,
-) -> io::Result<rustls::StreamOwned<ClientConnection, TcpStream>> {    
+) -> io::Result<rustls::StreamOwned<ClientConnection, TcpStream>> {
     let server_name = match pki_types::ServerName::try_from(hostname) {
         Ok(s) => s,
         Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
@@ -46,9 +46,8 @@ fn get_tls_server(
     socket: TcpStream,
     config: ServerConfig,
 ) -> io::Result<rustls::StreamOwned<ServerConnection, TcpStream>> {
-    let tls_connection: rustls::ServerConnection =
-        rustls::ServerConnection::new(Arc::new(config))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let tls_connection: rustls::ServerConnection = rustls::ServerConnection::new(Arc::new(config))
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     let stream = rustls::StreamOwned::new(tls_connection, socket);
     Ok(stream)
 }
@@ -129,7 +128,7 @@ impl TlsClient {
             Err(e) => Err(e),
         }
     }
-} 
+}
 
 /// Wrapper around a `rustls::StreamOwned<ServerConnection, TcpStream>`
 pub struct TlsServer {
@@ -162,7 +161,7 @@ impl TlsServer {
             Err(e) => Err(e),
         }
     }
-} 
+}
 
 /// Async TLS connector.
 /// A wrapper around a `rustls::ClientConfig`
@@ -203,14 +202,23 @@ impl AsyncTlsConnector {
     }
 
     #[inline]
-    pub fn connect<IO>(&self, server_name: pki_types::ServerName<'static>, stream: IO) -> Connect<IO>
+    pub fn connect<IO>(
+        &self,
+        server_name: pki_types::ServerName<'static>,
+        stream: IO,
+    ) -> Connect<IO>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
         self.connect_with(server_name, stream, |_| ())
     }
 
-    pub fn connect_with<IO, F>(&self, server_name: pki_types::ServerName<'static>, stream: IO, f: F) -> Connect<IO>
+    pub fn connect_with<IO, F>(
+        &self,
+        server_name: pki_types::ServerName<'static>,
+        stream: IO,
+        f: F,
+    ) -> Connect<IO>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
         F: FnOnce(&mut ClientConnection),

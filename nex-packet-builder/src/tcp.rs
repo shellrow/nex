@@ -1,10 +1,10 @@
-use std::net::{IpAddr, SocketAddr};
 use nex_packet::ethernet::ETHERNET_HEADER_LEN;
 use nex_packet::ipv4::IPV4_HEADER_LEN;
 use nex_packet::ipv6::IPV6_HEADER_LEN;
 use nex_packet::tcp::TCP_MIN_DATA_OFFSET;
 use nex_packet::tcp::{MutableTcpPacket, TcpFlags, TcpOption, TCP_HEADER_LEN};
 use nex_packet::Packet;
+use std::net::{IpAddr, SocketAddr};
 
 /// Default TCP Option Length.
 pub const TCP_DEFAULT_OPTION_LEN: usize = 12;

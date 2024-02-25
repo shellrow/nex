@@ -1,8 +1,8 @@
 mod async_impl;
 mod sync_impl;
 
-use socket2::{Domain, Type};
 use nex_packet::ip::IpNextLevelProtocol;
+use socket2::{Domain, Type};
 
 use crate::sys;
 
@@ -65,7 +65,7 @@ impl SocketType {
             SocketType::Stream => Type::STREAM,
         }
     }
-    pub (crate) fn from_type(t: Type) -> SocketType {
+    pub(crate) fn from_type(t: Type) -> SocketType {
         match t {
             Type::RAW => SocketType::Raw,
             Type::DGRAM => SocketType::Datagram,

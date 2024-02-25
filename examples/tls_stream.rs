@@ -1,5 +1,9 @@
-use std::{io::{Read, Write}, net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream}, time::Duration};
 use nex_socket::tls::socket::TlsClient;
+use std::{
+    io::{Read, Write},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    time::Duration,
+};
 
 // connect to 1.1.1.1:443 using TLS and send a payload(HTTPS GET request)
 fn main() {
@@ -11,7 +15,7 @@ fn main() {
     // if you want to disable certificate verification
     //nex_socket::tls::danger::disable_certificate_verification(&mut config, rustls::crypto::ring::default_provider());
 
-    // connect to 1.1.1.1:443 and send a payload(HTTPS GET request) 
+    // connect to 1.1.1.1:443 and send a payload(HTTPS GET request)
     let hostname = "1.1.1.1";
     let socket_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 443);
     let stream: TcpStream = match TcpStream::connect(socket_addr.clone()) {
@@ -26,7 +30,7 @@ fn main() {
         Err(e) => {
             println!("set_read_timeout error: {}", e);
             return;
-        },
+        }
     }
     let mut tls_client = TlsClient::new(hostname.to_string(), stream, config).unwrap();
     let req = format!(
@@ -53,5 +57,4 @@ fn main() {
         }
     }
     println!("response: {}", String::from_utf8_lossy(&res));
-
 }

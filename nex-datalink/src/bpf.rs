@@ -356,7 +356,11 @@ struct FrameReceiverImpl {
 
 impl FrameReceiver for FrameReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
-        let header_size = if self.loopback { ETHERNET_NULL_HEADER_SIZE } else { 0 };
+        let header_size = if self.loopback {
+            ETHERNET_NULL_HEADER_SIZE
+        } else {
+            0
+        };
         if self.packets.is_empty() {
             let buffer = &mut self.read_buffer[self.buffer_offset..];
             let ret = unsafe {

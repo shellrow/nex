@@ -3,7 +3,6 @@ use crate::icmpv6::build_icmpv6_echo_packet;
 use crate::ipv6::build_ipv6_packet;
 use crate::tcp::{build_tcp_packet, TCP_DEFAULT_OPTION_LEN};
 use crate::udp::build_udp_packet;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use nex_core::mac::MacAddr;
 use nex_packet::arp::{MutableArpPacket, ARP_HEADER_LEN};
 use nex_packet::ethernet::ETHERNET_HEADER_LEN;
@@ -16,6 +15,7 @@ use nex_packet::ipv6::{MutableIpv6Packet, IPV6_HEADER_LEN};
 use nex_packet::tcp::{MutableTcpPacket, TCP_HEADER_LEN};
 use nex_packet::udp::{MutableUdpPacket, UDP_HEADER_LEN};
 use nex_packet::Packet;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::arp::build_arp_packet;
 use crate::ethernet::{build_ethernet_arp_packet, build_ethernet_packet};

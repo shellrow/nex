@@ -1,8 +1,8 @@
-use std::net::Ipv6Addr;
 use nex_packet::ip::IpNextLevelProtocol;
 use nex_packet::ipv6::MutableIpv6Packet;
 use nex_packet::ipv6::IPV6_HEADER_LEN;
 use nex_packet::Packet;
+use std::net::Ipv6Addr;
 
 pub(crate) fn build_ipv6_packet(
     ipv6_packet: &mut MutableIpv6Packet,

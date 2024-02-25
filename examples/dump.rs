@@ -1,8 +1,5 @@
 //! Basic packet capture using nex
 
-use std::env;
-use std::net::IpAddr;
-use std::process;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
@@ -17,6 +14,9 @@ use nex::packet::ipv6::Ipv6Packet;
 use nex::packet::tcp::TcpPacket;
 use nex::packet::udp::UdpPacket;
 use nex::packet::Packet;
+use std::env;
+use std::net::IpAddr;
+use std::process;
 
 fn main() {
     let interface: Interface = match env::args().nth(1) {
@@ -61,7 +61,10 @@ fn main() {
                     packet.len()
                 );
                 let payload_offset;
-                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+                if interface.is_tun()
+                    || (cfg!(any(target_os = "macos", target_os = "ios"))
+                        && interface.is_loopback())
+                {
                     if interface.is_loopback() {
                         payload_offset = 14;
                     } else {

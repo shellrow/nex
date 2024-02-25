@@ -1,10 +1,10 @@
-use std::net::Ipv4Addr;
 use nex_packet::ip::IpNextLevelProtocol;
 use nex_packet::ipv4::Ipv4Flags;
 use nex_packet::ipv4::MutableIpv4Packet;
 use nex_packet::ipv4::IPV4_HEADER_LEN;
 use nex_packet::ipv4::IPV4_HEADER_LENGTH_BYTE_UNITS;
 use nex_packet::Packet;
+use std::net::Ipv4Addr;
 
 /// Build IPv4 packet.
 pub(crate) fn build_ipv4_packet(

@@ -1,7 +1,7 @@
 use std::{io, mem::MaybeUninit, net::SocketAddr, time::Duration};
 
-use socket2::{Domain, Protocol, Socket as SystemSocket, Type};
 use nex_packet::ip::IpNextLevelProtocol;
+use socket2::{Domain, Protocol, Socket as SystemSocket, Type};
 
 use crate::socket::{IpVersion, SocketOption, SocketType};
 
