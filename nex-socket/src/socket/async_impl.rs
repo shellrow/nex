@@ -1,4 +1,5 @@
-use async_io::Async;
+use async_io::{Async, Timer};
+use futures_lite::future::FutureExt;
 use socket2::{SockAddr, Socket as SystemSocket};
 use std::io;
 use std::mem::MaybeUninit;
@@ -35,8 +36,40 @@ impl AsyncSocket {
             inner: Arc::new(Async::new(socket)?),
         })
     }
-    /// Constructs a new AsyncSocket with non-blocking connect.
-    /// Async Socket does not support non-blocking connect. Use TCP Stream to connect to the target.
+    /// Constructs a new AsyncSocket with async non-blocking TCP connect.
+    pub async fn new_with_async_connect(
+        addr: &SocketAddr
+    ) -> io::Result<AsyncSocket> {
+        let stream = Async::<TcpStream>::connect(*addr).await?;
+        // Once the connection is established, we can turn it into a SystemSocket(socket2::Socket).
+        // And then we can turn it into a AsyncSocket for the rest of the operations.
+        let socket = SystemSocket::from(stream.into_inner()?);
+        socket.set_nonblocking(true)?;
+        Ok(AsyncSocket {
+            inner: Arc::new(Async::new(socket)?),
+        })
+    }
+    /// Constructs a new AsyncSocket with async non-blocking TCP connect and timeout.
+    pub async fn new_with_async_connect_timeout(
+        addr: &SocketAddr,
+        timeout: Duration
+    ) -> io::Result<AsyncSocket> {
+        let stream = Async::<TcpStream>::connect(*addr)
+                .or(async {
+                    Timer::after(timeout).await;
+                    Err(io::ErrorKind::TimedOut.into())
+                })
+                .await?;
+        // Once the connection is established, we can turn it into a SystemSocket(socket2::Socket).
+        // And then we can turn it into a AsyncSocket for the rest of the operations.
+        let socket = SystemSocket::from(stream.into_inner()?);
+        socket.set_nonblocking(true)?;
+        Ok(AsyncSocket {
+            inner: Arc::new(Async::new(socket)?),
+        })
+    }
+    /// Constructs a new AsyncSocket with TCP connect.
+    /// If you want to async non-blocking connect, use `new_with_async_connect` instead.
     pub fn new_with_connect(socket_option: SocketOption, addr: &SocketAddr) -> io::Result<AsyncSocket> {
         let socket: SystemSocket = if let Some(protocol) = socket_option.protocol {
             SystemSocket::new(
@@ -58,8 +91,8 @@ impl AsyncSocket {
             inner: Arc::new(Async::new(socket)?),
         })
     }
-    /// Constructs a new AsyncSocket with non-blocking connect and timeout.
-    /// Async Socket does not support non-blocking connect. Use TCP Stream to connect to the target.
+    /// Constructs a new AsyncSocket with TCP connect and timeout.
+    /// If you want to async non-blocking connect, use `new_with_async_connect_timeout` instead.
     pub fn new_with_connect_timeout(
         socket_option: SocketOption,
         addr: &SocketAddr,
