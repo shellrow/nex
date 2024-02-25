@@ -508,7 +508,7 @@ where
 }
 
 #[cfg(windows)]
-impl<S> AsRawSocket for TlsStream<S>
+impl<S> AsRawSocket for AsyncTlsStream<S>
 where
     S: AsRawSocket,
 {
