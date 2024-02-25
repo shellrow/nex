@@ -18,21 +18,19 @@ winreg = "0.50"
 privilege = "0.3"
 sha2 = "0.10"
 zip = "0.6"
-reqwest = { version = "0.11", features = ["blocking"], optional = true }
+tokio = { version = "1.35", optional = true }
+futures = { version = "0.3", optional = true }
+reqwest = { version = "0.11", features = ["blocking", "rustls-tls", "stream"], optional = true }
+indicatif = { version = "0.16", optional = true }
 
 [target.'cfg(windows)'.dev-dependencies]
 inquire = "0.6"
 
 [features]
 default = ["download"]
-download = ["reqwest"]
+download = ["reqwest", "tokio", "futures", "indicatif"]
 
 [[example]]
 name = "setup"
 path = "examples/setup.rs"
-required-features = ["download"]
-
-[[example]]
-name = "setup_interactive"
-path = "examples/setup_interactive.rs"
 required-features = ["download"]
