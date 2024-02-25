@@ -1,5 +1,7 @@
 mod socket;
 mod sys;
+
+#[cfg(feature = "tls")]
 pub mod tls;
 
 pub use socket::AsyncSocket;

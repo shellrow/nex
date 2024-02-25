@@ -1,8 +1,8 @@
 [package]
 name = "nex-socket"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
-authors = ["shellrow <shellrow@protonmail.com>"]
+authors = ["shellrow <shellrow@foctet.com>"]
 description = "Cross-platform socket library. Part of nex project. Offers socket-related functionality."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"
@@ -13,12 +13,12 @@ license = "MIT"
 [dependencies]
 async-io = "2.3"
 futures-lite = "2.2"
+futures-io = "0.3"
 socket2 = { version = "0.5", features = ["all"] }
-nex-packet = { path = "../nex-packet", version = "0.5.0" }
+nex-packet = { path = "../nex-packet", version = "0.6.0" }
 rustls = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 rustls-pki-types = { version = "1.3", optional = true }
-futures-io = "0.3"
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.48.0"
@@ -31,5 +31,5 @@ features = [
 ]
 
 [features]
-default = ["rustls"]
-rustls = ["dep:rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
+default = ["tls"]
+tls = ["dep:rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
