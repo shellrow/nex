@@ -1,20 +1,20 @@
-//! Basic packet capture using xenet
+//! Basic packet capture using nex
 //!
 //! Parse packet as Frame and print it
 
+use nex::datalink;
+use nex::net::interface::Interface;
+use nex::packet::frame::Frame;
+use nex::packet::frame::ParseOption;
 use std::env;
 use std::process;
-use xenet::datalink;
-use xenet::net::interface::Interface;
-use xenet::packet::frame::Frame;
-use xenet::packet::frame::ParseOption;
 
 fn main() {
-    use xenet::datalink::Channel::Ethernet;
+    use nex::datalink::Channel::Ethernet;
     let interface: Interface = match env::args().nth(1) {
         Some(n) => {
             // Use interface specified by user
-            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interfaces: Vec<Interface> = nex::net::interface::get_interfaces();
             let interface: Interface = interfaces
                 .into_iter()
                 .find(|interface| interface.name == n)
@@ -51,7 +51,10 @@ fn main() {
                     packet.len()
                 );
                 let mut parse_option: ParseOption = ParseOption::default();
-                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+                if interface.is_tun()
+                    || (cfg!(any(target_os = "macos", target_os = "ios"))
+                        && interface.is_loopback())
+                {
                     let payload_offset;
                     if interface.is_loopback() {
                         payload_offset = 14;

@@ -4,25 +4,25 @@
 //!
 //! ndp "fe80::6284:bdff:fe95:ca80" eth0
 
+use nex::datalink;
+use nex::datalink::Channel::Ethernet;
+use nex::net::interface::Interface;
+use nex::net::mac::MacAddr;
+use nex::packet::ethernet::EtherType;
+use nex::packet::ethernet::MAC_ADDR_LEN;
+use nex::packet::frame::Frame;
+use nex::packet::frame::ParseOption;
+use nex::packet::icmpv6::ndp::{NDP_OPT_PACKET_LEN, NDP_SOL_PACKET_LEN};
+use nex::packet::icmpv6::Icmpv6Type;
+use nex::packet::ip::IpNextLevelProtocol;
+use nex::util::packet_builder::builder::PacketBuilder;
+use nex::util::packet_builder::ethernet::EthernetPacketBuilder;
+use nex::util::packet_builder::ipv6::Ipv6PacketBuilder;
+use nex::util::packet_builder::ndp::NdpPacketBuilder;
 use std::env;
 use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::process;
-use xenet::datalink;
-use xenet::datalink::Channel::Ethernet;
-use xenet::net::interface::Interface;
-use xenet::net::mac::MacAddr;
-use xenet::packet::ethernet::EtherType;
-use xenet::packet::ethernet::MAC_ADDR_LEN;
-use xenet::packet::frame::Frame;
-use xenet::packet::frame::ParseOption;
-use xenet::packet::icmpv6::ndp::{NDP_OPT_PACKET_LEN, NDP_SOL_PACKET_LEN};
-use xenet::packet::icmpv6::Icmpv6Type;
-use xenet::packet::ip::IpNextLevelProtocol;
-use xenet::util::packet_builder::builder::PacketBuilder;
-use xenet::util::packet_builder::ethernet::EthernetPacketBuilder;
-use xenet::util::packet_builder::ipv6::Ipv6PacketBuilder;
-use xenet::util::packet_builder::ndp::NdpPacketBuilder;
 
 const USAGE: &str = "USAGE: ndp <TARGET IPv6 Addr> <NETWORK INTERFACE>";
 
@@ -30,7 +30,7 @@ fn main() {
     let interface: Interface = match env::args().nth(2) {
         Some(n) => {
             // Use interface specified by the user
-            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interfaces: Vec<Interface> = nex::net::interface::get_interfaces();
             let interface: Interface = interfaces
                 .into_iter()
                 .find(|interface| interface.name == n)

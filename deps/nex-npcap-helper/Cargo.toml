@@ -1,0 +1,36 @@
+[package]
+name = "nex-npcap-helper"
+version = "0.6.0"
+edition = "2021"
+authors = ["shellrow <shellrow@foctet.com>"]
+description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the nex"
+repository = "https://github.com/shellrow/nex"
+readme = "../../README.md"
+keywords = ["network", "windows"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+home = "0.5"
+winreg = "0.50"
+privilege = "0.3"
+sha2 = "0.10"
+zip = "0.6"
+tokio = { version = "1.35", optional = true }
+futures = { version = "0.3", optional = true }
+reqwest = { version = "0.11", features = ["blocking", "rustls-tls", "stream"], optional = true }
+indicatif = { version = "0.16", optional = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+inquire = "0.6"
+
+[features]
+default = ["download"]
+download = ["reqwest", "tokio", "futures", "indicatif"]
+
+[[example]]
+name = "setup"
+path = "examples/setup.rs"
+required-features = ["download"]

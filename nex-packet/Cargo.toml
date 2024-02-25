@@ -1,0 +1,21 @@
+[package]
+name = "nex-packet"
+version = "0.6.0"
+edition = "2021"
+authors = ["shellrow <shellrow@foctet.com>"]
+description = "Cross-platform packet parsing and building library. Provides low-level packet handling. Part of nex project."
+repository = "https://github.com/shellrow/nex"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"], optional = true }
+nex-core = { path = "../nex-core", version = "0.6.0" }
+nex-macro = { path = "../nex-macro", version = "0.6.0" }
+nex-macro-helper = { path = "../nex-macro-helper", version = "0.6.0" }
+
+[features]
+serde = ["dep:serde", "nex-core/serde"]

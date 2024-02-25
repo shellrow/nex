@@ -1,28 +1,28 @@
-//! Basic packet capture using xenet
+//! Basic packet capture using nex
 
+use nex::datalink;
+use nex::datalink::Channel::Ethernet;
+use nex::net::interface::Interface;
+use nex::net::mac::MacAddr;
+use nex::packet::arp::ArpPacket;
+use nex::packet::ethernet::{EtherType, EthernetPacket, MutableEthernetPacket};
+use nex::packet::icmp::{echo_reply, echo_request, IcmpPacket, IcmpType};
+use nex::packet::icmpv6::Icmpv6Packet;
+use nex::packet::ip::IpNextLevelProtocol;
+use nex::packet::ipv4::Ipv4Packet;
+use nex::packet::ipv6::Ipv6Packet;
+use nex::packet::tcp::TcpPacket;
+use nex::packet::udp::UdpPacket;
+use nex::packet::Packet;
 use std::env;
 use std::net::IpAddr;
 use std::process;
-use xenet::datalink;
-use xenet::datalink::Channel::Ethernet;
-use xenet::net::interface::Interface;
-use xenet::net::mac::MacAddr;
-use xenet::packet::arp::ArpPacket;
-use xenet::packet::ethernet::{EtherType, EthernetPacket, MutableEthernetPacket};
-use xenet::packet::icmp::{echo_reply, echo_request, IcmpPacket, IcmpType};
-use xenet::packet::icmpv6::Icmpv6Packet;
-use xenet::packet::ip::IpNextLevelProtocol;
-use xenet::packet::ipv4::Ipv4Packet;
-use xenet::packet::ipv6::Ipv6Packet;
-use xenet::packet::tcp::TcpPacket;
-use xenet::packet::udp::UdpPacket;
-use xenet::packet::Packet;
 
 fn main() {
     let interface: Interface = match env::args().nth(1) {
         Some(n) => {
             // Use interface specified by user
-            let interfaces: Vec<Interface> = xenet::net::interface::get_interfaces();
+            let interfaces: Vec<Interface> = nex::net::interface::get_interfaces();
             let interface: Interface = interfaces
                 .into_iter()
                 .find(|interface| interface.name == n)
@@ -61,7 +61,10 @@ fn main() {
                     packet.len()
                 );
                 let payload_offset;
-                if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+                if interface.is_tun()
+                    || (cfg!(any(target_os = "macos", target_os = "ios"))
+                        && interface.is_loopback())
+                {
                     if interface.is_loopback() {
                         payload_offset = 14;
                     } else {

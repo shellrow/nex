@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "xenet",
-    "xenet-core",
-    "xenet-datalink",
-    "xenet-macro",
-    "xenet-macro-helper",
-    "xenet-packet",
-    "xenet-socket",
-    "xenet-sys",
-    "xenet-packet-builder"
+    "nex",
+    "nex-core",
+    "nex-datalink",
+    "nex-macro",
+    "nex-macro-helper",
+    "nex-packet",
+    "nex-socket",
+    "nex-sys",
+    "nex-packet-builder"
 ]
-exclude = ["deps/xenet-npcap-helper"]
+exclude = ["deps/nex-npcap-helper"]

@@ -1,0 +1,83 @@
+[package]
+name = "nex"
+version = "0.6.0"
+edition = "2021"
+authors = ["shellrow <shellrow@foctet.com>"]
+description = "Cross-platform networking library for Rust."
+repository = "https://github.com/shellrow/nex"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+nex-core = { path = "../nex-core", version = "0.6.0" }
+nex-sys = { path = "../nex-sys", version = "0.6.0" }
+nex-macro = { path = "../nex-macro", version = "0.6.0" }
+nex-macro-helper = { path = "../nex-macro-helper", version = "0.6.0" }
+nex-packet = { path = "../nex-packet", version = "0.6.0" }
+nex-datalink = { path = "../nex-datalink", version = "0.6.0" }
+nex-socket = { path = "../nex-socket", version = "0.6.0" }
+nex-packet-builder = { path = "../nex-packet-builder", version = "0.6.0" }
+
+[dev-dependencies]
+serde_json = "1.0"
+async-io = "2.3"
+futures = "0.3"
+rustls = "0.22"
+
+[features]
+default = ["tls"]
+pcap = ["nex-datalink/pcap"]
+serde = ["nex-core/serde", "nex-packet/serde", "nex-datalink/serde"]
+tls = ["nex-socket/tls"]
+
+[[example]]
+name = "dump"
+path = "../examples/dump.rs"
+
+[[example]]
+name = "arp"
+path = "../examples/arp.rs"
+
+[[example]]
+name = "ndp"
+path = "../examples/ndp.rs"
+
+[[example]]
+name = "parse_frame"
+path = "../examples/parse_frame.rs"
+
+[[example]]
+name = "icmp_ping"
+path = "../examples/icmp_ping.rs"
+
+[[example]]
+name = "tcp_ping"
+path = "../examples/tcp_ping.rs"
+
+[[example]]
+name = "udp_ping"
+path = "../examples/udp_ping.rs"
+
+[[example]]
+name = "list_interfaces"
+path = "../examples/list_interfaces.rs"
+
+[[example]]
+name = "serialize"
+path = "../examples/serialize.rs"
+required-features = ["serde"]
+
+[[example]]
+name = "tcp_stream"
+path = "../examples/tcp_stream.rs"
+
+[[example]]
+name = "async_tcp_connect"
+path = "../examples/async_tcp_connect.rs"
+
+[[example]]
+name = "tls_stream"
+path = "../examples/tls_stream.rs"
+required-features = ["tls"]

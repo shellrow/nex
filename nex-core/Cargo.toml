@@ -1,0 +1,19 @@
+[package]
+name = "nex-core"
+version = "0.6.0"
+edition = "2021"
+authors = ["shellrow <shellrow@foctet.com>"]
+description = "Core networking library for nex."
+repository = "https://github.com/shellrow/nex"
+readme = "../README.md"
+keywords = ["network", "packet"]
+categories = ["network-programming"]
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+netdev = { version = "0.24", optional = true }
+
+[features]
+default = ["dep:netdev"]
+serde = ["dep:serde", "netdev/serde"]
