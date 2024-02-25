@@ -1,6 +1,6 @@
 # nex
 
-Cross-platform networking library for Rust
+Cross-platform networking library in Rust
 
 [![Crates.io](https://img.shields.io/crates/v/nex.svg)](https://crates.io/crates/nex)
 [![Documentation](https://docs.rs/nex/badge.svg)](https://docs.rs/nex)
@@ -28,7 +28,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.6"
+nex = "0.7"
 ```
 
 ## Using Specific Sub-crates
