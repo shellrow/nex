@@ -33,7 +33,7 @@ fn get_global_ipv6(interface: &Interface) -> Option<Ipv6Addr> {
     interface
         .ipv6
         .iter()
-        .find(|ipv6| nex::net::ipnet::is_global_ipv6(&ipv6.addr))
+        .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
         .map(|ipv6| ipv6.addr)
 }
 

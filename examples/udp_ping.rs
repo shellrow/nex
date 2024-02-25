@@ -112,7 +112,7 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ipnet::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
                     let ipv6_packet_builder =
@@ -145,7 +145,7 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ipnet::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
             {
                 Some(src_ipv6) => {
                     let udp_packet_builder = UdpPacketBuilder::new(
