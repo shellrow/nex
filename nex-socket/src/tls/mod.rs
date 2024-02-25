@@ -40,6 +40,15 @@ pub fn get_dangerous_client_config(
     config
 }
 
+/// Disable certificate verification
+pub fn disable_certificate_verification(
+    config: &mut ClientConfig,
+    provider: CryptoProvider,
+) {
+    let mut dangerous_config: DangerousClientConfig = rustls::ClientConfig::dangerous(config);
+    dangerous_config.set_certificate_verifier(Arc::new(NoCertificateVerification::new(provider)));
+}
+
 /// Get TLS Stream. Return rustls::StreamOwned<ClientConnection, TcpStream>
 pub fn get_tls_stream(
     hostname: String,
