@@ -78,6 +78,10 @@ name = "async_tcp_connect"
 path = "../examples/async_tcp_connect.rs"
 
 [[example]]
+name = "async_tcp_stream"
+path = "../examples/async_tcp_stream.rs"
+
+[[example]]
 name = "tls_stream"
 path = "../examples/tls_stream.rs"
 required-features = ["tls"]
