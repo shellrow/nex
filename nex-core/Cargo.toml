@@ -1,6 +1,6 @@
 [package]
 name = "nex-core"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "Core networking library for nex."
@@ -12,7 +12,7 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
-netdev = { version = "0.24", optional = true }
+netdev = { version = "0.25", optional = true }
 
 [features]
 default = ["dep:netdev"]

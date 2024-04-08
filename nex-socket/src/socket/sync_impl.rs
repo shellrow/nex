@@ -91,6 +91,17 @@ impl Socket {
             Err(e) => Err(e),
         }
     }
+    /// Attempts to write an entire buffer into this writer.
+    pub fn write_all(&self, buf: &[u8]) -> io::Result<()> {
+        let mut offset = 0;
+        while offset < buf.len() {
+            match self.inner.send(&buf[offset..]) {
+                Ok(n) => offset += n,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
     /// Read data from the socket.
     /// Return how many bytes were read.
     pub fn read(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
@@ -98,6 +109,50 @@ impl Socket {
         match self.inner.recv(recv_buf) {
             Ok(result) => Ok(result),
             Err(e) => Err(e),
+        }
+    }
+    /// Read all bytes until EOF in this source, placing them into buf.
+    pub fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut total = 0;
+        loop {
+            let mut recv_buf = Vec::new();
+            match self.receive(&mut recv_buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        break;
+                    }
+                    total += n;
+                    buf.extend_from_slice(&recv_buf[..n]);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(total)
+    }
+    /// Read all bytes until EOF in this source, placing them into buf.
+    /// This ignore io::Error on read_to_end because it is expected when reading response.
+    /// If no response is received, and io::Error is occurred, return Err.
+    pub fn read_to_end_timeout(&self, buf: &mut Vec<u8>, timeout: Duration) -> io::Result<usize> {
+        // Set timeout
+        self.inner.set_read_timeout(Some(timeout))?;
+        let mut total = 0;
+        loop {
+            let mut recv_buf = Vec::new();
+            match self.receive(&mut recv_buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        return Ok(total);
+                    }
+                    total += n;
+                    buf.extend_from_slice(&recv_buf[..n]);
+                }
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::WouldBlock {
+                        return Ok(total);
+                    }
+                    return Err(e);
+                }
+            }
         }
     }
     /// Get TTL or Hop Limit.

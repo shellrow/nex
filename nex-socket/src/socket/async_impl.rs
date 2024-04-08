@@ -3,7 +3,7 @@ use crate::socket::{IpVersion, SocketOption};
 use async_io::{Async, Timer};
 use futures_lite::future::FutureExt;
 use socket2::{SockAddr, Socket as SystemSocket};
-use std::io;
+use std::io::{self, Read, Write};
 use std::mem::MaybeUninit;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
@@ -578,4 +578,147 @@ impl AsyncSocket {
         let udp_socket = UdpSocket::from(socket);
         Ok(udp_socket)
     }
+}
+
+/// Async TCP Stream.
+#[derive(Clone, Debug)]
+pub struct AsyncTcpStream {
+    inner: Arc<Async<TcpStream>>,
+}
+
+impl AsyncTcpStream {
+    /// Connect to a remote address.
+    pub async fn connect(addr: SocketAddr) -> io::Result<Self> {
+        let stream = Async::<TcpStream>::connect(addr).await?;
+        Ok(AsyncTcpStream {
+            inner: Arc::new(stream),
+        })
+    }
+
+    /// Connect to a remote address with timeout.
+    pub async fn connect_timeout(addr: &SocketAddr, timeout: Duration) -> io::Result<Self> {
+        let stream = Async::<TcpStream>::connect(*addr)
+        .or(async {
+            Timer::after(timeout).await;
+            Err(std::io::ErrorKind::TimedOut.into())
+        })
+        .await?;
+        Ok(AsyncTcpStream {
+            inner: Arc::new(stream),
+        })
+    }
+
+    /// Get local address.
+    pub async fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.read_with(|inner| inner.local_addr()).await
+    }
+
+    /// Get peer address.
+    pub async fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.inner.read_with(|inner| inner.peer_addr()).await
+    }
+
+    /// Write data to the socket.
+    pub async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write_with(|mut inner| inner.write(buf)).await
+    }
+
+    /// Attempts to write an entire buffer into this writer.
+    pub async fn write_all(&self, buf: &[u8]) -> io::Result<()> {
+        self.inner.write_with(|mut inner| inner.write_all(buf)).await
+    }
+
+    /// Read data from the socket.
+    pub async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read_with(|mut inner| inner.read(buf)).await
+    }
+
+    /// Read all bytes until EOF in this source, placing them into buf.
+    pub async fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        self.inner.read_with(|mut inner| inner.read_to_end(buf)).await
+    }
+
+    /// Read all bytes until EOF in this source, placing them into buf.
+    /// This ignore io::Error on read_to_end because it is expected when reading response.
+    /// If no response is received, and io::Error is occurred, return Err.
+    pub async fn read_to_end_timeout(&self, buf: &mut Vec<u8>, timeout: Duration) -> io::Result<usize> {
+        let mut io_error: io::Error = io::Error::new(io::ErrorKind::Other, "No response");
+        match self.read_to_end(buf).or(async {
+            Timer::after(timeout).await;
+            Err(std::io::ErrorKind::TimedOut.into())
+        }).await {
+            Ok(_) => {}
+            Err(e) => {
+                io_error = e;
+            }
+        }
+        if buf.is_empty() {
+            Err(io_error)
+        } else {
+            Ok(buf.len())
+        }
+    }
+    
+    /// Shutdown the socket.
+    pub async fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.shutdown(how)).await
+    }
+
+    /// Get the value of the `SO_ERROR` option on this socket.
+    pub async fn take_error(&self) -> io::Result<Option<io::Error>> {
+        self.inner.read_with(|inner| inner.take_error()).await
+    }
+    /// Creates a new independently owned handle to the underlying socket.
+    pub async fn try_clone(&self) -> io::Result<Self> {
+        let stream = self.inner.read_with(|inner| inner.try_clone()).await?;
+        Ok(AsyncTcpStream {
+            inner: Arc::new(Async::new(stream)?),
+        })
+    }
+
+    /// Sets the read timeout to the timeout specified.
+    pub async fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.set_read_timeout(dur)).await
+    }
+
+    /// Sets the write timeout to the timeout specified.
+    pub async fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.set_write_timeout(dur)).await
+    }
+
+    /// Gets the read timeout of this socket.
+    pub async fn read_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.read_with(|inner| inner.read_timeout()).await
+    }
+
+    /// Gets the write timeout of this socket.
+    pub async fn write_timeout(&self) -> io::Result<Option<Duration>> {
+        self.inner.read_with(|inner| inner.write_timeout()).await
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option on this socket.
+    pub async fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.set_nodelay(nodelay)).await
+    }
+
+    /// Gets the value of the `TCP_NODELAY` option on this socket.
+    pub async fn nodelay(&self) -> io::Result<bool> {
+        self.inner.read_with(|inner| inner.nodelay()).await
+    }
+
+    /// Sets the value for the IP_TTL option on this socket.
+    pub async fn set_ttl(&self, ttl: u32) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.set_ttl(ttl)).await
+    }
+
+    /// Gets the value of the IP_TTL option on this socket.
+    pub async fn ttl(&self) -> io::Result<u32> {
+        self.inner.read_with(|inner| inner.ttl()).await
+    }
+
+    /// Moves this TCP stream into or out of nonblocking mode.
+    pub async fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        self.inner.write_with(|inner| inner.set_nonblocking(nonblocking)).await
+    }
+
 }

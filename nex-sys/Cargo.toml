@@ -1,6 +1,6 @@
 [package]
 name = "nex-sys"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "Provides network-related system function and call support for nex. Used for low-level system interactions."
