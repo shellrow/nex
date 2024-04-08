@@ -1,6 +1,6 @@
 [package]
 name = "nex-npcap-helper"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the nex"
@@ -18,9 +18,9 @@ winreg = "0.50"
 privilege = "0.3"
 sha2 = "0.10"
 zip = "0.6"
-tokio = { version = "1.35", optional = true }
+tokio = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
-reqwest = { version = "0.11", features = ["blocking", "rustls-tls", "stream"], optional = true }
+reqwest = { version = "0.12", features = ["blocking", "rustls-tls", "stream"], optional = true }
 indicatif = { version = "0.16", optional = true }
 
 [target.'cfg(windows)'.dev-dependencies]
