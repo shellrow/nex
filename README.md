@@ -18,7 +18,6 @@ It includes a set of modules, each with a specific focus:
 
 ## Upcoming Features
 The project has plans to enhance nex with the following features:  
-- XDP Support: Adding support for eBPF, specifically XDP (eXpress Data Path), for high-performance packet processing and filtering.
 - More Protocol Support: Expanding protocol support to include additional network protocols and standards.
 - Performance Improvements: Continuously working on performance enhancements for faster network operations.
 
@@ -39,3 +38,13 @@ You can also directly use specific sub-crates by importing them individually.
 - `nex-socket`
 
 If you want to focus on network interfaces, you can use the [netdev](https://github.com/shellrow/netdev).
+
+
+## for Windows Users
+Please note that in order to send and receive raw packets using `nex-datalink` on Windows, `npcap` is required.
+
+1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
+
+2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
+
+To simplify the process of downloading and installing `npcap`, you can use `nex-npcap-helper`. This crate facilitates the download and installation process, which can be helpful when distributing applications that utilize `nex-datalink` on Windows.
