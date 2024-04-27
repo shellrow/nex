@@ -598,11 +598,11 @@ impl AsyncTcpStream {
     /// Connect to a remote address with timeout.
     pub async fn connect_timeout(addr: &SocketAddr, timeout: Duration) -> io::Result<Self> {
         let stream = Async::<TcpStream>::connect(*addr)
-        .or(async {
-            Timer::after(timeout).await;
-            Err(std::io::ErrorKind::TimedOut.into())
-        })
-        .await?;
+            .or(async {
+                Timer::after(timeout).await;
+                Err(std::io::ErrorKind::TimedOut.into())
+            })
+            .await?;
         Ok(AsyncTcpStream {
             inner: Arc::new(stream),
         })
@@ -625,7 +625,9 @@ impl AsyncTcpStream {
 
     /// Attempts to write an entire buffer into this writer.
     pub async fn write_all(&self, buf: &[u8]) -> io::Result<()> {
-        self.inner.write_with(|mut inner| inner.write_all(buf)).await
+        self.inner
+            .write_with(|mut inner| inner.write_all(buf))
+            .await
     }
 
     /// Read data from the socket.
@@ -635,18 +637,28 @@ impl AsyncTcpStream {
 
     /// Read all bytes until EOF in this source, placing them into buf.
     pub async fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
-        self.inner.read_with(|mut inner| inner.read_to_end(buf)).await
+        self.inner
+            .read_with(|mut inner| inner.read_to_end(buf))
+            .await
     }
 
     /// Read all bytes until EOF in this source, placing them into buf.
     /// This ignore io::Error on read_to_end because it is expected when reading response.
     /// If no response is received, and io::Error is occurred, return Err.
-    pub async fn read_to_end_timeout(&self, buf: &mut Vec<u8>, timeout: Duration) -> io::Result<usize> {
+    pub async fn read_to_end_timeout(
+        &self,
+        buf: &mut Vec<u8>,
+        timeout: Duration,
+    ) -> io::Result<usize> {
         let mut io_error: io::Error = io::Error::new(io::ErrorKind::Other, "No response");
-        match self.read_to_end(buf).or(async {
-            Timer::after(timeout).await;
-            Err(std::io::ErrorKind::TimedOut.into())
-        }).await {
+        match self
+            .read_to_end(buf)
+            .or(async {
+                Timer::after(timeout).await;
+                Err(std::io::ErrorKind::TimedOut.into())
+            })
+            .await
+        {
             Ok(_) => {}
             Err(e) => {
                 io_error = e;
@@ -658,7 +670,7 @@ impl AsyncTcpStream {
             Ok(buf.len())
         }
     }
-    
+
     /// Shutdown the socket.
     pub async fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         self.inner.write_with(|inner| inner.shutdown(how)).await
@@ -678,12 +690,16 @@ impl AsyncTcpStream {
 
     /// Sets the read timeout to the timeout specified.
     pub async fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-        self.inner.write_with(|inner| inner.set_read_timeout(dur)).await
+        self.inner
+            .write_with(|inner| inner.set_read_timeout(dur))
+            .await
     }
 
     /// Sets the write timeout to the timeout specified.
     pub async fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-        self.inner.write_with(|inner| inner.set_write_timeout(dur)).await
+        self.inner
+            .write_with(|inner| inner.set_write_timeout(dur))
+            .await
     }
 
     /// Gets the read timeout of this socket.
@@ -698,7 +714,9 @@ impl AsyncTcpStream {
 
     /// Sets the value of the `TCP_NODELAY` option on this socket.
     pub async fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
-        self.inner.write_with(|inner| inner.set_nodelay(nodelay)).await
+        self.inner
+            .write_with(|inner| inner.set_nodelay(nodelay))
+            .await
     }
 
     /// Gets the value of the `TCP_NODELAY` option on this socket.
@@ -718,7 +736,8 @@ impl AsyncTcpStream {
 
     /// Moves this TCP stream into or out of nonblocking mode.
     pub async fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        self.inner.write_with(|inner| inner.set_nonblocking(nonblocking)).await
+        self.inner
+            .write_with(|inner| inner.set_nonblocking(nonblocking))
+            .await
     }
-
 }

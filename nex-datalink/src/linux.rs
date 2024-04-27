@@ -357,7 +357,7 @@ impl FrameReceiver for FrameReceiverImpl {
             .timeout
             .as_ref()
             .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
-            .unwrap_or(-1); 
+            .unwrap_or(-1);
 
         let ret = unsafe {
             libc::poll(

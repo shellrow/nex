@@ -559,10 +559,7 @@ fn test_dns_query_packet() {
     assert_eq!(packet.get_authority_rr_count(), 0);
     assert_eq!(packet.get_additional_rr_count(), 1);
     assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(
-        packet.get_queries()[0].get_qname_parsed(),
-        "cloudflare.com"
-    );
+    assert_eq!(packet.get_queries()[0].get_qname_parsed(), "cloudflare.com");
     assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
     assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
     assert_eq!(packet.get_responses().len(), 0);
@@ -587,10 +584,7 @@ fn test_dns_reponse_packet() {
     assert_eq!(packet.get_authority_rr_count(), 0);
     assert_eq!(packet.get_additional_rr_count(), 1);
     assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(
-        packet.get_queries()[0].get_qname_parsed(),
-        "cloudflare.com"
-    );
+    assert_eq!(packet.get_queries()[0].get_qname_parsed(), "cloudflare.com");
     assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
     assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
     assert_eq!(packet.get_responses().len(), 1);
