@@ -31,5 +31,4 @@ features = [
 ]
 
 [features]
-default = ["tls"]
 tls = ["dep:rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
