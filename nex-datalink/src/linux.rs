@@ -7,11 +7,8 @@ use crate::interface::Interface;
 use crate::{FrameReceiver, FrameSender};
 use nex_core::mac::MacAddr;
 use nex_sys;
-
-use std::cmp;
 use std::io;
 use std::mem;
-use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -159,8 +156,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         if fanout.rollover {
             typ = typ | linux::PACKET_FANOUT_FLAG_ROLLOVER;
         }
-        // set uniqueid flag -- probably not needed atm..
-        // PACKET_FANOUT_FLAG_UNIQUEID -- https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=4a69a864209e9ab436d4a58e8028ac96cc873d15
+        // set uniqueid flag -- probably not needed atm.
+        // PACKET_FANOUT_FLAG_UNIQUEID
+        // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=4a69a864209e9ab436d4a58e8028ac96cc873d15
         let arg: libc::c_uint = fanout.group_id as u32 | (typ << 16);
 
         if unsafe {
@@ -193,7 +191,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let fd = Arc::new(nex_sys::FileDesc { fd: socket });
     let sender = Box::new(FrameSenderImpl {
         socket: fd.clone(),
-        fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
         _channel_type: config.channel_type,
         send_addr: unsafe { *(send_addr as *const libc::sockaddr_ll) },
@@ -204,7 +201,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     });
     let receiver = Box::new(FrameReceiverImpl {
         socket: fd.clone(),
-        fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; config.read_buffer_size],
         _channel_type: config.channel_type,
         timeout: config
@@ -217,7 +213,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
 
 struct FrameSenderImpl {
     socket: Arc<nex_sys::FileDesc>,
-    fd_set: libc::fd_set,
     write_buffer: Vec<u8>,
     _channel_type: super::ChannelType,
     send_addr: libc::sockaddr_ll,
@@ -235,35 +230,41 @@ impl FrameSender for FrameSenderImpl {
     ) -> Option<io::Result<()>> {
         let len = num_packets * packet_size;
         if len <= self.write_buffer.len() {
-            let min = cmp::min(self.write_buffer[..].len(), len);
+            let min = std::cmp::min(self.write_buffer.len(), len);
             let mut_slice = &mut self.write_buffer;
+
+            let mut pollfd = libc::pollfd {
+                fd: self.socket.fd,
+                events: libc::POLLOUT,
+                revents: 0,
+            };
+
+            // poll timeout in milliseconds
+            // -1: wait indefinitely
+            let timeout_ms = self
+                .timeout
+                .as_ref()
+                .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
+                .unwrap_or(-1);
+
             for chunk in mut_slice[..min].chunks_mut(packet_size) {
                 func(chunk);
                 let send_addr =
                     (&self.send_addr as *const libc::sockaddr_ll) as *const libc::sockaddr;
 
-                unsafe {
-                    libc::FD_ZERO(&mut self.fd_set as *mut libc::fd_set);
-                    libc::FD_SET(self.socket.fd, &mut self.fd_set as *mut libc::fd_set);
-                }
                 let ret = unsafe {
-                    libc::pselect(
-                        self.socket.fd + 1,
-                        ptr::null_mut(),
-                        &mut self.fd_set as *mut libc::fd_set,
-                        ptr::null_mut(),
-                        self.timeout
-                            .as_ref()
-                            .map(|to| to as *const libc::timespec)
-                            .unwrap_or(ptr::null()),
-                        ptr::null(),
+                    libc::poll(
+                        &mut pollfd as *mut libc::pollfd,
+                        1,
+                        timeout_ms as libc::c_int,
                     )
                 };
+
                 if ret == -1 {
                     return Some(Err(io::Error::last_os_error()));
                 } else if ret == 0 {
                     return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
-                } else {
+                } else if pollfd.revents & libc::POLLOUT != 0 {
                     if let Err(e) = nex_sys::send_to(
                         self.socket.fd,
                         chunk,
@@ -272,6 +273,11 @@ impl FrameSender for FrameSenderImpl {
                     ) {
                         return Some(Err(e));
                     }
+                } else {
+                    return Some(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Unexpected poll event",
+                    )));
                 }
             }
 
@@ -283,28 +289,34 @@ impl FrameSender for FrameSenderImpl {
 
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
-        unsafe {
-            libc::FD_ZERO(&mut self.fd_set as *mut libc::fd_set);
-            libc::FD_SET(self.socket.fd, &mut self.fd_set as *mut libc::fd_set);
-        }
+        let mut pollfd = libc::pollfd {
+            fd: self.socket.fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+
+        // poll timeout in milliseconds
+        // -1: wait indefinitely
+        let timeout_ms = self
+            .timeout
+            .as_ref()
+            .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
+            .unwrap_or(-1);
+
         let ret = unsafe {
-            libc::pselect(
-                self.socket.fd + 1,
-                ptr::null_mut(),
-                &mut self.fd_set as *mut libc::fd_set,
-                ptr::null_mut(),
-                self.timeout
-                    .as_ref()
-                    .map(|to| to as *const libc::timespec)
-                    .unwrap_or(ptr::null()),
-                ptr::null(),
+            libc::poll(
+                &mut pollfd as *mut libc::pollfd,
+                1,
+                timeout_ms as libc::c_int,
             )
         };
+
         if ret == -1 {
             Some(Err(io::Error::last_os_error()))
         } else if ret == 0 {
             Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")))
-        } else {
+        } else if pollfd.revents & libc::POLLOUT != 0 {
+            // Socket is ready for writing
             match nex_sys::send_to(
                 self.socket.fd,
                 packet,
@@ -314,13 +326,17 @@ impl FrameSender for FrameSenderImpl {
                 Err(e) => Some(Err(e)),
                 Ok(_) => Some(Ok(())),
             }
+        } else {
+            Some(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Unexpected poll event",
+            )))
         }
     }
 }
 
 struct FrameReceiverImpl {
     socket: Arc<nex_sys::FileDesc>,
-    fd_set: libc::fd_set,
     read_buffer: Vec<u8>,
     _channel_type: super::ChannelType,
     timeout: Option<libc::timespec>,
@@ -329,33 +345,44 @@ struct FrameReceiverImpl {
 impl FrameReceiver for FrameReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut caddr: libc::sockaddr_storage = unsafe { mem::zeroed() };
-        unsafe {
-            libc::FD_ZERO(&mut self.fd_set as *mut libc::fd_set);
-            libc::FD_SET(self.socket.fd, &mut self.fd_set as *mut libc::fd_set);
-        }
+        let mut pollfd = libc::pollfd {
+            fd: self.socket.fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+
+        // poll timeout in milliseconds
+        // -1: wait indefinitely
+        let timeout_ms = self
+            .timeout
+            .as_ref()
+            .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
+            .unwrap_or(-1); 
+
         let ret = unsafe {
-            libc::pselect(
-                self.socket.fd + 1,
-                &mut self.fd_set as *mut libc::fd_set,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                self.timeout
-                    .as_ref()
-                    .map(|to| to as *const libc::timespec)
-                    .unwrap_or(ptr::null()),
-                ptr::null(),
+            libc::poll(
+                &mut pollfd as *mut libc::pollfd,
+                1,
+                timeout_ms as libc::c_int,
             )
         };
+
         if ret == -1 {
             Err(io::Error::last_os_error())
         } else if ret == 0 {
             Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"))
-        } else {
+        } else if pollfd.revents & libc::POLLIN != 0 {
+            // Socket is ready for reading
             let res = nex_sys::recv_from(self.socket.fd, &mut self.read_buffer, &mut caddr);
             match res {
                 Ok(len) => Ok(&self.read_buffer[0..len]),
                 Err(e) => Err(e),
             }
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Unexpected poll event",
+            ))
         }
     }
 }
