@@ -1,6 +1,6 @@
 [package]
 name = "nex-macro"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "A macro for generating packet structures used by nex-packet. Not intended for direct use."
@@ -20,4 +20,4 @@ syn = { version = "2.0", features = ["full"] }
 regex = "1.9"
 
 [dev-dependencies]
-nex-macro-helper = { path = "../nex-macro-helper", version = "0.8.0" }
+nex-macro-helper = { path = "../nex-macro-helper", version = "0.9.0" }
