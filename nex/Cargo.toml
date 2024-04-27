@@ -27,7 +27,6 @@ futures = "0.3"
 rustls = "0.22"
 
 [features]
-default = ["tls"]
 pcap = ["nex-datalink/pcap"]
 serde = ["nex-core/serde", "nex-packet/serde", "nex-datalink/serde"]
 tls = ["nex-socket/tls"]
