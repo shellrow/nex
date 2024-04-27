@@ -1,11 +1,19 @@
-use std::{net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr}, time::Duration};
 use nex_socket::AsyncTcpStream;
+use std::{
+    net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr},
+    time::Duration,
+};
 
 fn main() {
     let ip_addr: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
     println!("Connecting to 1.1.1.1:80 ...");
     async_io::block_on(async {
-        match AsyncTcpStream::connect_timeout(&SocketAddr::new(ip_addr, 80), Duration::from_millis(200)).await {
+        match AsyncTcpStream::connect_timeout(
+            &SocketAddr::new(ip_addr, 80),
+            Duration::from_millis(200),
+        )
+        .await
+        {
             Ok(stream) => {
                 println!("Connected to 1.1.1.1:80");
                 let req = format!("GET / HTTP/1.1\r\nHost: {}\r\n\r\n", ip_addr.to_string());
@@ -30,7 +38,7 @@ fn main() {
                     Ok(_) => println!("Socket closed"),
                     Err(e) => println!("{}", e),
                 }
-            },
+            }
             Err(e) => println!("{}", e),
         }
     });
