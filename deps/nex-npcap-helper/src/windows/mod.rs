@@ -1,4 +1,6 @@
 pub mod app;
 pub mod npcap;
-pub mod http;
 mod sys;
+
+#[cfg(feature = "download")]
+pub mod http;

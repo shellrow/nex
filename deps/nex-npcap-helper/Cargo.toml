@@ -27,7 +27,6 @@ indicatif = { version = "0.16", optional = true }
 inquire = "0.6"
 
 [features]
-default = ["download"]
 download = ["reqwest", "tokio", "futures", "indicatif"]
 
 [[example]]
