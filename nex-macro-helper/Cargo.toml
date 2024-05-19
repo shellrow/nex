@@ -1,6 +1,6 @@
 [package]
 name = "nex-macro-helper"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "A helper crate for nex-macro. Not intended for direct use."
@@ -11,4 +11,4 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.9.0" }
+nex-core = { path = "../nex-core", version = "0.10.0" }
