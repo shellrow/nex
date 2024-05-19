@@ -48,3 +48,6 @@ Please note that in order to send and receive raw packets using `nex-datalink` o
 2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
 
 To simplify the process of downloading and installing `npcap`, you can use `nex-npcap-helper`. This crate facilitates the download and installation process, which can be helpful when distributing applications that utilize `nex-datalink` on Windows.
+
+## Build time requirements for optional feature
+The cryptography provider for `nex-socket`'s optional `tls` feature use `aws-lc-rs`. Note that this has some implications on [build-time tool requirements](https://aws.github.io/aws-lc-rs/requirements/index.html), such as requiring cmake on all platforms and nasm on Windows.
