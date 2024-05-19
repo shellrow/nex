@@ -2,11 +2,12 @@ use super::client;
 use super::server;
 use super::session::MidHandshake;
 use super::state;
-use super::stream::SyncReadAdapter;
+use super::stream::{SyncReadAdapter, SyncWriteAdapter};
 
 use futures_io::{AsyncRead, AsyncWrite};
 use rustls::ConnectionCommon;
 use rustls::{ClientConfig, ClientConnection, CommonState, ServerConfig, ServerConnection};
+use rustls::server::AcceptedAlert;
 use state::TlsState;
 use std::future::Future;
 use std::io;
@@ -291,6 +292,7 @@ impl AsyncTlsAcceptor {
 pub struct LazyConfigAcceptor<IO> {
     acceptor: rustls::server::Acceptor,
     io: Option<IO>,
+    alert: Option<(rustls::Error, AcceptedAlert)>,
 }
 
 impl<IO> LazyConfigAcceptor<IO>
@@ -302,6 +304,7 @@ where
         Self {
             acceptor,
             io: Some(io),
+            alert: None,
         }
     }
 }
@@ -325,6 +328,22 @@ where
                 }
             };
 
+            if let Some((err, mut alert)) = this.alert.take() {
+                match alert.write(&mut SyncWriteAdapter { io, cx }) {
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        this.alert = Some((err, alert));
+                        return Poll::Pending;
+                    }
+                    Ok(0) | Err(_) => {
+                        return Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, err)))
+                    }
+                    Ok(_) => {
+                        this.alert = Some((err, alert));
+                        continue;
+                    }
+                };
+            }
+
             let mut reader = SyncReadAdapter { io, cx };
             match this.acceptor.read_tls(&mut reader) {
                 Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()).into(),
@@ -338,9 +357,9 @@ where
                     let io = this.io.take().unwrap();
                     return Poll::Ready(Ok(StartHandshake { accepted, io }));
                 }
-                Ok(None) => continue,
-                Err(err) => {
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidInput, err)))
+                Ok(None) => {}
+                Err((err, alert)) => {
+                    this.alert = Some((err, alert));
                 }
             }
         }
@@ -370,10 +389,11 @@ where
     {
         let mut conn = match self.accepted.into_connection(config) {
             Ok(conn) => conn,
-            Err(error) => {
-                return Accept(MidHandshake::Error {
+            Err((error, alert)) => {
+                return Accept(MidHandshake::SendAlert {
                     io: self.io,
                     error: io::Error::new(io::ErrorKind::Other, error),
+                    alert,
                 });
             }
         };

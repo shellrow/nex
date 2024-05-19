@@ -305,3 +305,39 @@ impl<'a, 'b, T: AsyncRead + Unpin> Read for SyncReadAdapter<'a, 'b, T> {
         }
     }
 }
+
+/// An adapter that implements a [`Write`] interface for [`AsyncWrite`] types and an
+/// associated [`Context`].
+pub struct SyncWriteAdapter<'a, 'b, T> {
+    pub(crate) io: &'a mut T,
+    pub(crate) cx: &'a mut Context<'b>,
+}
+
+impl<'a, 'b, T: Unpin> SyncWriteAdapter<'a, 'b, T> {
+    #[inline]
+    fn poll_with<U>(
+        &mut self,
+        f: impl FnOnce(Pin<&mut T>, &mut Context<'_>) -> Poll<io::Result<U>>,
+    ) -> io::Result<U> {
+        match f(Pin::new(&mut self.io), self.cx) {
+            Poll::Ready(result) => result,
+            Poll::Pending => Err(io::ErrorKind::WouldBlock.into()),
+        }
+    }
+}
+
+impl<'a, 'b, T: AsyncWrite + Unpin> Write for SyncWriteAdapter<'a, 'b, T> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.poll_with(|io, cx| io.poll_write(cx, buf))
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        self.poll_with(|io, cx| io.poll_write_vectored(cx, bufs))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.poll_with(|io, cx| io.poll_flush(cx))
+    }
+}
