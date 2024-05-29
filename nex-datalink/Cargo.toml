@@ -16,7 +16,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 pcap = { version = "1.1.0", optional = true }
 nex-core = { path = "../nex-core", version = "0.10.0" }
 nex-sys = { path = "../nex-sys", version = "0.10.0" }
-netdev = { version = "0.26", optional = true }
+netdev = { version = "0.27", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52.0"
