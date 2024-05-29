@@ -1,16 +1,12 @@
 //! Provides functionality for interacting with the data link layer, support for sending and receiving packets.
 
 #![deny(warnings)]
-extern crate libc;
-extern crate nex_core;
-extern crate nex_sys;
 
 use std::io;
 use std::option::Option;
 use std::time::Duration;
 
 mod bindings;
-use nex_core::interface;
 
 #[cfg(windows)]
 #[path = "wpcap.rs"]
@@ -59,7 +55,7 @@ pub type EtherType = u16;
 pub enum ChannelType {
     /// Send and receive layer 2 packets directly, including headers.
     Layer2,
-    /// Send and receive "cooked" packets - send and receive network layer packets.
+    /// Send and receive IP packets - send and receive network layer packets.
     Layer3(EtherType),
 }
 
@@ -138,20 +134,18 @@ impl Default for Config {
     }
 }
 
-/// Create a new datalink channel for sending and receiving data.
+/// Creates a new datalink channel for sending and receiving raw packets.
 ///
-/// This allows for sending and receiving packets at the data link layer.
+/// This function sets up a channel to send and receive raw packets directly from a data link layer
+/// such as Ethernet. It uses the provided network interface and configuration settings to
+/// establish the channel. Note that the actual usage of the configuration may vary based on the
+/// underlying backend; some settings may be ignored or treated differently depending on the system
+/// and library capabilities.
 ///
-/// A list of network interfaces can be retrieved using datalink::interfaces().
-///
-/// The configuration serves as a hint to the backend - some or all of it may be used or ignored,
-/// depending on which backend is used.
-///
-/// When matching on the returned channel, make sure to include a catch-all so that code doesn't
-/// break when new channel types are added.
+/// The function returns a `Channel` object encapsulating the transmission and reception capabilities.
 #[inline]
 pub fn channel(
-    network_interface: &interface::Interface,
+    network_interface: &nex_core::interface::Interface,
     configuration: Config,
 ) -> io::Result<Channel> {
     backend::channel(network_interface, (&configuration).into())
@@ -180,7 +174,7 @@ pub trait FrameSender: Send {
 }
 
 /// Structure for receiving packets at the data link layer. Should be constructed using
-/// `datalink_channel()`.
+/// `channel()`.
 pub trait FrameReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;
