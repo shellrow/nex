@@ -3,7 +3,7 @@
 extern crate libc;
 
 use crate::bindings::linux;
-use crate::interface::Interface;
+use nex_core::interface::Interface;
 use crate::{FrameReceiver, FrameSender};
 use nex_core::mac::MacAddr;
 use nex_sys;
