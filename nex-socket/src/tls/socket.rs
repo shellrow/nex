@@ -22,8 +22,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-pub use rustls;
-pub use rustls_pki_types as pki_types;
+use super::pki_types;
 
 /// Get TLS Client. Return rustls::StreamOwned<ClientConnection, TcpStream>
 fn get_tls_client(

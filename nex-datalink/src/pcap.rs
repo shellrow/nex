@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use pcap::{Activated, Active};
 
-use crate::interface::Interface;
-use crate::interface::InterfaceType;
+use nex_core::interface::Interface;
+use nex_core::interface::InterfaceType;
 use crate::Channel::Ethernet;
-use crate::{DataLinkReceiver, DataLinkSender};
+use crate::{FrameReceiver, FrameSender};
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -79,10 +79,10 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
-        Box::new(DataLinkSenderImpl {
+        Box::new(FrameSenderImpl {
             capture: cap.clone(),
         }),
-        Box::new(DataLinkReceiverImpl {
+        Box::new(FrameReceiverImpl {
             capture: cap.clone(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
@@ -98,19 +98,19 @@ pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::C
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
-        Box::new(InvalidDataLinkSenderImpl {}),
-        Box::new(DataLinkReceiverImpl {
+        Box::new(InvalidFrameSenderImpl {}),
+        Box::new(FrameReceiverImpl {
             capture: cap.clone(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
     ))
 }
 
-struct DataLinkSenderImpl {
+struct FrameSenderImpl {
     capture: Arc<Mutex<pcap::Capture<Active>>>,
 }
 
-impl DataLinkSender for DataLinkSenderImpl {
+impl FrameSender for FrameSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -139,9 +139,9 @@ impl DataLinkSender for DataLinkSenderImpl {
     }
 }
 
-struct InvalidDataLinkSenderImpl {}
+struct InvalidFrameSenderImpl {}
 
-impl DataLinkSender for InvalidDataLinkSenderImpl {
+impl FrameSender for InvalidFrameSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -158,12 +158,12 @@ impl DataLinkSender for InvalidDataLinkSenderImpl {
     }
 }
 
-struct DataLinkReceiverImpl<T: Activated + Send + Sync> {
+struct FrameReceiverImpl<T: Activated + Send + Sync> {
     capture: Arc<Mutex<pcap::Capture<T>>>,
     read_buffer: Vec<u8>,
 }
 
-impl<T: Activated + Send + Sync> DataLinkReceiver for DataLinkReceiverImpl<T> {
+impl<T: Activated + Send + Sync> FrameReceiver for FrameReceiverImpl<T> {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut cap = self.capture.lock().unwrap();
         match cap.next_packet() {
@@ -196,6 +196,8 @@ pub fn interfaces() -> Vec<Interface> {
                 transmit_speed: None,
                 receive_speed: None,
                 gateway: None,
+                dns_servers: Vec::new(),
+                default: false,
             })
             .collect()
     } else {

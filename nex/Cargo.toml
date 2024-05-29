@@ -1,6 +1,6 @@
 [package]
 name = "nex"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 authors = ["shellrow <shellrow@foctet.com>"]
 description = "Cross-platform networking library in Rust"
@@ -11,20 +11,16 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.10.0" }
-nex-sys = { path = "../nex-sys", version = "0.10.0" }
-nex-macro = { path = "../nex-macro", version = "0.10.0" }
-nex-macro-helper = { path = "../nex-macro-helper", version = "0.10.0" }
-nex-packet = { path = "../nex-packet", version = "0.10.0" }
-nex-datalink = { path = "../nex-datalink", version = "0.10.0" }
-nex-socket = { path = "../nex-socket", version = "0.10.0" }
-nex-packet-builder = { path = "../nex-packet-builder", version = "0.10.0" }
+nex-core = { path = "../nex-core", version = "0.11.0" }
+nex-packet = { path = "../nex-packet", version = "0.11.0" }
+nex-datalink = { path = "../nex-datalink", version = "0.11.0" }
+nex-socket = { path = "../nex-socket", version = "0.11.0" }
+nex-packet-builder = { path = "../nex-packet-builder", version = "0.11.0" }
 
 [dev-dependencies]
 serde_json = "1.0"
 async-io = "2.3"
 futures = "0.3"
-rustls = "0.23"
 
 [features]
 pcap = ["nex-datalink/pcap"]

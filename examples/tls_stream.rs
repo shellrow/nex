@@ -1,4 +1,6 @@
 use nex_socket::tls::socket::TlsClient;
+use nex_socket::tls::rustls::ClientConfig;
+
 use std::{
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
@@ -8,17 +10,17 @@ use std::{
 // connect to 1.1.1.1:443 using TLS and send a payload(HTTPS GET request)
 fn main() {
     let native_certs = nex_socket::tls::certs::get_native_certs().unwrap();
-    let config = rustls::ClientConfig::builder()
+    let config = ClientConfig::builder()
         .with_root_certificates(native_certs)
         .with_no_client_auth();
 
     // if you want to disable certificate verification
     //nex_socket::tls::danger::disable_certificate_verification(&mut config, rustls::crypto::ring::default_provider());
 
-    // connect to 1.1.1.1:443 and send a payload(HTTPS GET request)
-    let hostname = "1.1.1.1";
+    // connect to one.one.one.one(1.1.1.1):443 and send a payload(HTTPS GET request)
+    let hostname = "one.one.one.one";
     let socket_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 443);
-    let stream: TcpStream = match TcpStream::connect(socket_addr.clone()) {
+    let stream: TcpStream = match TcpStream::connect(socket_addr) {
         Ok(s) => s,
         Err(e) => {
             println!("connect error: {}", e);
