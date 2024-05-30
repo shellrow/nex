@@ -1,8 +1,8 @@
 [package]
 name = "nex-core"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
-authors = ["shellrow <shellrow@foctet.com>"]
+authors = ["shellrow <shellrow@fortnium.com>"]
 description = "Core networking library for nex."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"

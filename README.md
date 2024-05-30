@@ -27,7 +27,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.11"
+nex = "0.12"
 ```
 
 ## Using Specific Sub-crates
@@ -51,4 +51,4 @@ To simplify the process of downloading and installing `npcap`, you can use `nex-
 
 ## Build time requirements for optional feature
 The cryptography provider for `nex-socket`'s optional `tls` feature use `aws-lc-rs`. Note that this has some implications on [build-time tool requirements](https://aws.github.io/aws-lc-rs/requirements/index.html), such as requiring cmake on all platforms and nasm on Windows.  
-Starting from v0.11.0, you can also continue to use `ring` as the cryptography provider (without additional dependencies) by specifying the `tls-ring` feature.
+Starting from v0.12.0, you can also continue to use `ring` as the cryptography provider (without additional dependencies) by specifying the `tls-ring` feature.

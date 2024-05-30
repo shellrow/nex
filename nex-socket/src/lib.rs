@@ -1,7 +1,7 @@
 mod socket;
 mod sys;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-ring"))]
 pub mod tls;
 
 pub use socket::AsyncSocket;

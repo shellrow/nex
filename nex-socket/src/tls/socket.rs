@@ -5,9 +5,9 @@ use super::state;
 use super::stream::{SyncReadAdapter, SyncWriteAdapter};
 
 use futures_io::{AsyncRead, AsyncWrite};
+use rustls::server::AcceptedAlert;
 use rustls::ConnectionCommon;
 use rustls::{ClientConfig, ClientConnection, CommonState, ServerConfig, ServerConnection};
-use rustls::server::AcceptedAlert;
 use state::TlsState;
 use std::future::Future;
 use std::io;

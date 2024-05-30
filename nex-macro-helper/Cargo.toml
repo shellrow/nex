@@ -1,8 +1,8 @@
 [package]
 name = "nex-macro-helper"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
-authors = ["shellrow <shellrow@foctet.com>"]
+authors = ["shellrow <shellrow@fortnium.com>"]
 description = "A helper crate for nex-macro. Not intended for direct use."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"
@@ -11,4 +11,4 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.11.0" }
+nex-core = { path = "../nex-core", version = "0.12.0" }
