@@ -1,5 +1,5 @@
-use nex_socket::tls::socket::TlsClient;
 use nex_socket::tls::rustls::ClientConfig;
+use nex_socket::tls::socket::TlsClient;
 
 use std::{
     io::{Read, Write},

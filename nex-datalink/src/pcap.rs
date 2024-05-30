@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use pcap::{Activated, Active};
 
-use nex_core::interface::Interface;
-use nex_core::interface::InterfaceType;
 use crate::Channel::Ethernet;
 use crate::{FrameReceiver, FrameSender};
+use nex_core::interface::Interface;
+use nex_core::interface::InterfaceType;
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
