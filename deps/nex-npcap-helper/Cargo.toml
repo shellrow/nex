@@ -1,8 +1,8 @@
 [package]
 name = "nex-npcap-helper"
-version = "0.9.0"
+version = "0.12.0"
 edition = "2021"
-authors = ["shellrow <shellrow@foctet.com>"]
+authors = ["shellrow <shellrow@fortnium.com>"]
 description = "Helper crate for managing the installation of npcap on Windows, providing essential support for the nex"
 repository = "https://github.com/shellrow/nex"
 readme = "../../README.md"
