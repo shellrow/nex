@@ -11,9 +11,8 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
+netdev = { version = "0.28" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-netdev = { version = "0.27", optional = true }
 
 [features]
-default = ["dep:netdev"]
 serde = ["dep:serde", "netdev/serde"]
