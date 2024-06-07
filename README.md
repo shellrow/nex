@@ -50,5 +50,5 @@ Please note that in order to send and receive raw packets using `nex-datalink` o
 To simplify the process of downloading and installing `npcap`, you can use `nex-npcap-helper`. This crate facilitates the download and installation process, which can be helpful when distributing applications that utilize `nex-datalink` on Windows.
 
 ## Build time requirements for optional feature
-The cryptography provider for `nex-socket`'s optional `tls` feature use `aws-lc-rs`. Note that this has some implications on [build-time tool requirements](https://aws.github.io/aws-lc-rs/requirements/index.html), such as requiring cmake on all platforms and nasm on Windows.  
-Starting from v0.12.0, you can also continue to use `ring` as the cryptography provider (without additional dependencies) by specifying the `tls-ring` feature.
+The cryptography provider for `nex-socket`'s optional `tls-aws-lc` feature use `aws-lc-rs`. Note that this has some implications on [build-time tool requirements](https://aws.github.io/aws-lc-rs/requirements/index.html), such as requiring cmake on all platforms and nasm on Windows.  
+**You can use `ring` as the cryptography provider (without additional dependencies) by specifying the `tls` feature.**

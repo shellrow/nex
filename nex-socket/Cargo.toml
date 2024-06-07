@@ -16,7 +16,7 @@ futures-lite = "2.3"
 futures-io = "0.3"
 socket2 = { version = "0.5", features = ["all"] }
 nex-packet = { path = "../nex-packet", version = "0.12.0" }
-rustls = { version = "0.23", default-features = false, features = ["std"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["logging", "std", "tls12"], optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 rustls-pki-types = { version = "1.7", optional = true }
 
@@ -31,5 +31,5 @@ features = [
 ]
 
 [features]
-tls = ["rustls/aws_lc_rs", "dep:rustls-native-certs", "dep:rustls-pki-types"]
-tls-ring = ["rustls/ring", "dep:rustls-native-certs", "dep:rustls-pki-types"]
+tls = ["rustls/ring", "dep:rustls-native-certs", "dep:rustls-pki-types"]
+tls-aws-lc = ["rustls/aws_lc_rs", "dep:rustls-native-certs", "dep:rustls-pki-types"]
