@@ -1,8 +1,8 @@
 [package]
 name = "nex-datalink"
-version = "0.14.0"
+version.workspace = true
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors.workspace = true
 description = "Provides cross-platform datalink layer networking. Part of nex project."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"

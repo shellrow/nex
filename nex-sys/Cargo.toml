@@ -1,8 +1,8 @@
 [package]
 name = "nex-sys"
-version = "0.14.0"
+version.workspace = true
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors.workspace = true
 description = "Provides network-related system function and call support for nex. Used for low-level system interactions."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"

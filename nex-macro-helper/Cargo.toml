@@ -1,8 +1,8 @@
 [package]
 name = "nex-macro-helper"
-version = "0.14.0"
+version.workspace = true
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors.workspace = true
 description = "A helper crate for nex-macro. Not intended for direct use."
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"

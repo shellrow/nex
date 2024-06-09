@@ -1,8 +1,8 @@
 [package]
 name = "nex"
-version = "0.14.0"
+version.workspace = true
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors.workspace = true
 description = "Cross-platform networking library in Rust"
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"
