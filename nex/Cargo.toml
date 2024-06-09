@@ -1,8 +1,8 @@
 [package]
 name = "nex"
-version = "0.13.0"
+version.workspace = true
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors.workspace = true
 description = "Cross-platform networking library in Rust"
 repository = "https://github.com/shellrow/nex"
 readme = "../README.md"
@@ -11,11 +11,11 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.13.0" }
-nex-packet = { path = "../nex-packet", version = "0.13.0" }
-nex-datalink = { path = "../nex-datalink", version = "0.13.0" }
-nex-socket = { path = "../nex-socket", version = "0.13.0" }
-nex-packet-builder = { path = "../nex-packet-builder", version = "0.13.0" }
+nex-core = { path = "../nex-core", version = "0.14.0" }
+nex-packet = { path = "../nex-packet", version = "0.14.0" }
+nex-datalink = { path = "../nex-datalink", version = "0.14.0" }
+nex-socket = { path = "../nex-socket", version = "0.14.0" }
+nex-packet-builder = { path = "../nex-packet-builder", version = "0.14.0" }
 
 [dev-dependencies]
 serde_json = "1.0"

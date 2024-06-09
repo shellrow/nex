@@ -1,7 +1,7 @@
 //! Support for sending and receiving data link layer packets using the npcap or winpcap library.
 
 use super::bindings::{bpf, windows};
-use super::{FrameReceiver, FrameSender};
+use super::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 
 use libc::c_char;
@@ -134,14 +134,14 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let adapter = Arc::new(WinPcapAdapter { adapter: adapter });
-    let sender = Box::new(FrameSenderImpl {
+    let sender = Box::new(RawSenderImpl {
         adapter: adapter.clone(),
         _write_buffer: write_buffer,
         packet: WinPcapPacket {
             packet: write_packet,
         },
     });
-    let receiver = Box::new(FrameReceiverImpl {
+    let receiver = Box::new(RawReceiverImpl {
         adapter: adapter,
         _read_buffer: read_buffer,
         packet: WinPcapPacket {
@@ -153,13 +153,13 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct FrameSenderImpl {
+struct RawSenderImpl {
     adapter: Arc<WinPcapAdapter>,
     _write_buffer: Vec<u8>,
     packet: WinPcapPacket,
 }
 
-impl FrameSender for FrameSenderImpl {
+impl RawSender for RawSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -207,20 +207,20 @@ impl FrameSender for FrameSenderImpl {
     }
 }
 
-unsafe impl Send for FrameSenderImpl {}
-unsafe impl Sync for FrameSenderImpl {}
+unsafe impl Send for RawSenderImpl {}
+unsafe impl Sync for RawSenderImpl {}
 
-struct FrameReceiverImpl {
+struct RawReceiverImpl {
     adapter: Arc<WinPcapAdapter>,
     _read_buffer: Vec<u8>,
     packet: WinPcapPacket,
     packets: VecDeque<(usize, usize)>,
 }
 
-unsafe impl Send for FrameReceiverImpl {}
-unsafe impl Sync for FrameReceiverImpl {}
+unsafe impl Send for RawReceiverImpl {}
+unsafe impl Sync for RawReceiverImpl {}
 
-impl FrameReceiver for FrameReceiverImpl {
+impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         // NOTE Most of the logic here is identical to FreeBSD/OS X
         while self.packets.is_empty() {

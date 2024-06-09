@@ -63,7 +63,7 @@ pub enum ChannelType {
 #[non_exhaustive]
 pub enum Channel {
     /// A datalink channel which sends and receives Ethernet packets.
-    Ethernet(Box<dyn FrameSender>, Box<dyn FrameReceiver>),
+    Ethernet(Box<dyn RawSender>, Box<dyn RawReceiver>),
 }
 
 /// Socket fanout type (Linux only).
@@ -110,7 +110,7 @@ pub struct Config {
     /// Defaults to Layer2
     pub channel_type: ChannelType,
 
-    /// BPF/OS X only: The number of /dev/bpf* file descriptors to attempt before failing. Defaults
+    /// BPF/macOS only: The number of /dev/bpf* file descriptors to attempt before failing. Defaults
     /// to: 1000.
     pub bpf_fd_attempts: usize,
 
@@ -152,7 +152,7 @@ pub fn channel(
 }
 
 /// Trait to enable sending `$packet` packets.
-pub trait FrameSender: Send {
+pub trait RawSender: Send {
     /// Create and send a number of packets.
     ///
     /// This will call `func` `num_packets` times. The function will be provided with a
@@ -175,7 +175,7 @@ pub trait FrameSender: Send {
 
 /// Structure for receiving packets at the data link layer. Should be constructed using
 /// `channel()`.
-pub trait FrameReceiver: Send {
+pub trait RawReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;
 }

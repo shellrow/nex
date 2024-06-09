@@ -3,7 +3,7 @@
 extern crate libc;
 
 use crate::bindings::linux;
-use crate::{FrameReceiver, FrameSender};
+use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 use nex_core::mac::MacAddr;
 use nex_sys;
@@ -189,7 +189,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let fd = Arc::new(nex_sys::FileDesc { fd: socket });
-    let sender = Box::new(FrameSenderImpl {
+    let sender = Box::new(RawSenderImpl {
         socket: fd.clone(),
         write_buffer: vec![0; config.write_buffer_size],
         _channel_type: config.channel_type,
@@ -199,7 +199,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             .write_timeout
             .map(|to| nex_sys::duration_to_timespec(to)),
     });
-    let receiver = Box::new(FrameReceiverImpl {
+    let receiver = Box::new(RawReceiverImpl {
         socket: fd.clone(),
         read_buffer: vec![0; config.read_buffer_size],
         _channel_type: config.channel_type,
@@ -211,7 +211,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct FrameSenderImpl {
+struct RawSenderImpl {
     socket: Arc<nex_sys::FileDesc>,
     write_buffer: Vec<u8>,
     _channel_type: super::ChannelType,
@@ -220,7 +220,7 @@ struct FrameSenderImpl {
     timeout: Option<libc::timespec>,
 }
 
-impl FrameSender for FrameSenderImpl {
+impl RawSender for RawSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -335,14 +335,14 @@ impl FrameSender for FrameSenderImpl {
     }
 }
 
-struct FrameReceiverImpl {
+struct RawReceiverImpl {
     socket: Arc<nex_sys::FileDesc>,
     read_buffer: Vec<u8>,
     _channel_type: super::ChannelType,
     timeout: Option<libc::timespec>,
 }
 
-impl FrameReceiver for FrameReceiverImpl {
+impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut caddr: libc::sockaddr_storage = unsafe { mem::zeroed() };
         let mut pollfd = libc::pollfd {

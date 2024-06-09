@@ -1,7 +1,7 @@
 //! Support for sending and receiving data link layer packets using the /dev/bpf device.
 
 use crate::bindings::bpf;
-use crate::{FrameReceiver, FrameSender};
+use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 use nex_sys;
 
@@ -204,7 +204,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     let fd = Arc::new(nex_sys::FileDesc { fd: fd });
-    let mut sender = Box::new(FrameSenderImpl {
+    let mut sender = Box::new(RawSenderImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
@@ -217,7 +217,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
         libc::FD_SET(fd.fd, &mut sender.fd_set as *mut libc::fd_set);
     }
-    let mut receiver = Box::new(FrameReceiverImpl {
+    let mut receiver = Box::new(RawReceiverImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; allocated_read_buffer_size],
@@ -237,7 +237,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
-struct FrameSenderImpl {
+struct RawSenderImpl {
     fd: Arc<nex_sys::FileDesc>,
     fd_set: libc::fd_set,
     write_buffer: Vec<u8>,
@@ -245,7 +245,7 @@ struct FrameSenderImpl {
     timeout: Option<libc::timespec>,
 }
 
-impl FrameSender for FrameSenderImpl {
+impl RawSender for RawSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -344,7 +344,7 @@ impl FrameSender for FrameSenderImpl {
     }
 }
 
-struct FrameReceiverImpl {
+struct RawReceiverImpl {
     fd: Arc<nex_sys::FileDesc>,
     fd_set: libc::fd_set,
     read_buffer: Vec<u8>,
@@ -354,7 +354,7 @@ struct FrameReceiverImpl {
     packets: VecDeque<(usize, usize)>,
 }
 
-impl FrameReceiver for FrameReceiverImpl {
+impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         let header_size = if self.loopback {
             ETHERNET_NULL_HEADER_SIZE

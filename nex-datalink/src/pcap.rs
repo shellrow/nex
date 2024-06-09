@@ -10,7 +10,7 @@ use std::time::Duration;
 use pcap::{Activated, Active};
 
 use crate::Channel::Ethernet;
-use crate::{FrameReceiver, FrameSender};
+use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 use nex_core::interface::InterfaceType;
 
@@ -79,10 +79,10 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
-        Box::new(FrameSenderImpl {
+        Box::new(RawSenderImpl {
             capture: cap.clone(),
         }),
-        Box::new(FrameReceiverImpl {
+        Box::new(RawReceiverImpl {
             capture: cap.clone(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
@@ -98,19 +98,19 @@ pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::C
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
-        Box::new(InvalidFrameSenderImpl {}),
-        Box::new(FrameReceiverImpl {
+        Box::new(InvalidRawSenderImpl {}),
+        Box::new(RawReceiverImpl {
             capture: cap.clone(),
             read_buffer: vec![0; config.read_buffer_size],
         }),
     ))
 }
 
-struct FrameSenderImpl {
+struct RawSenderImpl {
     capture: Arc<Mutex<pcap::Capture<Active>>>,
 }
 
-impl FrameSender for FrameSenderImpl {
+impl RawSender for RawSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -139,9 +139,9 @@ impl FrameSender for FrameSenderImpl {
     }
 }
 
-struct InvalidFrameSenderImpl {}
+struct InvalidRawSenderImpl {}
 
-impl FrameSender for InvalidFrameSenderImpl {
+impl RawSender for InvalidRawSenderImpl {
     #[inline]
     fn build_and_send(
         &mut self,
@@ -158,12 +158,12 @@ impl FrameSender for InvalidFrameSenderImpl {
     }
 }
 
-struct FrameReceiverImpl<T: Activated + Send + Sync> {
+struct RawReceiverImpl<T: Activated + Send + Sync> {
     capture: Arc<Mutex<pcap::Capture<T>>>,
     read_buffer: Vec<u8>,
 }
 
-impl<T: Activated + Send + Sync> FrameReceiver for FrameReceiverImpl<T> {
+impl<T: Activated + Send + Sync> RawReceiver for RawReceiverImpl<T> {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut cap = self.capture.lock().unwrap();
         match cap.next_packet() {
