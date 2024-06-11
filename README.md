@@ -63,7 +63,6 @@ The cryptography provider for `nex-socket`'s optional `tls-aws-lc` feature use `
 **You can use `ring` as the cryptography provider (without additional dependencies) by specifying the `tls` feature.**
 
 ## Acknowledgment
-### Inspired by
 This library was heavily inspired by `pnet`, which catalyzed my journey into Rust development.  
 I am grateful to everyone involved in `pnet` for their pioneering efforts and significant contributions to networking in Rust.  
 
