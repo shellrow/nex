@@ -45,13 +45,11 @@ If you want to focus on network interfaces, you can use the [netdev](https://git
 Execute with administrator privileges if necessary.
 
 ## for Windows Users
-Please note that in order to send and receive raw packets using `nex-datalink` on Windows, `npcap` is required.
+Please note that in order to send and receive raw packets using `nex-datalink` on Windows, [Npcap](https://npcap.com/#download) is required.
 
 1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
 
 2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
-
-To simplify the process of downloading and installing `npcap`, you can use `nex-npcap-helper`. This crate facilitates the download and installation process, which can be helpful when distributing applications that utilize `nex-datalink` on Windows.
 
 ## for macOS Users
 On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary for send and receive raw packets using `nex-datalink`.
