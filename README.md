@@ -40,6 +40,10 @@ You can also directly use specific sub-crates by importing them individually.
 If you want to focus on network interfaces, you can use the [netdev](https://github.com/shellrow/netdev).
 
 
+## Privileges
+`nex-datalink` uses a raw socket which may require elevated privileges depending on your system's configuration.  
+Execute with administrator privileges if necessary.
+
 ## for Windows Users
 Please note that in order to send and receive raw packets using `nex-datalink` on Windows, `npcap` is required.
 
@@ -48,6 +52,11 @@ Please note that in order to send and receive raw packets using `nex-datalink` o
 2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
 
 To simplify the process of downloading and installing `npcap`, you can use `nex-npcap-helper`. This crate facilitates the download and installation process, which can be helpful when distributing applications that utilize `nex-datalink` on Windows.
+
+## for macOS Users
+On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary for send and receive raw packets using `nex-datalink`.
+You can use [chmod-bpf](https://github.com/shellrow/chmod-bpf) to automatically manage permissions for BPF devices.
+Alternatively, of course, you can also use `sudo` to temporarily grant the necessary permissions.
 
 ## Build time requirements for optional feature
 The cryptography provider for `nex-socket`'s optional `tls-aws-lc` feature use `aws-lc-rs`. Note that this has some implications on [build-time tool requirements](https://aws.github.io/aws-lc-rs/requirements/index.html), such as requiring cmake on all platforms and nasm on Windows.  
