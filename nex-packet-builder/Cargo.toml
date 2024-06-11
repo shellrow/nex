@@ -11,6 +11,6 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.14.0" }
-nex-packet = { path = "../nex-packet", version = "0.14.0" }
+nex-core = { path = "../nex-core", version = "0.15.0" }
+nex-packet = { path = "../nex-packet", version = "0.15.0" }
 rand = "0.8"
