@@ -13,9 +13,9 @@ license = "MIT"
 [dependencies]
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"], optional = true }
-nex-core = { path = "../nex-core" }
-nex-macro = { path = "../nex-macro" }
-nex-macro-helper = { path = "../nex-macro-helper" }
+nex-core = { path = "../nex-core", version = "0.18.0" }
+nex-macro = { path = "../nex-macro", version = "0.18.0" }
+nex-macro-helper = { path = "../nex-macro-helper", version = "0.18.0" }
 
 [features]
 serde = ["dep:serde", "nex-core/serde"]

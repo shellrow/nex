@@ -20,4 +20,4 @@ syn = { version = "2.0", features = ["full"] }
 regex = "1.10"
 
 [dev-dependencies]
-nex-macro-helper = { path = "../nex-macro-helper" }
+nex-macro-helper = { path = "../nex-macro-helper", version = "0.18.0" }
