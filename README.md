@@ -27,7 +27,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.16"
+nex = "0.17"
 ```
 
 ## Using Specific Sub-crates

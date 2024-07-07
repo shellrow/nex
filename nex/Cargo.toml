@@ -11,11 +11,11 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { workspace = true }
-nex-packet = { workspace = true }
-nex-datalink = { workspace = true }
-nex-socket = { workspace = true }
-nex-packet-builder = { workspace = true }
+nex-core = { path = "../nex-core" }
+nex-packet = { path = "../nex-packet" }
+nex-datalink = { path = "../nex-datalink" }
+nex-socket = { path = "../nex-socket" }
+nex-packet-builder = { path = "../nex-packet-builder" }
 
 [dev-dependencies]
 serde_json = "1.0"
