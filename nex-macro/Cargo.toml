@@ -17,7 +17,7 @@ proc-macro = true
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full"] }
-regex = "1.9"
+regex = "1.10"
 
 [dev-dependencies]
 nex-macro-helper = { path = "../nex-macro-helper", version = "0.15.0" }
