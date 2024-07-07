@@ -16,13 +16,3 @@ exclude = ["deps/nex-npcap-helper"]
 [workspace.package]
 version = "0.16.0"
 authors = ["shellrow <shellrow@fortnium.com>"]
-
-[workspace.dependencies]
-nex-core = { path = "./nex-core" }
-nex-sys = { path = "./nex-sys" }
-nex-macro = { path = "./nex-macro" }
-nex-macro-helper = { path = "./nex-macro-helper" }
-nex-packet = { path = "./nex-packet" }
-nex-packet-builder = { path = "./nex-packet-builder" }
-nex-datalink = { path = "./nex-datalink" }
-nex-socket = { path = "./nex-socket" }
