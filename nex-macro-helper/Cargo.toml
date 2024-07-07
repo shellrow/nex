@@ -11,4 +11,4 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-nex-core = { path = "../nex-core", version = "0.15.0" }
+nex-core = { workspace = true }
