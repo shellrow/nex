@@ -14,5 +14,5 @@ members = [
 exclude = ["deps/nex-npcap-helper"]
 
 [workspace.package]
-version = "0.16.0"
+version = "0.17.0"
 authors = ["shellrow <shellrow@fortnium.com>"]
