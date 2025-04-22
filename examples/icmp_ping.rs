@@ -33,8 +33,8 @@ fn get_global_ipv6(interface: &Interface) -> Option<Ipv6Addr> {
     interface
         .ipv6
         .iter()
-        .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
-        .map(|ipv6| ipv6.addr)
+        .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr()))
+        .map(|ipv6| ipv6.addr())
 }
 
 fn main() {
@@ -76,7 +76,7 @@ fn main() {
     };
     let use_tun: bool = interface.is_tun();
     let src_ip: IpAddr = match dst_ip {
-        IpAddr::V4(_) => interface.ipv4[0].addr.into(),
+        IpAddr::V4(_) => interface.ipv4[0].addr().into(),
         IpAddr::V6(_) => {
             let ipv6 = get_global_ipv6(&interface).expect("Failed to get global IPv6 address");
             ipv6.into()

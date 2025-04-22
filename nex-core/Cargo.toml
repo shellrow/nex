@@ -1,7 +1,7 @@
 [package]
 name = "nex-core"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 description = "Core networking library for nex."
 repository = "https://github.com/shellrow/nex"
@@ -11,8 +11,8 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-netdev = { version = "0.30" }
-serde = { version = "1.0", features = ["derive"], optional = true }
+netdev = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
 
 [features]
 serde = ["dep:serde", "netdev/serde"]

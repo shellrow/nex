@@ -67,7 +67,7 @@ fn main() {
         }
     };
 
-    let src_ip: Ipv4Addr = interface.ipv4[0].addr.into();
+    let src_ip: Ipv4Addr = interface.ipv4[0].addr();
 
     // Create a channel to send/receive packet
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {

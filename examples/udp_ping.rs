@@ -100,7 +100,7 @@ fn main() {
         IpAddr::V4(dst_ipv4) => match interface.ipv4.get(0) {
             Some(src_ipv4) => {
                 let ipv4_packet_builder =
-                    Ipv4PacketBuilder::new(src_ipv4.addr, dst_ipv4, IpNextLevelProtocol::Udp);
+                    Ipv4PacketBuilder::new(src_ipv4.addr(), dst_ipv4, IpNextLevelProtocol::Udp);
                 packet_builder.set_ipv4(ipv4_packet_builder);
             }
             None => {
@@ -112,11 +112,11 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr()))
             {
                 Some(src_ipv6) => {
                     let ipv6_packet_builder =
-                        Ipv6PacketBuilder::new(src_ipv6.addr, dst_ipv6, IpNextLevelProtocol::Udp);
+                        Ipv6PacketBuilder::new(src_ipv6.addr(), dst_ipv6, IpNextLevelProtocol::Udp);
                     packet_builder.set_ipv6(ipv6_packet_builder);
                 }
                 None => {
@@ -131,7 +131,7 @@ fn main() {
         IpAddr::V4(_dst_ipv4) => match interface.ipv4.get(0) {
             Some(src_ipv4) => {
                 let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V4(src_ipv4.addr), SRC_PORT),
+                    SocketAddr::new(IpAddr::V4(src_ipv4.addr()), SRC_PORT),
                     SocketAddr::new(target_ip, DST_PORT),
                 );
                 packet_builder.set_udp(udp_packet_builder);
@@ -145,11 +145,11 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr()))
             {
                 Some(src_ipv6) => {
                     let udp_packet_builder = UdpPacketBuilder::new(
-                        SocketAddr::new(IpAddr::V6(src_ipv6.addr), SRC_PORT),
+                        SocketAddr::new(IpAddr::V6(src_ipv6.addr()), SRC_PORT),
                         SocketAddr::new(target_ip, DST_PORT),
                     );
                     packet_builder.set_udp(udp_packet_builder);

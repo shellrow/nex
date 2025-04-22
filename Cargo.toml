@@ -11,8 +11,15 @@ members = [
     "nex-sys",
     "nex-packet-builder"
 ]
-exclude = ["deps/nex-npcap-helper"]
 
 [workspace.package]
 version = "0.18.0"
+edition = "2021"
 authors = ["shellrow <shellrow@fortnium.com>"]
+
+[workspace.dependencies]
+serde = { version = "1" }
+libc = "0.2"
+rand = "0.8"
+netdev = { version = "0.34" }
+async-io = "2.4"

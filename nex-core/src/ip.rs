@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-pub use netdev::ip::*;
+pub use netdev::ipnet::*;
 
 pub fn is_global_ipv4(ipv4_addr: &Ipv4Addr) -> bool {
     !(ipv4_addr.octets()[0] == 0 // "This network"
