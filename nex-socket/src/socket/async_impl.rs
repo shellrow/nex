@@ -531,12 +531,12 @@ impl AsyncSocket {
     }
     /// Get the value of the IP_HDRINCL option on this socket.
     pub async fn is_ip_header_included(&self) -> io::Result<bool> {
-        self.inner.read_with(|inner| inner.header_included()).await
+        self.inner.read_with(|inner| inner.header_included_v4()).await
     }
     /// Set the value of the `IP_HDRINCL` option on this socket.
     pub async fn set_ip_header_included(&self, include: bool) -> io::Result<()> {
         self.inner
-            .write_with(|inner| inner.set_header_included(include))
+            .write_with(|inner| inner.set_header_included_v4(include))
             .await
     }
     /// Get the value of the TCP_NODELAY option on this socket.
