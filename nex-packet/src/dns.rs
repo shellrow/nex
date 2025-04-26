@@ -1,10 +1,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::{fmt, str};
-use std::str::Utf8Error;
 use nex_macro::packet;
 use nex_macro_helper::packet::{Packet, PacketSize, PrimitiveValues};
 use nex_macro_helper::types::{u1, u16be, u32be, u4};
+use std::str::Utf8Error;
 
 /// Represents an DNS operation.
 /// These identifiers correspond to DNS resource record classes.
@@ -570,17 +570,17 @@ pub fn parse_name(packet: &DnsPacket, coded_name: &Vec<u8>) -> Result<String, Ut
     let start = packet.packet();
     let mut name = coded_name.as_slice();
     let mut rname = String::new();
-    let mut offset:usize = 0;
+    let mut offset: usize = 0;
 
     loop {
-        let label_len:u16 = name[offset] as u16;
+        let label_len: u16 = name[offset] as u16;
         if label_len == 0 {
             break;
         }
         if (label_len & 0xC0) == 0xC0 {
             let offset1 = ((label_len & 0x3F) as usize) << 8;
             let offset2 = name[offset + 1] as usize;
-            offset =  offset1 + offset2;
+            offset = offset1 + offset2;
             // now change name
             name = start;
             continue;
@@ -658,15 +658,32 @@ impl SrvName {
     pub fn new(name: &str) -> Self {
         let parts: Vec<&str> = name.split('.').collect();
         let (instance, service, protocol, domain) = match parts.as_slice() {
-            [instance, service, protocol, domain @ ..] if service.starts_with('_') && protocol.starts_with('_') => {
-                (Some(String::from(*instance)), Some(String::from(*service)), Some(String::from(*protocol)), Some(String::from(domain.join("."))))
-            },
-            [service, protocol, domain @ ..] if service.starts_with('_') && protocol.starts_with('_') => {
-                (None, Some(String::from(*service)), Some(String::from(*protocol)), Some(String::from(domain.join("."))))
-            },
-            [instance, service, protocol, domain @ ..] => {
-                (Some(String::from(*instance)), Some(String::from(*service)), Some(String::from(*protocol)), Some(String::from(domain.join("."))))
-            },
+            [instance, service, protocol, domain @ ..]
+                if service.starts_with('_') && protocol.starts_with('_') =>
+            {
+                (
+                    Some(String::from(*instance)),
+                    Some(String::from(*service)),
+                    Some(String::from(*protocol)),
+                    Some(String::from(domain.join("."))),
+                )
+            }
+            [service, protocol, domain @ ..]
+                if service.starts_with('_') && protocol.starts_with('_') =>
+            {
+                (
+                    None,
+                    Some(String::from(*service)),
+                    Some(String::from(*protocol)),
+                    Some(String::from(domain.join("."))),
+                )
+            }
+            [instance, service, protocol, domain @ ..] => (
+                Some(String::from(*instance)),
+                Some(String::from(*service)),
+                Some(String::from(*protocol)),
+                Some(String::from(domain.join("."))),
+            ),
             _ => (None, None, None, None),
         };
 
@@ -696,7 +713,12 @@ fn test_dns_query_packet() {
     assert_eq!(packet.get_authority_rr_count(), 0);
     assert_eq!(packet.get_additional_rr_count(), 1);
     assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(packet.get_queries()[0].get_qname_parsed().unwrap_or(String::new()), "cloudflare.com");
+    assert_eq!(
+        packet.get_queries()[0]
+            .get_qname_parsed()
+            .unwrap_or(String::new()),
+        "cloudflare.com"
+    );
     assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
     assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
     assert_eq!(packet.get_responses().len(), 0);
@@ -721,7 +743,12 @@ fn test_dns_reponse_packet() {
     assert_eq!(packet.get_authority_rr_count(), 0);
     assert_eq!(packet.get_additional_rr_count(), 1);
     assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(packet.get_queries()[0].get_qname_parsed().unwrap_or(String::new()), "cloudflare.com");
+    assert_eq!(
+        packet.get_queries()[0]
+            .get_qname_parsed()
+            .unwrap_or(String::new()),
+        "cloudflare.com"
+    );
     assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
     assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
     assert_eq!(packet.get_responses().len(), 2);
@@ -782,9 +809,7 @@ fn test_mdns_response() {
     assert_eq!(String::from_utf8(text_rr.get_text()).unwrap(), "version=1");
     // RR #3
     let srv_name = parse_name(&packet, &responses[2].rname).unwrap_or(String::new());
-    assert_eq!(
-        srv_name, "_service._amzn-alexa._tcp.local"
-    );
+    assert_eq!(srv_name, "_service._amzn-alexa._tcp.local");
     assert_eq!(responses[2].rtype, DnsTypes::SRV);
     assert_eq!(responses[2].data_len, 29);
     let srv_rr = DnsRrSrvPacket::new(&responses[2].data).unwrap();
@@ -803,5 +828,4 @@ fn test_mdns_response() {
     // RR #4
     assert_eq!(responses[3].rtype, DnsTypes::A);
     assert_eq!(responses[3].data.as_slice(), [192, 168, 1, 6]);
-
 }

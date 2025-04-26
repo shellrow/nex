@@ -1,8 +1,8 @@
 use nex_core::mac::MacAddr;
-use nex_packet::dhcp::{DhcpHardwareType, DhcpOperation, MutableDhcpPacket};
-use std::net::Ipv4Addr;
 use nex_packet::dhcp::DHCP_MIN_PACKET_SIZE;
+use nex_packet::dhcp::{DhcpHardwareType, DhcpOperation, MutableDhcpPacket};
 use nex_packet::Packet;
+use std::net::Ipv4Addr;
 
 #[derive(Clone, Debug)]
 pub struct DhcpPacketBuilder {
@@ -45,9 +45,9 @@ impl DhcpPacketBuilder {
         self.operation = DhcpOperation::Request;
         self.options.clear();
         self.options.extend_from_slice(&[
-            53, 1, 1,            // DHCP Message Type: DHCPDISCOVER (1)
-            55, 2, 1, 3,         // Parameter Request List: Subnet Mask (1), Router (3)
-            255,                 // End
+            53, 1, 1, // DHCP Message Type: DHCPDISCOVER (1)
+            55, 2, 1, 3,   // Parameter Request List: Subnet Mask (1), Router (3)
+            255, // End
         ]);
     }
 
@@ -62,19 +62,26 @@ impl DhcpPacketBuilder {
         self.operation = DhcpOperation::Request;
         self.options.clear();
         self.options.extend_from_slice(&[
-            53, 1, 3,            // DHCP Message Type: DHCPREQUEST (3)
-            50, 4,               // Requested IP Address
+            53,
+            1,
+            3, // DHCP Message Type: DHCPREQUEST (3)
+            50,
+            4, // Requested IP Address
             requested_ip.octets()[0],
             requested_ip.octets()[1],
             requested_ip.octets()[2],
             requested_ip.octets()[3],
-            54, 4,               // DHCP Server Identifier
+            54,
+            4, // DHCP Server Identifier
             server_id.octets()[0],
             server_id.octets()[1],
             server_id.octets()[2],
             server_id.octets()[3],
-            55, 2, 1, 3,         // Parameter Request List
-            255,                 // End
+            55,
+            2,
+            1,
+            3,   // Parameter Request List
+            255, // End
         ]);
     }
 
@@ -121,10 +128,9 @@ mod tests {
     fn test_dhcp_discover_builder() {
         let transaction_id = 0x12345678;
         let client_mac = MacAddr::new(0x00, 0x11, 0x22, 0x33, 0x44, 0x55);
-        let builder = DhcpPacketBuilder::new(transaction_id, client_mac)
-            .with_discover_options();
+        let builder = DhcpPacketBuilder::new(transaction_id, client_mac).with_discover_options();
         let packet = builder.build();
-        
+
         assert!(packet.len() >= DHCP_MIN_PACKET_SIZE);
         assert_eq!(packet[0], 1);
         assert_eq!(
@@ -143,7 +149,7 @@ mod tests {
         let builder = DhcpPacketBuilder::new(transaction_id, client_mac)
             .with_request_options(requested_ip, server_id);
         let packet = builder.build();
-        
+
         assert!(packet.len() >= DHCP_MIN_PACKET_SIZE);
         assert_eq!(packet[0], 1);
         assert_eq!(
