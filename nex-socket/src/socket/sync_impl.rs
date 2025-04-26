@@ -337,11 +337,11 @@ impl Socket {
     }
     /// Get the value of the IP_HDRINCL option on this socket.
     pub fn is_ip_header_included(&self) -> io::Result<bool> {
-        self.inner.header_included()
+        self.inner.header_included_v4()
     }
     /// Set the value of the `IP_HDRINCL` option on this socket.
     pub fn set_ip_header_included(&self, include: bool) -> io::Result<()> {
-        self.inner.set_header_included(include)
+        self.inner.set_header_included_v4(include)
     }
     /// Get the value of the TCP_NODELAY option on this socket.
     pub fn nodelay(&self) -> io::Result<bool> {
