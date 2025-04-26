@@ -95,7 +95,7 @@ fn main() {
         IpAddr::V4(dst_ipv4) => match interface.ipv4.get(0) {
             Some(src_ipv4) => {
                 let ipv4_packet_builder =
-                    Ipv4PacketBuilder::new(src_ipv4.addr, dst_ipv4, IpNextLevelProtocol::Tcp);
+                    Ipv4PacketBuilder::new(src_ipv4.addr(), dst_ipv4, IpNextLevelProtocol::Tcp);
                 packet_builder.set_ipv4(ipv4_packet_builder);
             }
             None => {
@@ -107,11 +107,11 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr()))
             {
                 Some(src_ipv6) => {
                     let ipv6_packet_builder =
-                        Ipv6PacketBuilder::new(src_ipv6.addr, dst_ipv6, IpNextLevelProtocol::Tcp);
+                        Ipv6PacketBuilder::new(src_ipv6.addr(), dst_ipv6, IpNextLevelProtocol::Tcp);
                     packet_builder.set_ipv6(ipv6_packet_builder);
                 }
                 None => {
@@ -126,7 +126,7 @@ fn main() {
         IpAddr::V4(_dst_ipv4) => match interface.ipv4.get(0) {
             Some(src_ipv4) => {
                 let mut tcp_packet_builder = TcpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V4(src_ipv4.addr), 53443),
+                    SocketAddr::new(IpAddr::V4(src_ipv4.addr()), 53443),
                     target_socket,
                 );
                 tcp_packet_builder.flags = TcpFlags::SYN;
@@ -148,11 +148,11 @@ fn main() {
             match interface
                 .ipv6
                 .iter()
-                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr))
+                .find(|ipv6| nex::net::ip::is_global_ipv6(&ipv6.addr()))
             {
                 Some(src_ipv6) => {
                     let mut tcp_packet_builder = TcpPacketBuilder::new(
-                        SocketAddr::new(IpAddr::V6(src_ipv6.addr), 53443),
+                        SocketAddr::new(IpAddr::V6(src_ipv6.addr()), 53443),
                         target_socket,
                     );
                     tcp_packet_builder.flags = TcpFlags::SYN;

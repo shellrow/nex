@@ -1,7 +1,7 @@
 [package]
 name = "nex-packet-builder"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 description = "Provides high-level packet building on top of nex-packet. Part of nex project. "
 repository = "https://github.com/shellrow/nex"
@@ -13,4 +13,4 @@ license = "MIT"
 [dependencies]
 nex-core = { path = "../nex-core", version = "0.18.0" }
 nex-packet = { path = "../nex-packet", version = "0.18.0" }
-rand = "0.8"
+rand = { workspace = true }
