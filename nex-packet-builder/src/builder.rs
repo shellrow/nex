@@ -159,15 +159,13 @@ impl PacketBuilder {
 
         if self.packet.len() >= min_offset_ipv4 {
             if self.packet.len() < min_offset_ipv4 + dhcp_packet.len() {
-                self.packet
-                    .resize(min_offset_ipv4 + dhcp_packet.len(), 0);
+                self.packet.resize(min_offset_ipv4 + dhcp_packet.len(), 0);
             }
             self.packet[min_offset_ipv4..min_offset_ipv4 + dhcp_packet.len()]
                 .copy_from_slice(&dhcp_packet);
         } else if self.packet.len() >= min_offset_ipv6 {
             if self.packet.len() < min_offset_ipv6 + dhcp_packet.len() {
-                self.packet
-                    .resize(min_offset_ipv6 + dhcp_packet.len(), 0);
+                self.packet.resize(min_offset_ipv6 + dhcp_packet.len(), 0);
             }
             self.packet[min_offset_ipv6..min_offset_ipv6 + dhcp_packet.len()]
                 .copy_from_slice(&dhcp_packet);

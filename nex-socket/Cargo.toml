@@ -11,11 +11,11 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-async-io = { workspace = true }
+async-io = "2.4"
 futures-lite = "2.6"
 futures-io = "0.3"
 socket2 = { version = "0.5", features = ["all"] }
-nex-packet = { path = "../nex-packet", version = "0.18.0" }
+nex-packet = { workspace = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.59.0"

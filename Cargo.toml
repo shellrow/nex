@@ -13,13 +13,20 @@ members = [
 ]
 
 [workspace.package]
-version = "0.18.0"
+version = "0.19.0"
 edition = "2021"
 authors = ["shellrow <shellrow@fortnium.com>"]
 
 [workspace.dependencies]
+nex-core = { version = "0.19.0", path = "nex-core" }
+nex-datalink = { version = "0.19.0", path = "nex-datalink" }
+nex-macro = { version = "0.19.0", path = "nex-macro" }
+nex-macro-helper = { version = "0.19.0", path = "nex-macro-helper" }
+nex-packet = { version = "0.19.0", path = "nex-packet" }
+nex-packet-builder = { version = "0.19.0", path = "nex-packet-builder" }
+nex-socket = { version = "0.19.0", path = "nex-socket" }
+nex-sys = { version = "0.19.0", path = "nex-sys" }
 serde = { version = "1" }
 libc = "0.2"
 rand = "0.8"
 netdev = { version = "0.34" }
-async-io = "2.4"
