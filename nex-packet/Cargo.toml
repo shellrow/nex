@@ -13,9 +13,9 @@ license = "MIT"
 [dependencies]
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-nex-core = { path = "../nex-core", version = "0.18.0" }
-nex-macro = { path = "../nex-macro", version = "0.18.0" }
-nex-macro-helper = { path = "../nex-macro-helper", version = "0.18.0" }
+nex-core = { workspace = true }
+nex-macro = { workspace = true }
+nex-macro-helper = { workspace = true }
 
 [features]
 clippy = []

@@ -15,8 +15,8 @@ libc = { workspace = true }
 netdev = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 pcap = { version = "2.0", optional = true }
-nex-core = { path = "../nex-core", version = "0.18.0" }
-nex-sys = { path = "../nex-sys", version = "0.18.0" }
+nex-core = { workspace = true }
+nex-sys = { workspace = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.59.0"
