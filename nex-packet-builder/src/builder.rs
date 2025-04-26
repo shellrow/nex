@@ -1,8 +1,10 @@
 use nex_packet::ethernet::ETHERNET_HEADER_LEN;
 use nex_packet::ipv4::IPV4_HEADER_LEN;
 use nex_packet::ipv6::IPV6_HEADER_LEN;
+use nex_packet::udp::UDP_HEADER_LEN;
 
 use crate::arp::ArpPacketBuilder;
+use crate::dhcp::DhcpPacketBuilder;
 use crate::ethernet::EthernetPacketBuilder;
 use crate::icmp::IcmpPacketBuilder;
 use crate::icmpv6::Icmpv6PacketBuilder;
@@ -146,6 +148,29 @@ impl PacketBuilder {
             self.packet[ETHERNET_HEADER_LEN + IPV6_HEADER_LEN
                 ..ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + udp_packet.len()]
                 .copy_from_slice(&udp_packet);
+        }
+    }
+    /// Set DHCP header and payload.
+    pub fn set_dhcp(&mut self, packet_builder: DhcpPacketBuilder) {
+        let dhcp_packet = packet_builder.build();
+
+        let min_offset_ipv4 = ETHERNET_HEADER_LEN + IPV4_HEADER_LEN + UDP_HEADER_LEN;
+        let min_offset_ipv6 = ETHERNET_HEADER_LEN + IPV6_HEADER_LEN + UDP_HEADER_LEN;
+
+        if self.packet.len() >= min_offset_ipv4 {
+            if self.packet.len() < min_offset_ipv4 + dhcp_packet.len() {
+                self.packet
+                    .resize(min_offset_ipv4 + dhcp_packet.len(), 0);
+            }
+            self.packet[min_offset_ipv4..min_offset_ipv4 + dhcp_packet.len()]
+                .copy_from_slice(&dhcp_packet);
+        } else if self.packet.len() >= min_offset_ipv6 {
+            if self.packet.len() < min_offset_ipv6 + dhcp_packet.len() {
+                self.packet
+                    .resize(min_offset_ipv6 + dhcp_packet.len(), 0);
+            }
+            self.packet[min_offset_ipv6..min_offset_ipv6 + dhcp_packet.len()]
+                .copy_from_slice(&dhcp_packet);
         }
     }
 }

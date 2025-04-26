@@ -2,6 +2,7 @@
 
 pub mod arp;
 pub mod builder;
+pub mod dhcp;
 pub mod ethernet;
 pub mod icmp;
 pub mod icmpv6;

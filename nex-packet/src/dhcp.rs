@@ -7,6 +7,10 @@ use nex_macro::packet;
 use nex_macro_helper::types::*;
 use std::net::Ipv4Addr;
 
+/// Minimum size of an DHCP packet.
+/// Options field is not included in this size.
+pub const DHCP_MIN_PACKET_SIZE: usize = 236;
+
 /// Represents an DHCP operation.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
