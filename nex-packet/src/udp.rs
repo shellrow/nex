@@ -1,16 +1,13 @@
 //! A UDP packet abstraction.
 
-use crate::ip::IpNextLevelProtocol;
-use crate::Packet;
-
-use alloc::vec::Vec;
-
-use nex_macro::packet;
-use nex_macro_helper::types::*;
+use crate::ip::IpNextProtocol;
+use crate::packet::Packet;
 
 use crate::util;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use nex_core::bitfield::u16be;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -27,42 +24,94 @@ pub struct UdpHeader {
     pub checksum: u16be,
 }
 
-impl UdpHeader {
-    /// Construct a UDP header from a byte slice.
-    pub fn from_bytes(packet: &[u8]) -> Result<UdpHeader, String> {
-        if packet.len() < UDP_HEADER_LEN {
-            return Err("Packet is too small for UDP header".to_string());
+/// Represents a UDP Packet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UdpPacket {
+    pub header: UdpHeader,
+    pub payload: Bytes,
+}
+
+impl Packet for UdpPacket {
+    type Header = UdpHeader;
+    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < UDP_HEADER_LEN {
+            return None;
         }
-        match UdpPacket::new(packet) {
-            Some(udp_packet) => Ok(UdpHeader {
-                source: udp_packet.get_source(),
-                destination: udp_packet.get_destination(),
-                length: udp_packet.get_length(),
-                checksum: udp_packet.get_checksum(),
-            }),
-            None => Err("Failed to parse UDP packet".to_string()),
+
+        let source = bytes.get_u16();
+        let destination = bytes.get_u16();
+        let length = bytes.get_u16();
+        let checksum = bytes.get_u16();
+
+        if length < UDP_HEADER_LEN as u16 {
+            return None;
         }
+
+        let payload_len = length as usize - UDP_HEADER_LEN;
+        if bytes.len() < payload_len {
+            return None;
+        }
+
+        let (payload_slice, _) = bytes.split_at(payload_len);
+
+        Some(UdpPacket {
+            header: UdpHeader {
+                source,
+                destination,
+                length,
+                checksum,
+            },
+            payload: Bytes::copy_from_slice(payload_slice),
+        })
     }
-    /// Construct a UDP header from a UdpPacket.
-    pub(crate) fn from_packet(udp_packet: &UdpPacket) -> UdpHeader {
-        UdpHeader {
-            source: udp_packet.get_source(),
-            destination: udp_packet.get_destination(),
-            length: udp_packet.get_length(),
-            checksum: udp_packet.get_checksum(),
-        }
+    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&mut bytes)
+    }
+    fn to_bytes(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(UDP_HEADER_LEN + self.payload.len());
+        buf.put_u16(self.header.source);
+        buf.put_u16(self.header.destination);
+        buf.put_u16((UDP_HEADER_LEN + self.payload.len()) as u16);
+        buf.put_u16(self.header.checksum);
+        buf.extend_from_slice(&self.payload);
+        buf.freeze()
+    }
+    fn header(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(UDP_HEADER_LEN);
+        buf.put_u16(self.header.source);
+        buf.put_u16(self.header.destination);
+        buf.put_u16(self.header.length);
+        buf.put_u16(self.header.checksum);
+        buf.freeze()
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        UDP_HEADER_LEN
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        (self.header, self.payload)
     }
 }
 
-/// Represents a UDP Packet.
-#[packet]
-pub struct Udp {
-    pub source: u16be,
-    pub destination: u16be,
-    pub length: u16be,
-    pub checksum: u16be,
-    #[payload]
-    pub payload: Vec<u8>,
+pub fn checksum(packet: &UdpPacket, source: &IpAddr, destination: &IpAddr) -> u16 {
+    match (source, destination) {
+        (IpAddr::V4(src), IpAddr::V4(dst)) => ipv4_checksum(packet, src, dst),
+        (IpAddr::V6(src), IpAddr::V6(dst)) => ipv6_checksum(packet, src, dst),
+        _ => 0, // Unsupported IP version
+    }
 }
 
 /// Calculate a checksum for a packet built on IPv4.
@@ -84,59 +133,13 @@ pub fn ipv4_checksum_adv(
     destination: &Ipv4Addr,
 ) -> u16be {
     util::ipv4_checksum(
-        packet.packet(),
+        packet.to_bytes().as_ref(),
         3,
         extra_data,
         source,
         destination,
-        IpNextLevelProtocol::Udp,
+        IpNextProtocol::Udp,
     )
-}
-
-#[test]
-fn udp_header_ipv4_test() {
-    use crate::ip::IpNextLevelProtocol;
-    use crate::ipv4::MutableIpv4Packet;
-
-    let mut packet = [0u8; 20 + 8 + 4];
-    let ipv4_source = Ipv4Addr::new(192, 168, 0, 1);
-    let ipv4_destination = Ipv4Addr::new(192, 168, 0, 199);
-    {
-        let mut ip_header = MutableIpv4Packet::new(&mut packet[..]).unwrap();
-        ip_header.set_next_level_protocol(IpNextLevelProtocol::Udp);
-        ip_header.set_source(ipv4_source);
-        ip_header.set_destination(ipv4_destination);
-    }
-
-    // Set data
-    packet[20 + 8] = 't' as u8;
-    packet[20 + 8 + 1] = 'e' as u8;
-    packet[20 + 8 + 2] = 's' as u8;
-    packet[20 + 8 + 3] = 't' as u8;
-
-    {
-        let mut udp_header = MutableUdpPacket::new(&mut packet[20..]).unwrap();
-        udp_header.set_source(12345);
-        assert_eq!(udp_header.get_source(), 12345);
-
-        udp_header.set_destination(54321);
-        assert_eq!(udp_header.get_destination(), 54321);
-
-        udp_header.set_length(8 + 4);
-        assert_eq!(udp_header.get_length(), 8 + 4);
-
-        let checksum = ipv4_checksum(&udp_header.to_immutable(), &ipv4_source, &ipv4_destination);
-        udp_header.set_checksum(checksum);
-        assert_eq!(udp_header.get_checksum(), 0x9178);
-    }
-
-    let ref_packet = [
-        0x30, 0x39, /* source */
-        0xd4, 0x31, /* destination */
-        0x00, 0x0c, /* length */
-        0x91, 0x78, /* checksum */
-    ];
-    assert_eq!(&ref_packet[..], &packet[20..28]);
 }
 
 /// Calculate a checksum for a packet built on IPv6.
@@ -158,57 +161,59 @@ pub fn ipv6_checksum_adv(
     destination: &Ipv6Addr,
 ) -> u16be {
     util::ipv6_checksum(
-        packet.packet(),
+        packet.to_bytes().as_ref(),
         3,
         extra_data,
         source,
         destination,
-        IpNextLevelProtocol::Udp,
+        IpNextProtocol::Udp,
     )
 }
 
-#[test]
-fn udp_header_ipv6_test() {
-    use crate::ip::IpNextLevelProtocol;
-    use crate::ipv6::MutableIpv6Packet;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_basic_udp_parse() {
+        let raw = Bytes::from_static(&[
+            0x12, 0x34, // source
+            0xab, 0xcd, // destination
+            0x00, 0x0c, // length = 12 bytes (8 header + 4 payload)
+            0x55, 0xaa, // checksum
+            b'd', b'a', b't', b'a', // payload
+        ]);
+        let packet = UdpPacket::from_bytes(raw.clone()).expect("Failed to parse UDP packet");
 
-    let mut packet = [0u8; 40 + 8 + 4];
-    let ipv6_source = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
-    let ipv6_destination = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
-    {
-        let mut ip_header = MutableIpv6Packet::new(&mut packet[..]).unwrap();
-        ip_header.set_next_header(IpNextLevelProtocol::Udp);
-        ip_header.set_source(ipv6_source);
-        ip_header.set_destination(ipv6_destination);
+        assert_eq!(packet.header.source, 0x1234);
+        assert_eq!(packet.header.destination, 0xabcd);
+        assert_eq!(packet.header.length, 12);
+        assert_eq!(packet.header.checksum, 0x55aa);
+        assert_eq!(packet.payload, Bytes::from_static(b"data"));
+        assert_eq!(packet.to_bytes(), raw);
     }
+    #[test]
+    fn test_basic_udp_create() {
+        let payload = Bytes::from_static(b"data");
+        let packet = UdpPacket {
+            header: UdpHeader {
+                source: 0x1234,
+                destination: 0xabcd,
+                length: (UDP_HEADER_LEN + payload.len()) as u16,
+                checksum: 0x55aa,
+            },
+            payload: payload.clone(),
+        };
 
-    // Set data
-    packet[40 + 8] = 't' as u8;
-    packet[40 + 8 + 1] = 'e' as u8;
-    packet[40 + 8 + 2] = 's' as u8;
-    packet[40 + 8 + 3] = 't' as u8;
+        let expected = Bytes::from_static(&[
+            0x12, 0x34, // source
+            0xab, 0xcd, // destination
+            0x00, 0x0c, // length
+            0x55, 0xaa, // checksum
+            b'd', b'a', b't', b'a', // payload
+        ]);
 
-    {
-        let mut udp_header = MutableUdpPacket::new(&mut packet[40..]).unwrap();
-        udp_header.set_source(12345);
-        assert_eq!(udp_header.get_source(), 12345);
-
-        udp_header.set_destination(54321);
-        assert_eq!(udp_header.get_destination(), 54321);
-
-        udp_header.set_length(8 + 4);
-        assert_eq!(udp_header.get_length(), 8 + 4);
-
-        let checksum = ipv6_checksum(&udp_header.to_immutable(), &ipv6_source, &ipv6_destination);
-        udp_header.set_checksum(checksum);
-        assert_eq!(udp_header.get_checksum(), 0x1390);
+        assert_eq!(packet.to_bytes(), expected);
+        assert_eq!(packet.payload(), payload);
+        assert_eq!(packet.header_len(), UDP_HEADER_LEN);
     }
-
-    let ref_packet = [
-        0x30, 0x39, /* source */
-        0xd4, 0x31, /* destination */
-        0x00, 0x0c, /* length */
-        0x13, 0x90, /* checksum */
-    ];
-    assert_eq!(&ref_packet[..], &packet[40..48]);
 }

@@ -146,3 +146,29 @@ where
 fn errno() -> i32 {
     io::Error::last_os_error().raw_os_error().unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_timeval_round_trip() {
+        let dur = Duration::new(1, 500_000_000);
+        let tv = duration_to_timeval(dur);
+        assert_eq!(timeval_to_duration(tv), dur);
+    }
+
+    #[test]
+    fn test_timespec_round_trip() {
+        let dur = Duration::new(2, 123_456_789);
+        let ts = duration_to_timespec(dur);
+        assert_eq!(timespec_to_duration(ts), dur);
+    }
+
+    #[test]
+    fn test_ipv4_addr_int() {
+        let addr = InAddr { s_addr: u32::from_be(0x7f000001) };
+        assert_eq!(ipv4_addr_int(addr), 0x7f000001);
+    }
+}

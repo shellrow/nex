@@ -64,10 +64,70 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = payload_offset;
                 }
-                let frame: Frame = Frame::from_bytes(&packet, parse_option);
-                println!("Packet Frame: {:?}", frame);
+                match Frame::from_buf(&packet, parse_option) {
+                    Some(frame) => {
+                        display_frame(&frame);
+                    }
+                    None => {
+                        println!("Failed to parse packet as Frame");
+                    }
+                }
             }
             Err(e) => panic!("parse_frame: unable to receive packet: {}", e),
         }
+    }
+}
+
+pub fn display_frame(frame: &Frame) {
+    println!("Packet Frame ({} bytes)", frame.packet_len);
+
+    if let Some(dl) = &frame.datalink {
+        if let Some(eth) = &dl.ethernet {
+            println!("  Ethernet: {} > {} ({:?})", eth.source, eth.destination, eth.ethertype);
+        }
+        if let Some(arp) = &dl.arp {
+            println!(
+                "  ARP: {}({}) > {}({}); operation: {:?}",
+                arp.sender_hw_addr,
+                arp.sender_proto_addr,
+                arp.target_hw_addr,
+                arp.target_proto_addr,
+                arp.operation
+            );
+        }
+    }
+
+    if let Some(ip) = &frame.ip {
+        if let Some(ipv4) = &ip.ipv4 {
+            println!(
+                "  IPv4: {} -> {} (protocol: {:?})",
+                ipv4.source, ipv4.destination, ipv4.next_level_protocol
+            );
+        }
+        if let Some(ipv6) = &ip.ipv6 {
+            println!(
+                "  IPv6: {} -> {} (next header: {:?})",
+                ipv6.source, ipv6.destination, ipv6.next_header
+            );
+        }
+        if ip.icmp.is_some() {
+            println!("  ICMP: present");
+        }
+        if ip.icmpv6.is_some() {
+            println!("  ICMPv6: present");
+        }
+    }
+
+    if let Some(tp) = &frame.transport {
+        if let Some(tcp) = &tp.tcp {
+            println!("  TCP: {} -> {}", tcp.source, tcp.destination);
+        }
+        if let Some(udp) = &tp.udp {
+            println!("  UDP: {} -> {}", udp.source, udp.destination);
+        }
+    }
+
+    if !frame.payload.is_empty() {
+        println!("  Payload: {} bytes", frame.payload.len());
     }
 }

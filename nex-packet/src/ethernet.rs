@@ -1,15 +1,13 @@
 //! An ethernet packet abstraction.
 
-use crate::PrimitiveValues;
-
-use alloc::vec::Vec;
 use core::fmt;
-
+use bytes::Bytes;
 use nex_core::mac::MacAddr;
-use nex_macro::packet;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use crate::packet::Packet;
 
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
@@ -17,83 +15,8 @@ pub const ETHERNET_HEADER_LEN: usize = 14;
 /// Represents the MAC address length.
 pub const MAC_ADDR_LEN: usize = 6;
 
-/// Represents the Ethernet Header.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct EthernetHeader {
-    /// Destination MAC address
-    pub destination: MacAddr,
-    /// Source MAC address
-    pub source: MacAddr,
-    /// EtherType
-    pub ethertype: EtherType,
-}
-
-impl EthernetHeader {
-    /// Construct an Ethernet header from a byte slice.
-    pub fn from_bytes(packet: &[u8]) -> Result<EthernetHeader, String> {
-        if packet.len() < ETHERNET_HEADER_LEN {
-            return Err("Packet is too small for Ethernet header".to_string());
-        }
-        match EthernetPacket::new(packet) {
-            Some(ethernet_packet) => Ok(EthernetHeader {
-                destination: ethernet_packet.get_destination(),
-                source: ethernet_packet.get_source(),
-                ethertype: ethernet_packet.get_ethertype(),
-            }),
-            None => Err("Failed to parse Ethernet packet".to_string()),
-        }
-    }
-    /// Construct an Ethernet header from a EthernetPacket.
-    pub(crate) fn from_packet(ethernet_packet: &EthernetPacket) -> EthernetHeader {
-        EthernetHeader {
-            destination: ethernet_packet.get_destination(),
-            source: ethernet_packet.get_source(),
-            ethertype: ethernet_packet.get_ethertype(),
-        }
-    }
-}
-
-/// Represents an Ethernet packet.
-#[packet]
-pub struct Ethernet {
-    #[construct_with(u8, u8, u8, u8, u8, u8)]
-    pub destination: MacAddr,
-    #[construct_with(u8, u8, u8, u8, u8, u8)]
-    pub source: MacAddr,
-    #[construct_with(u16)]
-    pub ethertype: EtherType,
-    #[payload]
-    pub payload: Vec<u8>,
-}
-
-#[test]
-fn ethernet_header_test() {
-    let mut packet = [0u8; 14];
-    {
-        let mut ethernet_header = MutableEthernetPacket::new(&mut packet[..]).unwrap();
-
-        let source = MacAddr(0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc);
-        ethernet_header.set_source(source);
-        assert_eq!(ethernet_header.get_source(), source);
-
-        let dest = MacAddr(0xde, 0xf0, 0x12, 0x34, 0x45, 0x67);
-        ethernet_header.set_destination(dest);
-        assert_eq!(ethernet_header.get_destination(), dest);
-
-        ethernet_header.set_ethertype(EtherType::Ipv6);
-        assert_eq!(ethernet_header.get_ethertype(), EtherType::Ipv6);
-    }
-
-    let ref_packet = [
-        0xde, 0xf0, 0x12, 0x34, 0x45, 0x67, /* destination */
-        0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, /* source */
-        0x86, 0xdd, /* ethertype */
-    ];
-    assert_eq!(&ref_packet[..], &packet[..]);
-}
-
 /// Represents the Ethernet types.
+#[repr(u16)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EtherType {
@@ -185,84 +108,251 @@ impl EtherType {
             EtherType::Unknown(_) => "Unknown",
         }
     }
-}
-
-impl PrimitiveValues for EtherType {
-    type T = (u16,);
-    fn to_primitive_values(&self) -> (u16,) {
+    pub fn value(&self) -> u16 {
         match *self {
-            EtherType::Ipv4 => (0x0800,),
-            EtherType::Arp => (0x0806,),
-            EtherType::WakeOnLan => (0x0842,),
-            EtherType::Trill => (0x22F3,),
-            EtherType::DECnet => (0x6003,),
-            EtherType::Rarp => (0x8035,),
-            EtherType::AppleTalk => (0x809B,),
-            EtherType::Aarp => (0x80F3,),
-            EtherType::Ipx => (0x8137,),
-            EtherType::Qnx => (0x8204,),
-            EtherType::Ipv6 => (0x86DD,),
-            EtherType::FlowControl => (0x8808,),
-            EtherType::CobraNet => (0x8819,),
-            EtherType::Mpls => (0x8847,),
-            EtherType::MplsMcast => (0x8848,),
-            EtherType::PppoeDiscovery => (0x8863,),
-            EtherType::PppoeSession => (0x8864,),
-            EtherType::Vlan => (0x8100,),
-            EtherType::PBridge => (0x88a8,),
-            EtherType::Lldp => (0x88cc,),
-            EtherType::Ptp => (0x88f7,),
-            EtherType::Cfm => (0x8902,),
-            EtherType::QinQ => (0x9100,),
-            EtherType::Rldp => (0x8899,),
-            EtherType::Unknown(n) => (n,),
+            EtherType::Ipv4 => 0x0800,
+            EtherType::Arp => 0x0806,
+            EtherType::WakeOnLan => 0x0842,
+            EtherType::Trill => 0x22F3,
+            EtherType::DECnet => 0x6003,
+            EtherType::Rarp => 0x8035,
+            EtherType::AppleTalk => 0x809B,
+            EtherType::Aarp => 0x80F3,
+            EtherType::Ipx => 0x8137,
+            EtherType::Qnx => 0x8204,
+            EtherType::Ipv6 => 0x86DD,
+            EtherType::FlowControl => 0x8808,
+            EtherType::CobraNet => 0x8819,
+            EtherType::Mpls => 0x8847,
+            EtherType::MplsMcast => 0x8848,
+            EtherType::PppoeDiscovery => 0x8863,
+            EtherType::PppoeSession => 0x8864,
+            EtherType::Vlan => 0x8100,
+            EtherType::PBridge => 0x88a8,
+            EtherType::Lldp => 0x88cc,
+            EtherType::Ptp => 0x88f7,
+            EtherType::Cfm => 0x8902,
+            EtherType::QinQ => 0x9100,
+            EtherType::Rldp => 0x8899,
+            EtherType::Unknown(value) => value,
         }
     }
 }
 
 impl fmt::Display for EtherType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+/// Represents the Ethernet Header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct EthernetHeader {
+    /// Destination MAC address
+    pub destination: MacAddr,
+    /// Source MAC address
+    pub source: MacAddr,
+    /// EtherType
+    pub ethertype: EtherType,
+}
+
+impl EthernetHeader {
+    /// Construct an Ethernet header from a byte slice.
+    pub fn from_bytes(packet: Bytes) -> Result<EthernetHeader, String> {
+        if packet.len() < ETHERNET_HEADER_LEN {
+            return Err("Packet is too small for Ethernet header".to_string());
+        }
+        match EthernetPacket::from_bytes(packet) {
+            Some(ethernet_packet) => Ok(EthernetHeader {
+                destination: ethernet_packet.get_destination(),
+                source: ethernet_packet.get_source(),
+                ethertype: ethernet_packet.get_ethertype(),
+            }),
+            None => Err("Failed to parse Ethernet packet".to_string()),
+        }
+    }
+    pub fn to_bytes(&self) -> Bytes {
+        let mut buf = Vec::with_capacity(ETHERNET_HEADER_LEN);
+        buf.extend_from_slice(&self.destination.octets());
+        buf.extend_from_slice(&self.source.octets());
+        buf.extend_from_slice(&self.ethertype.value().to_be_bytes());
+        Bytes::from(buf)
+    }
+}
+
+/// Represents an Ethernet packet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct EthernetPacket {
+    /// The Ethernet header.
+    pub header: EthernetHeader,
+    pub payload: Bytes,
+}
+
+impl Packet for EthernetPacket {
+    type Header = EthernetHeader;
+
+    fn from_buf(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < ETHERNET_HEADER_LEN {
+            return None;
+        }
+        let destination = MacAddr::from_octets(bytes[0..MAC_ADDR_LEN].try_into().unwrap());
+        let source = MacAddr::from_octets(bytes[MAC_ADDR_LEN..2 * MAC_ADDR_LEN].try_into().unwrap());
+        let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
+        let payload = Bytes::copy_from_slice(&bytes[ETHERNET_HEADER_LEN..]);
+
+        Some(EthernetPacket {
+            header: EthernetHeader {
+                destination,
+                source,
+                ethertype,
+            },
+            payload,
+        })
+    }
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&bytes)
+    }
+    fn to_bytes(&self) -> Bytes {
+        let mut buf = Vec::with_capacity(ETHERNET_HEADER_LEN + self.payload.len());
+        buf.extend_from_slice(&self.header.to_bytes());
+        buf.extend_from_slice(&self.payload);
+        Bytes::from(buf)
+    }
+    fn header(&self) -> Bytes {
+        self.header.to_bytes()
+    }
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+    fn header_len(&self) -> usize {
+        ETHERNET_HEADER_LEN
+    }
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        (self.header, self.payload)
+    }
+}
+
+impl EthernetPacket {
+    /// Create a new Ethernet packet.
+    pub fn new(header: EthernetHeader, payload: Bytes) -> Self {
+        EthernetPacket { header, payload }
+    }
+    /// Get the destination MAC address.
+    pub fn get_destination(&self) -> MacAddr {
+        self.header.destination
+    }
+
+    /// Get the source MAC address.
+    pub fn get_source(&self) -> MacAddr {
+        self.header.source
+    }
+
+    /// Get the EtherType.
+    pub fn get_ethertype(&self) -> EtherType {
+        self.header.ethertype
+    }
+
+    pub fn ip_packet(&self) -> Option<Bytes> {
+        if self.get_ethertype() == EtherType::Ipv4 || self.get_ethertype() == EtherType::Ipv6 {
+            Some(self.payload.clone())
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for EthernetPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}",
-            match self {
-                EtherType::Ipv4 => "Ipv4",
-                EtherType::Arp => "Arp",
-                EtherType::WakeOnLan => "WakeOnLan",
-                EtherType::Trill => "Trill",
-                EtherType::DECnet => "DECnet",
-                EtherType::Rarp => "Rarp",
-                EtherType::AppleTalk => "AppleTalk",
-                EtherType::Aarp => "Aarp",
-                EtherType::Ipx => "Ipx",
-                EtherType::Qnx => "Qnx",
-                EtherType::Ipv6 => "Ipv6",
-                EtherType::FlowControl => "FlowControl",
-                EtherType::CobraNet => "CobraNet",
-                EtherType::Mpls => "Mpls",
-                EtherType::MplsMcast => "MplsMcast",
-                EtherType::PppoeDiscovery => "PppoeDiscovery",
-                EtherType::PppoeSession => "PppoeSession",
-                EtherType::Vlan => "Vlan",
-                EtherType::PBridge => "PBridge",
-                EtherType::Lldp => "Lldp",
-                EtherType::Ptp => "Ptp",
-                EtherType::Cfm => "Cfm",
-                EtherType::QinQ => "QinQ",
-                EtherType::Rldp => "Rldp",
-                EtherType::Unknown(_) => "unknown",
-            }
+            "EthernetPacket {{ destination: {}, source: {}, ethertype: {} }}",
+            self.get_destination(),
+            self.get_source(),
+            self.get_ethertype()
         )
     }
 }
 
-#[test]
-fn ether_type_to_str() {
-    use std::format;
-    let ipv4 = EtherType::new(0x0800);
-    assert_eq!(format!("{}", ipv4), "Ipv4");
-    let arp = EtherType::new(0x0806);
-    assert_eq!(format!("{}", arp), "Arp");
-    let unknown = EtherType::new(0x0666);
-    assert_eq!(format!("{}", unknown), "unknown");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use nex_core::mac::MacAddr;
+
+    #[test]
+    fn test_ethernet_parse_basic() {
+        let raw = [
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, // dst
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, // src
+            0x08, 0x00,                         // EtherType: IPv4
+            0xde, 0xad, 0xbe, 0xef              // Payload (dummy)
+        ];
+        let packet = EthernetPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
+        assert_eq!(packet.get_destination(), MacAddr::from_octets([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]));
+        assert_eq!(packet.get_source(), MacAddr::from_octets([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]));
+        assert_eq!(packet.get_ethertype(), EtherType::Ipv4);
+        assert_eq!(packet.payload.len(), 4);
+    }
+
+    #[test]
+    fn test_ethernet_serialize_roundtrip() {
+        let original = EthernetPacket {
+            header: EthernetHeader {
+                destination: MacAddr::from_octets([1, 2, 3, 4, 5, 6]),
+                source: MacAddr::from_octets([10, 20, 30, 40, 50, 60]),
+                ethertype: EtherType::Arp,
+            },
+            payload: Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef]),
+        };
+
+        let bytes = original.to_bytes();
+        let parsed = EthernetPacket::from_bytes(bytes).unwrap();
+
+        assert_eq!(parsed, original);
+    }
+
+    #[test]
+    fn test_ethernet_header_parse_and_serialize() {
+        let header = EthernetHeader {
+            destination: MacAddr::from_octets([1, 1, 1, 1, 1, 1]),
+            source: MacAddr::from_octets([2, 2, 2, 2, 2, 2]),
+            ethertype: EtherType::Ipv6,
+        };
+        let bytes = header.to_bytes();
+        let parsed = EthernetHeader::from_bytes(bytes.clone()).unwrap();
+
+        assert_eq!(header, parsed);
+        assert_eq!(bytes.len(), ETHERNET_HEADER_LEN);
+    }
+
+    #[test]
+    fn test_ethernet_parse_too_short() {
+        let short = Bytes::from_static(&[0, 1, 2, 3]); // insufficient length
+        assert!(EthernetPacket::from_bytes(short).is_none());
+    }
+
+    #[test]
+    fn test_ethernet_unknown_ethertype() {
+        let raw = [
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0xde, 0xad, // Unknown EtherType
+            0x00, 0x11, 0x22, 0x33
+        ];
+        let packet = EthernetPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
+        match packet.get_ethertype() {
+            EtherType::Unknown(val) => assert_eq!(val, 0xdead),
+            _ => panic!("Expected unknown EtherType"),
+        }
+    }
 }

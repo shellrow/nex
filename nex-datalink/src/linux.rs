@@ -45,8 +45,8 @@ pub struct Config {
     /// The write timeout. Defaults to None.
     pub write_timeout: Option<Duration>,
 
-    /// Specifies whether to read packets at the datalink layer or network layer.
-    /// NOTE FIXME Currently ignored.
+    /// Selects the socket mode: datalink (Layer2) or network (Layer3).
+    /// This setting is only consulted when the socket is created.
     /// Defaults to Layer2.
     pub channel_type: super::ChannelType,
 
@@ -55,6 +55,17 @@ pub struct Config {
 
     /// Promiscuous mode.
     pub promiscuous: bool,
+}
+
+#[inline]
+fn poll_timeout_ms(timeout: Option<libc::timespec>) -> libc::c_int {
+    timeout
+        .map(|to| {
+            let ms = (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000);
+            ms.clamp(i64::from(libc::c_int::MIN), i64::from(libc::c_int::MAX))
+                as libc::c_int
+        })
+        .unwrap_or(-1)
 }
 
 impl<'a> From<&'a super::Config> for Config {
@@ -192,7 +203,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let sender = Box::new(RawSenderImpl {
         socket: fd.clone(),
         write_buffer: vec![0; config.write_buffer_size],
-        _channel_type: config.channel_type,
         send_addr: unsafe { *(send_addr as *const libc::sockaddr_ll) },
         send_addr_len: len,
         timeout: config
@@ -202,7 +212,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let receiver = Box::new(RawReceiverImpl {
         socket: fd.clone(),
         read_buffer: vec![0; config.read_buffer_size],
-        _channel_type: config.channel_type,
         timeout: config
             .read_timeout
             .map(|to| nex_sys::duration_to_timespec(to)),
@@ -214,7 +223,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
 struct RawSenderImpl {
     socket: Arc<nex_sys::FileDesc>,
     write_buffer: Vec<u8>,
-    _channel_type: super::ChannelType,
     send_addr: libc::sockaddr_ll,
     send_addr_len: usize,
     timeout: Option<libc::timespec>,
@@ -241,11 +249,7 @@ impl RawSender for RawSenderImpl {
 
             // poll timeout in milliseconds
             // -1: wait indefinitely
-            let timeout_ms = self
-                .timeout
-                .as_ref()
-                .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
-                .unwrap_or(-1);
+            let timeout_ms = poll_timeout_ms(self.timeout);
 
             for chunk in mut_slice[..min].chunks_mut(packet_size) {
                 func(chunk);
@@ -297,11 +301,7 @@ impl RawSender for RawSenderImpl {
 
         // poll timeout in milliseconds
         // -1: wait indefinitely
-        let timeout_ms = self
-            .timeout
-            .as_ref()
-            .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
-            .unwrap_or(-1);
+        let timeout_ms = poll_timeout_ms(self.timeout);
 
         let ret = unsafe {
             libc::poll(
@@ -338,7 +338,6 @@ impl RawSender for RawSenderImpl {
 struct RawReceiverImpl {
     socket: Arc<nex_sys::FileDesc>,
     read_buffer: Vec<u8>,
-    _channel_type: super::ChannelType,
     timeout: Option<libc::timespec>,
 }
 
@@ -353,11 +352,7 @@ impl RawReceiver for RawReceiverImpl {
 
         // poll timeout in milliseconds
         // -1: wait indefinitely
-        let timeout_ms = self
-            .timeout
-            .as_ref()
-            .map(|to| (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000))
-            .unwrap_or(-1);
+        let timeout_ms = poll_timeout_ms(self.timeout);
 
         let ret = unsafe {
             libc::poll(

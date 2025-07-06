@@ -1,7 +1,7 @@
 [package]
 name = "nex"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 authors.workspace = true
 description = "Cross-platform networking library in Rust"
 repository = "https://github.com/shellrow/nex"
@@ -15,12 +15,14 @@ nex-core = { workspace = true }
 nex-packet = { workspace = true }
 nex-datalink = { workspace = true }
 nex-socket = { workspace = true }
-nex-packet-builder = { workspace = true }
 
 [dev-dependencies]
+bytes = { workspace = true }
 serde_json = "1.0"
+rand = { workspace = true }
 async-io = "2.4"
 futures = "0.3"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "signal", "macros"] }
 
 [features]
 pcap = ["nex-datalink/pcap"]
@@ -31,16 +33,16 @@ name = "dump"
 path = "../examples/dump.rs"
 
 [[example]]
+name = "parse_frame"
+path = "../examples/parse_frame.rs"
+
+[[example]]
 name = "arp"
 path = "../examples/arp.rs"
 
 [[example]]
 name = "ndp"
 path = "../examples/ndp.rs"
-
-[[example]]
-name = "parse_frame"
-path = "../examples/parse_frame.rs"
 
 [[example]]
 name = "icmp_ping"
@@ -55,22 +57,21 @@ name = "udp_ping"
 path = "../examples/udp_ping.rs"
 
 [[example]]
-name = "list_interfaces"
-path = "../examples/list_interfaces.rs"
+name = "icmp_socket"
+path = "../examples/icmp_socket.rs"
 
 [[example]]
-name = "serialize"
-path = "../examples/serialize.rs"
-required-features = ["serde"]
+name = "tcp_socket"
+path = "../examples/tcp_socket.rs"
 
 [[example]]
-name = "tcp_stream"
-path = "../examples/tcp_stream.rs"
+name = "udp_socket"
+path = "../examples/udp_socket.rs"
 
 [[example]]
-name = "async_tcp_connect"
-path = "../examples/async_tcp_connect.rs"
+name = "async_icmp_socket"
+path = "../examples/async_icmp_socket.rs"
 
 [[example]]
-name = "async_tcp_stream"
-path = "../examples/async_tcp_stream.rs"
+name = "async_tcp_socket"
+path = "../examples/async_tcp_socket.rs"

@@ -1,9 +1,0 @@
-[build]
-build-std = false                              # do not build the std library. has precedence over xargo
-xargo = false                                  # do not use xargo for the builds
-zig = false                                    # do not use zig cc for the builds
-default-target = "x86_64-unknown-linux-gnu"    # use this target if none is explicitly provided
-pre-build = [                                  # additional commands to run prior to building the package
-    "dpkg --add-architecture $CROSS_DEB_ARCH", 
-    "apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH"
-]

@@ -8,3 +8,4 @@ pub mod gateway;
 pub mod interface;
 pub mod ip;
 pub mod mac;
+pub mod bitfield;
