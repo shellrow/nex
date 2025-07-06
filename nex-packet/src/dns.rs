@@ -1,5 +1,5 @@
 use core::str;
-use std::str::Utf8Error;
+use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr}, str::Utf8Error};
 use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::{u1, u16be, u32be};
 use crate::packet::Packet;
@@ -857,6 +857,7 @@ impl Packet for DnsResponsePacket {
 }
 
 impl DnsResponsePacket {
+    /// Creates a new `DnsResponsePacket` from a mutable buffer.
     pub fn from_buf_mut(buf: &mut &[u8]) -> Option<Self> {
         if buf.len() < 12 {
             return None;
@@ -902,6 +903,69 @@ impl DnsResponsePacket {
             data,
             payload,
         })
+    }
+
+    /// Returns the IPv4 address if the record type is A and data length is 4 bytes.
+    pub fn get_ipv4(&self) -> Option<Ipv4Addr> {
+        if self.rtype == DnsType::A && self.data.len() == 4 {
+            Some(Ipv4Addr::new(self.data[0], self.data[1], self.data[2], self.data[3]))
+        } else {
+            None
+        }
+    }
+    /// Returns the IPv6 address if the record type is AAAA and data length is 16 bytes.
+    pub fn get_ipv6(&self) -> Option<Ipv6Addr> {
+        if self.rtype == DnsType::AAAA && self.data.len() == 16 {
+            Some(Ipv6Addr::from(<[u8; 16]>::try_from(&self.data[..]).ok()?))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the IP address based on the record type.
+    pub fn get_ip(&self) -> Option<IpAddr> {
+        match self.rtype {
+            DnsType::A => self.get_ipv4().map(IpAddr::V4),
+            DnsType::AAAA => self.get_ipv6().map(IpAddr::V6),
+            _ => None,
+        }
+    }
+
+    /// Returns the DNS name if the record type is CNAME, NS, or PTR.
+    pub fn get_name(&self) -> Option<DnsName> {
+        match self.rtype {
+            DnsType::CNAME | DnsType::NS | DnsType::PTR => {
+                DnsName::from_bytes(&self.data).ok()
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the TXT strings if the record type is TXT.
+    pub fn get_txt_strings(&self) -> Option<Vec<String>> {
+        if self.rtype != DnsType::TXT {
+            return None;
+        }
+
+        let mut pos = 0;
+        let mut result = Vec::new();
+
+        while pos < self.data.len() {
+            let len = self.data[pos] as usize;
+            pos += 1;
+            if pos + len > self.data.len() {
+                break;
+            }
+
+            match std::str::from_utf8(&self.data[pos..pos + len]) {
+                Ok(s) => result.push(s.to_string()),
+                Err(_) => return None,
+            }
+
+            pos += len;
+        }
+
+        Some(result)
     }
 }
 
@@ -1078,6 +1142,51 @@ impl Packet for DnsPacket {
         let header = ();
         let payload = self.payload;
         (header, payload)
+    }
+}
+
+/// Represents a DNS name
+pub struct DnsName(String);
+
+impl DnsName {
+    /// Creates a new `DnsName` string from bytes.
+    pub fn from_bytes(buf: &[u8]) -> Result<Self, Utf8Error> {
+        let mut pos = 0;
+        let mut labels = Vec::new();
+
+        while pos < buf.len() {
+            let len = buf[pos] as usize;
+            if len == 0 {
+                break;
+            }
+            pos += 1;
+            if pos + len > buf.len() {
+                break;
+            }
+            let label = std::str::from_utf8(&buf[pos..pos + len])?;
+            labels.push(label);
+            pos += len;
+        }
+
+        Ok(DnsName(labels.join(".")))
+    }
+
+    /// Returns the DNS name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Splits the DNS name into its labels.
+    /// For example, "example.com" becomes ["example", "com"].
+    pub fn labels(&self) -> Vec<&str> {
+        self.0.split('.').collect()
+    }
+
+}
+
+impl std::fmt::Display for DnsName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
