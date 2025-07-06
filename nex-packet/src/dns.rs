@@ -883,13 +883,9 @@ impl DnsResponsePacket {
         let data_len = u16::from_be_bytes([buf[0], buf[1]]);
         *buf = &buf[2..];
 
-        if buf.len() < data_len as usize {
-            return None;
-        }
-
-        // data (data_len)
-        let data = buf[..data_len as usize].to_vec();
-        *buf = &buf[data_len as usize..];
+        let safe_data_len = std::cmp::min(buf.len(), data_len as usize);
+        let data = buf[..safe_data_len].to_vec();
+        *buf = &buf[safe_data_len..];
 
         // Remaining bytes are stored as payload
         let payload = Bytes::copy_from_slice(buf);
@@ -1043,7 +1039,15 @@ impl Packet for DnsPacket {
         }
 
         fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
-            (0..count).map(|_| DnsResponsePacket::from_buf_mut(buf)).collect()
+            let mut packets = Vec::with_capacity(count);
+            for _ in 0..count {
+                if let Some(pkt) = DnsResponsePacket::from_buf_mut(buf) {
+                    packets.push(pkt);
+                } else {
+                    break;
+                }
+            }
+            Some(packets)
         }
 
         let mut working_buf = cursor;
