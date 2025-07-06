@@ -1,7 +1,7 @@
 //! Utilities for working with packets, eg. checksumming.
 
-use crate::ip::IpNextLevelProtocol;
-use nex_macro_helper::types::u16be;
+use crate::ip::IpNextProtocol;
+use nex_core::bitfield::u16be;
 
 use core::convert::TryInto;
 use core::u16;
@@ -87,7 +87,7 @@ pub fn ipv4_checksum(
     extra_data: &[u8],
     source: &Ipv4Addr,
     destination: &Ipv4Addr,
-    next_level_protocol: IpNextLevelProtocol,
+    next_level_protocol: IpNextProtocol,
 ) -> u16be {
     let mut sum = 0u32;
 
@@ -118,7 +118,7 @@ pub fn ipv6_checksum(
     extra_data: &[u8],
     source: &Ipv6Addr,
     destination: &Ipv6Addr,
-    next_level_protocol: IpNextLevelProtocol,
+    next_level_protocol: IpNextProtocol,
 ) -> u16be {
     let mut sum = 0u32;
 
@@ -171,7 +171,6 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::sum_be_words;
-    use alloc::{vec, vec::Vec};
     use core::slice;
 
     #[test]

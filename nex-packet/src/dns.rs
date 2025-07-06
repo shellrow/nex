@@ -1,360 +1,435 @@
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::{fmt, str};
-use nex_macro::packet;
-use nex_macro_helper::packet::{Packet, PacketSize, PrimitiveValues};
-use nex_macro_helper::types::{u1, u16be, u32be, u4};
+use core::str;
 use std::str::Utf8Error;
+use bytes::{BufMut, Bytes, BytesMut};
+use nex_core::bitfield::{u1, u16be, u32be};
+use crate::packet::Packet;
 
 /// Represents an DNS operation.
 /// These identifiers correspond to DNS resource record classes.
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-2>
-#[allow(non_snake_case)]
-#[allow(non_upper_case_globals)]
-pub mod DnsClasses {
-    use super::DnsClass;
-
-    /// Internet
-    pub const IN: DnsClass = DnsClass(1);
-    /// CSNET (Unassigned)
-    pub const CS: DnsClass = DnsClass(2);
-    /// Chaos
-    pub const CH: DnsClass = DnsClass(3);
-    /// Hesiod
-    pub const HS: DnsClass = DnsClass(4);
-}
-
-/// Represents a DNS class.
+#[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DnsClass(pub u16);
+pub enum DnsClass {
+    IN = 1,   // Internet
+    CS = 2,   // CSNET (Obsolete)
+    CH = 3,   // Chaos
+    HS = 4,   // Hesiod
+    Unknown(u16),
+}
 
 impl DnsClass {
     pub fn new(value: u16) -> Self {
-        Self(value)
+        match value {
+            1 => DnsClass::IN,
+            2 => DnsClass::CS,
+            3 => DnsClass::CH,
+            4 => DnsClass::HS,
+            v => DnsClass::Unknown(v),
+        }
+    }
+
+    pub fn value(&self) -> u16 {
+        match self {
+            DnsClass::IN => 1,
+            DnsClass::CS => 2,
+            DnsClass::CH => 3,
+            DnsClass::HS => 4,
+            DnsClass::Unknown(v) => *v,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            DnsClass::IN => "IN",
+            DnsClass::CS => "CS",
+            DnsClass::CH => "CH",
+            DnsClass::HS => "HS",
+            DnsClass::Unknown(_) => "Unknown",
+        }
     }
 }
 
-impl PrimitiveValues for DnsClass {
-    type T = (u16,);
-
-    fn to_primitive_values(&self) -> (u16,) {
-        (self.0,)
-    }
-}
-
-impl fmt::Display for DnsClass {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                &DnsClasses::IN => "IN", // 1
-                &DnsClasses::CS => "CS", // 2
-                &DnsClasses::CH => "CH", // 3
-                &DnsClasses::HS => "HS", // 4
-                _ => "unknown",
-            }
-        )
-    }
-}
-
-/// Represents an DNS types.
-/// These identifiers are used to specify the type of DNS query or response.
-/// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4>
-#[allow(non_snake_case)]
-#[allow(non_upper_case_globals)]
-pub mod DnsTypes {
-    use super::DnsType;
-
-    pub const A: DnsType = DnsType(1);
-    pub const NS: DnsType = DnsType(2);
-    pub const MD: DnsType = DnsType(3);
-    pub const MF: DnsType = DnsType(4);
-    pub const CNAME: DnsType = DnsType(5);
-    pub const SOA: DnsType = DnsType(6);
-    pub const MB: DnsType = DnsType(7);
-    pub const MG: DnsType = DnsType(8);
-    pub const MR: DnsType = DnsType(9);
-    pub const NULL: DnsType = DnsType(10);
-    pub const WKS: DnsType = DnsType(11);
-    pub const PTR: DnsType = DnsType(12);
-    pub const HINFO: DnsType = DnsType(13);
-    pub const MINFO: DnsType = DnsType(14);
-    pub const MX: DnsType = DnsType(15);
-    pub const TXT: DnsType = DnsType(16);
-    pub const RP: DnsType = DnsType(17);
-    pub const AFSDB: DnsType = DnsType(18);
-    pub const X25: DnsType = DnsType(19);
-    pub const ISDN: DnsType = DnsType(20);
-    pub const RT: DnsType = DnsType(21);
-    pub const NSAP: DnsType = DnsType(22);
-    pub const NSAP_PTR: DnsType = DnsType(23);
-    pub const SIG: DnsType = DnsType(24);
-    pub const KEY: DnsType = DnsType(25);
-    pub const PX: DnsType = DnsType(26);
-    pub const GPOS: DnsType = DnsType(27);
-    pub const AAAA: DnsType = DnsType(28);
-    pub const LOC: DnsType = DnsType(29);
-    pub const NXT: DnsType = DnsType(30);
-    pub const EID: DnsType = DnsType(31);
-    pub const NIMLOC: DnsType = DnsType(32);
-    pub const SRV: DnsType = DnsType(33);
-    pub const ATMA: DnsType = DnsType(34);
-    pub const NAPTR: DnsType = DnsType(35);
-    pub const KX: DnsType = DnsType(36);
-    pub const CERT: DnsType = DnsType(37);
-    pub const A6: DnsType = DnsType(38);
-    pub const DNAME: DnsType = DnsType(39);
-    pub const SINK: DnsType = DnsType(40);
-    pub const OPT: DnsType = DnsType(41);
-    pub const APL: DnsType = DnsType(42);
-    pub const DS: DnsType = DnsType(43);
-    pub const SSHFP: DnsType = DnsType(44);
-    pub const IPSECKEY: DnsType = DnsType(45);
-    pub const RRSIG: DnsType = DnsType(46);
-    pub const NSEC: DnsType = DnsType(47);
-    pub const DNSKEY: DnsType = DnsType(48);
-    pub const DHCID: DnsType = DnsType(49);
-    pub const NSEC3: DnsType = DnsType(50);
-    pub const NSEC3PARAM: DnsType = DnsType(51);
-    pub const TLSA: DnsType = DnsType(52);
-    pub const SMIMEA: DnsType = DnsType(53);
-    pub const HIP: DnsType = DnsType(55);
-    pub const NINFO: DnsType = DnsType(56);
-    pub const RKEY: DnsType = DnsType(57);
-    pub const TALINK: DnsType = DnsType(58);
-    pub const CDS: DnsType = DnsType(59);
-    pub const CDNSKEY: DnsType = DnsType(60);
-    pub const OPENPGPKEY: DnsType = DnsType(61);
-    pub const CSYNC: DnsType = DnsType(62);
-    pub const ZONEMD: DnsType = DnsType(63);
-    pub const SVCB: DnsType = DnsType(64);
-    pub const HTTPS: DnsType = DnsType(65);
-    pub const SPF: DnsType = DnsType(99);
-    pub const UINFO: DnsType = DnsType(100);
-    pub const UID: DnsType = DnsType(101);
-    pub const GID: DnsType = DnsType(102);
-    pub const UNSPEC: DnsType = DnsType(103);
-    pub const NID: DnsType = DnsType(104);
-    pub const L32: DnsType = DnsType(105);
-    pub const L64: DnsType = DnsType(106);
-    pub const LP: DnsType = DnsType(107);
-    pub const EUI48: DnsType = DnsType(108);
-    pub const EUI64: DnsType = DnsType(109);
-    pub const TKEY: DnsType = DnsType(249);
-    pub const TSIG: DnsType = DnsType(250);
-    pub const IXFR: DnsType = DnsType(251);
-    pub const AXFR: DnsType = DnsType(252);
-    pub const MAILB: DnsType = DnsType(253);
-    pub const MAILA: DnsType = DnsType(254);
-    pub const ANY: DnsType = DnsType(255);
-    pub const URI: DnsType = DnsType(256);
-    pub const CAA: DnsType = DnsType(257);
-    pub const AVC: DnsType = DnsType(258);
-    pub const DOA: DnsType = DnsType(259);
-    pub const AMTRELAY: DnsType = DnsType(260);
-    pub const TA: DnsType = DnsType(32768);
-    pub const DLV: DnsType = DnsType(32769);
-}
-
-/// Represents a DNS type.
+#[allow(non_camel_case_types)]
+#[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DnsType(pub u16);
+pub enum DnsType {
+    A = 1,
+    NS = 2,
+    MD = 3,
+    MF = 4,
+    CNAME = 5,
+    SOA = 6,
+    MB = 7,
+    MG = 8,
+    MR = 9,
+    NULL = 10,
+    WKS = 11,
+    PTR = 12,
+    HINFO = 13,
+    MINFO = 14,
+    MX = 15,
+    TXT = 16,
+    RP = 17,
+    AFSDB = 18,
+    X25 = 19,
+    ISDN = 20,
+    RT = 21,
+    NSAP = 22,
+    NSAP_PTR = 23,
+    SIG = 24,
+    KEY = 25,
+    PX = 26,
+    GPOS = 27,
+    AAAA = 28,
+    LOC = 29,
+    NXT = 30,
+    EID = 31,
+    NIMLOC = 32,
+    SRV = 33,
+    ATMA = 34,
+    NAPTR = 35,
+    KX = 36,
+    CERT = 37,
+    A6 = 38,
+    DNAME = 39,
+    SINK = 40,
+    OPT = 41,
+    APL = 42,
+    DS = 43,
+    SSHFP = 44,
+    IPSECKEY = 45,
+    RRSIG = 46,
+    NSEC = 47,
+    DNSKEY = 48,
+    DHCID = 49,
+    NSEC3 = 50,
+    NSEC3PARAM = 51,
+    TLSA = 52,
+    SMIMEA = 53,
+    HIP = 55,
+    NINFO = 56,
+    RKEY = 57,
+    TALINK = 58,
+    CDS = 59,
+    CDNSKEY = 60,
+    OPENPGPKEY = 61,
+    CSYNC = 62,
+    ZONEMD = 63,
+    SVCB = 64,
+    HTTPS = 65,
+    SPF = 99,
+    UINFO = 100,
+    UID = 101,
+    GID = 102,
+    UNSPEC = 103,
+    NID = 104,
+    L32 = 105,
+    L64 = 106,
+    LP = 107,
+    EUI48 = 108,
+    EUI64 = 109,
+    TKEY = 249,
+    TSIG = 250,
+    IXFR = 251,
+    AXFR = 252,
+    MAILB = 253,
+    MAILA = 254,
+    ANY = 255,
+    URI = 256,
+    CAA = 257,
+    AVC = 258,
+    DOA = 259,
+    AMTRELAY = 260,
+    TA = 32768,
+    DLV = 32769,
+    Unknown(u16),
+}
 
 impl DnsType {
     pub fn new(value: u16) -> Self {
-        Self(value)
+        match value {
+            1 => DnsType::A,
+            2 => DnsType::NS,
+            3 => DnsType::MD,
+            4 => DnsType::MF,
+            5 => DnsType::CNAME,
+            6 => DnsType::SOA,
+            7 => DnsType::MB,
+            8 => DnsType::MG,
+            9 => DnsType::MR,
+            10 => DnsType::NULL,
+            11 => DnsType::WKS,
+            12 => DnsType::PTR,
+            13 => DnsType::HINFO,
+            14 => DnsType::MINFO,
+            15 => DnsType::MX,
+            16 => DnsType::TXT,
+            17 => DnsType::RP,
+            18 => DnsType::AFSDB,
+            19 => DnsType::X25,
+            20 => DnsType::ISDN,
+            21 => DnsType::RT,
+            22 => DnsType::NSAP,
+            23 => DnsType::NSAP_PTR,
+            24 => DnsType::SIG,
+            25 => DnsType::KEY,
+            26 => DnsType::PX,
+            27 => DnsType::GPOS,
+            28 => DnsType::AAAA,
+            29 => DnsType::LOC,
+            30 => DnsType::NXT,
+            31 => DnsType::EID,
+            32 => DnsType::NIMLOC,
+            33 => DnsType::SRV,
+            34 => DnsType::ATMA,
+            35 => DnsType::NAPTR,
+            36 => DnsType::KX,
+            37 => DnsType::CERT,
+            38 => DnsType::A6,
+            39 => DnsType::DNAME,
+            40 => DnsType::SINK,
+            41 => DnsType::OPT,
+            42 => DnsType::APL,
+            43 => DnsType::DS,
+            44 => DnsType::SSHFP,
+            45 => DnsType::IPSECKEY,
+            46 => DnsType::RRSIG,
+            47 => DnsType::NSEC,
+            48 => DnsType::DNSKEY,
+            49 => DnsType::DHCID,
+            50 => DnsType::NSEC3,
+            51 => DnsType::NSEC3PARAM,
+            52 => DnsType::TLSA,
+            53 => DnsType::SMIMEA,
+            55 => DnsType::HIP,
+            56 => DnsType::NINFO,
+            57 => DnsType::RKEY,
+            58 => DnsType::TALINK,
+            59 => DnsType::CDS,
+            60 => DnsType::CDNSKEY,
+            61 => DnsType::OPENPGPKEY,
+            62 => DnsType::CSYNC,
+            63 => DnsType::ZONEMD,
+            64 => DnsType::SVCB,
+            65 => DnsType::HTTPS,
+            99 => DnsType::SPF,
+            100 => DnsType::UINFO,
+            101 => DnsType::UID,
+            102 => DnsType::GID,
+            103 => DnsType::UNSPEC,
+            104 => DnsType::NID,
+            105 => DnsType::L32,
+            106 => DnsType::L64,
+            107 => DnsType::LP,
+            108 => DnsType::EUI48,
+            109 => DnsType::EUI64,
+            249 => DnsType::TKEY,
+            250 => DnsType::TSIG,
+            251 => DnsType::IXFR,
+            252 => DnsType::AXFR,
+            253 => DnsType::MAILB,
+            254 => DnsType::MAILA,
+            255 => DnsType::ANY,
+            256 => DnsType::URI,
+            257 => DnsType::CAA,
+            258 => DnsType::AVC,
+            259 => DnsType::DOA,
+            260 => DnsType::AMTRELAY,
+            32768 => DnsType::TA,
+            32769 => DnsType::DLV,
+            v => DnsType::Unknown(v),
+        }
     }
-}
 
-impl PrimitiveValues for DnsType {
-    type T = (u16,);
-
-    fn to_primitive_values(&self) -> (u16,) {
-        (self.0,)
+    pub fn value(&self) -> u16 {
+        match self {
+            DnsType::A => 1,
+            DnsType::NS => 2,
+            DnsType::MD => 3,
+            DnsType::MF => 4,
+            DnsType::CNAME => 5,
+            DnsType::SOA => 6,
+            DnsType::MB => 7,
+            DnsType::MG => 8,
+            DnsType::MR => 9,
+            DnsType::NULL => 10,
+            DnsType::WKS => 11,
+            DnsType::PTR => 12,
+            DnsType::HINFO => 13,
+            DnsType::MINFO => 14,
+            DnsType::MX => 15,
+            DnsType::TXT => 16,
+            DnsType::RP => 17,
+            DnsType::AFSDB => 18,
+            DnsType::X25 => 19,
+            DnsType::ISDN => 20,
+            DnsType::RT => 21,
+            DnsType::NSAP => 22,
+            DnsType::NSAP_PTR => 23,
+            DnsType::SIG => 24,
+            DnsType::KEY => 25,
+            DnsType::PX => 26,
+            DnsType::GPOS => 27,
+            DnsType::AAAA => 28,
+            DnsType::LOC => 29,
+            DnsType::NXT => 30,
+            DnsType::EID => 31,
+            DnsType::NIMLOC => 32,
+            DnsType::SRV => 33,
+            DnsType::ATMA => 34,
+            DnsType::NAPTR => 35,
+            DnsType::KX => 36,
+            DnsType::CERT => 37,
+            DnsType::A6 => 38,
+            DnsType::DNAME => 39,
+            DnsType::SINK => 40,
+            DnsType::OPT => 41,
+            DnsType::APL => 42,
+            DnsType::DS => 43,
+            DnsType::SSHFP => 44,
+            DnsType::IPSECKEY => 45,
+            DnsType::RRSIG => 46,
+            DnsType::NSEC => 47,
+            DnsType::DNSKEY => 48,
+            DnsType::DHCID => 49,
+            DnsType::NSEC3 => 50,
+            DnsType::NSEC3PARAM => 51,
+            DnsType::TLSA => 52,
+            DnsType::SMIMEA => 53,
+            DnsType::HIP => 55,
+            DnsType::NINFO => 56,
+            DnsType::RKEY => 57,
+            DnsType::TALINK => 58,
+            DnsType::CDS => 59,
+            DnsType::CDNSKEY => 60,
+            DnsType::OPENPGPKEY => 61,
+            DnsType::CSYNC => 62,
+            DnsType::ZONEMD => 63,
+            DnsType::SVCB => 64,
+            DnsType::HTTPS => 65,
+            DnsType::SPF => 99,
+            DnsType::UINFO => 100,
+            DnsType::UID => 101,
+            DnsType::GID => 102,
+            DnsType::UNSPEC => 103,
+            DnsType::NID => 104,
+            DnsType::L32 => 105,
+            DnsType::L64 => 106,
+            DnsType::LP => 107,
+            DnsType::EUI48 => 108,
+            DnsType::EUI64 => 109,
+            DnsType::TKEY => 249,
+            DnsType::TSIG => 250,
+            DnsType::IXFR => 251,
+            DnsType::AXFR => 252,
+            DnsType::MAILB => 253,
+            DnsType::MAILA => 254,
+            DnsType::ANY => 255,
+            DnsType::URI => 256,
+            DnsType::CAA => 257,
+            DnsType::AVC => 258,
+            DnsType::DOA => 259,
+            DnsType::AMTRELAY => 260,
+            DnsType::TA => 32768,
+            DnsType::DLV => 32769,
+            DnsType::Unknown(v) => *v,
+        }
     }
-}
 
-impl fmt::Display for DnsType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                &DnsTypes::A => "A",                   // 1
-                &DnsTypes::NS => "NS",                 // 2
-                &DnsTypes::MD => "MD",                 // 3
-                &DnsTypes::MF => "MF",                 // 4
-                &DnsTypes::CNAME => "CNAME",           // 5
-                &DnsTypes::SOA => "SOA",               // 6
-                &DnsTypes::MB => "MB",                 // 7
-                &DnsTypes::MG => "MG",                 // 8
-                &DnsTypes::MR => "MR",                 // 9
-                &DnsTypes::NULL => "NULL",             // 10
-                &DnsTypes::WKS => "WKS",               // 11
-                &DnsTypes::PTR => "PTR",               // 12
-                &DnsTypes::HINFO => "HINFO",           // 13
-                &DnsTypes::MINFO => "MINFO",           // 14
-                &DnsTypes::MX => "MX",                 // 15
-                &DnsTypes::TXT => "TXT",               // 16
-                &DnsTypes::RP => "RP",                 // 17
-                &DnsTypes::AFSDB => "AFSDB",           // 18
-                &DnsTypes::X25 => "X25",               // 19
-                &DnsTypes::ISDN => "ISDN",             // 20
-                &DnsTypes::RT => "RT",                 // 21
-                &DnsTypes::NSAP => "NSAP",             // 22
-                &DnsTypes::NSAP_PTR => "NSAP_PTR",     // 23
-                &DnsTypes::SIG => "SIG",               // 24
-                &DnsTypes::KEY => "KEY",               // 25
-                &DnsTypes::PX => "PX",                 // 26
-                &DnsTypes::GPOS => "GPOS",             // 27
-                &DnsTypes::AAAA => "AAAA",             // 28
-                &DnsTypes::LOC => "LOC",               // 29
-                &DnsTypes::NXT => "NXT",               // 30
-                &DnsTypes::EID => "EID",               // 31
-                &DnsTypes::NIMLOC => "NIMLOC",         // 32
-                &DnsTypes::SRV => "SRV",               // 33
-                &DnsTypes::ATMA => "ATMA",             // 34
-                &DnsTypes::NAPTR => "NAPTR",           // 35
-                &DnsTypes::KX => "KX",                 // 36
-                &DnsTypes::CERT => "CERT",             // 37
-                &DnsTypes::A6 => "A6",                 // 38
-                &DnsTypes::DNAME => "DNAME",           // 39
-                &DnsTypes::SINK => "SINK",             // 40
-                &DnsTypes::OPT => "OPT",               // 41
-                &DnsTypes::APL => "APL",               // 42
-                &DnsTypes::DS => "DS",                 // 43
-                &DnsTypes::SSHFP => "SSHFP",           // 44
-                &DnsTypes::IPSECKEY => "IPSECKEY",     // 45
-                &DnsTypes::RRSIG => "RRSIG",           // 46
-                &DnsTypes::NSEC => "NSEC",             // 47
-                &DnsTypes::DNSKEY => "DNSKEY",         // 48
-                &DnsTypes::DHCID => "DHCID",           // 49
-                &DnsTypes::NSEC3 => "NSEC3",           // 50
-                &DnsTypes::NSEC3PARAM => "NSEC3PARAM", // 51
-                &DnsTypes::TLSA => "TLSA",             // 52
-                &DnsTypes::SMIMEA => "SMIMEA",         // 53
-                &DnsTypes::HIP => "HIP",               // 55
-                &DnsTypes::NINFO => "NINFO",           // 56
-                &DnsTypes::RKEY => "RKEY",             // 57
-                &DnsTypes::TALINK => "TALINK",         // 58
-                &DnsTypes::CDS => "CDS",               // 59
-                &DnsTypes::CDNSKEY => "CDNSKEY",       // 60
-                &DnsTypes::OPENPGPKEY => "OPENPGPKEY", // 61
-                &DnsTypes::CSYNC => "CSYNC",           // 62
-                &DnsTypes::ZONEMD => "ZONEMD",         // 63
-                &DnsTypes::SVCB => "SVCB",             // 64
-                &DnsTypes::HTTPS => "HTTPS",           // 65
-                &DnsTypes::SPF => "SPF",               // 99
-                &DnsTypes::UINFO => "UINFO",           // 100
-                &DnsTypes::UID => "UID",               // 101
-                &DnsTypes::GID => "GID",               // 102
-                &DnsTypes::UNSPEC => "UNSPEC",         // 103
-                &DnsTypes::NID => "NID",               // 104
-                &DnsTypes::L32 => "L32",               // 105
-                &DnsTypes::L64 => "L64",               // 106
-                &DnsTypes::LP => "LP",                 // 107
-                &DnsTypes::EUI48 => "EUI48",           // 108
-                &DnsTypes::EUI64 => "EUI64",           // 109
-                &DnsTypes::TKEY => "TKEY",             // 249
-                &DnsTypes::TSIG => "TSIG",             // 250
-                &DnsTypes::IXFR => "IXFR",             // 251
-                &DnsTypes::AXFR => "AXFR",             // 252
-                &DnsTypes::MAILB => "MAILB",           // 253
-                &DnsTypes::MAILA => "MAILA",           // 254
-                &DnsTypes::ANY => "ANY",               // 255
-                &DnsTypes::URI => "URI",               // 256
-                &DnsTypes::CAA => "CAA",               // 257
-                &DnsTypes::AVC => "AVC",               // 258
-                &DnsTypes::DOA => "DOA",               // 259
-                &DnsTypes::AMTRELAY => "AMTRELAY",     // 260
-                &DnsTypes::TA => "TA",                 // 32768
-                &DnsTypes::DLV => "DLV",               // 32769
+    pub fn name(&self) -> &'static str {
+        match self {
+                DnsType::A => "A",                   // 1
+                DnsType::NS => "NS",                 // 2
+                DnsType::MD => "MD",                 // 3
+                DnsType::MF => "MF",                 // 4
+                DnsType::CNAME => "CNAME",           // 5
+                DnsType::SOA => "SOA",               // 6
+                DnsType::MB => "MB",                 // 7
+                DnsType::MG => "MG",                 // 8
+                DnsType::MR => "MR",                 // 9
+                DnsType::NULL => "NULL",             // 10
+                DnsType::WKS => "WKS",               // 11
+                DnsType::PTR => "PTR",               // 12
+                DnsType::HINFO => "HINFO",           // 13
+                DnsType::MINFO => "MINFO",           // 14
+                DnsType::MX => "MX",                 // 15
+                DnsType::TXT => "TXT",               // 16
+                DnsType::RP => "RP",                 // 17
+                DnsType::AFSDB => "AFSDB",           // 18
+                DnsType::X25 => "X25",               // 19
+                DnsType::ISDN => "ISDN",             // 20
+                DnsType::RT => "RT",                 // 21
+                DnsType::NSAP => "NSAP",             // 22
+                DnsType::NSAP_PTR => "NSAP_PTR",     // 23
+                DnsType::SIG => "SIG",               // 24
+                DnsType::KEY => "KEY",               // 25
+                DnsType::PX => "PX",                 // 26
+                DnsType::GPOS => "GPOS",             // 27
+                DnsType::AAAA => "AAAA",             // 28
+                DnsType::LOC => "LOC",               // 29
+                DnsType::NXT => "NXT",               // 30
+                DnsType::EID => "EID",               // 31
+                DnsType::NIMLOC => "NIMLOC",         // 32
+                DnsType::SRV => "SRV",               // 33
+                DnsType::ATMA => "ATMA",             // 34
+                DnsType::NAPTR => "NAPTR",           // 35
+                DnsType::KX => "KX",                 // 36
+                DnsType::CERT => "CERT",             // 37
+                DnsType::A6 => "A6",                 // 38
+                DnsType::DNAME => "DNAME",           // 39
+                DnsType::SINK => "SINK",             // 40
+                DnsType::OPT => "OPT",               // 41
+                DnsType::APL => "APL",               // 42
+                DnsType::DS => "DS",                 // 43
+                DnsType::SSHFP => "SSHFP",           // 44
+                DnsType::IPSECKEY => "IPSECKEY",     // 45
+                DnsType::RRSIG => "RRSIG",           // 46
+                DnsType::NSEC => "NSEC",             // 47
+                DnsType::DNSKEY => "DNSKEY",         // 48
+                DnsType::DHCID => "DHCID",           // 49
+                DnsType::NSEC3 => "NSEC3",           // 50
+                DnsType::NSEC3PARAM => "NSEC3PARAM", // 51
+                DnsType::TLSA => "TLSA",             // 52
+                DnsType::SMIMEA => "SMIMEA",         // 53
+                DnsType::HIP => "HIP",               // 55
+                DnsType::NINFO => "NINFO",           // 56
+                DnsType::RKEY => "RKEY",             // 57
+                DnsType::TALINK => "TALINK",         // 58
+                DnsType::CDS => "CDS",               // 59
+                DnsType::CDNSKEY => "CDNSKEY",       // 60
+                DnsType::OPENPGPKEY => "OPENPGPKEY", // 61
+                DnsType::CSYNC => "CSYNC",           // 62
+                DnsType::ZONEMD => "ZONEMD",         // 63
+                DnsType::SVCB => "SVCB",             // 64
+                DnsType::HTTPS => "HTTPS",           // 65
+                DnsType::SPF => "SPF",               // 99
+                DnsType::UINFO => "UINFO",           // 100
+                DnsType::UID => "UID",               // 101
+                DnsType::GID => "GID",               // 102
+                DnsType::UNSPEC => "UNSPEC",         // 103
+                DnsType::NID => "NID",               // 104
+                DnsType::L32 => "L32",               // 105
+                DnsType::L64 => "L64",               // 106
+                DnsType::LP => "LP",                 // 107
+                DnsType::EUI48 => "EUI48",           // 108
+                DnsType::EUI64 => "EUI64",           // 109
+                DnsType::TKEY => "TKEY",             // 249
+                DnsType::TSIG => "TSIG",             // 250
+                DnsType::IXFR => "IXFR",             // 251
+                DnsType::AXFR => "AXFR",             // 252
+                DnsType::MAILB => "MAILB",           // 253
+                DnsType::MAILA => "MAILA",           // 254
+                DnsType::ANY => "ANY",               // 255
+                DnsType::URI => "URI",               // 256
+                DnsType::CAA => "CAA",               // 257
+                DnsType::AVC => "AVC",               // 258
+                DnsType::DOA => "DOA",               // 259
+                DnsType::AMTRELAY => "AMTRELAY",     // 260
+                DnsType::TA => "TA",                 // 32768
+                DnsType::DLV => "DLV",               // 32769
                 _ => "unknown",
             }
-        )
     }
-}
-
-/// Represents a DNS packet.
-/// Including its header and all the associated records.
-#[packet]
-pub struct Dns {
-    pub id: u16be,
-    pub is_response: u1,
-    #[construct_with(u4)]
-    pub opcode: OpCode,
-    pub is_authoriative: u1,
-    pub is_truncated: u1,
-    pub is_recursion_desirable: u1,
-    pub is_recursion_available: u1,
-    pub zero_reserved: u1,
-    pub is_answer_authenticated: u1,
-    pub is_non_authenticated_data: u1,
-    #[construct_with(u4)]
-    pub rcode: RetCode,
-    pub query_count: u16be,
-    pub response_count: u16be,
-    pub authority_rr_count: u16be,
-    pub additional_rr_count: u16be,
-    #[length_fn = "queries_length"]
-    pub queries: Vec<DnsQuery>,
-    #[length_fn = "responses_length"]
-    pub responses: Vec<DnsResponse>,
-    #[length_fn = "authority_length"]
-    pub authorities: Vec<DnsResponse>,
-    #[length_fn = "additional_length"]
-    pub additionals: Vec<DnsResponse>,
-    #[payload]
-    pub payload: Vec<u8>,
-}
-
-fn queries_length(packet: &DnsPacket) -> usize {
-    let base = 12;
-    let mut length = 0;
-    for _ in 0..packet.get_query_count() {
-        match DnsQueryPacket::new(&packet.packet()[base + length..]) {
-            Some(query) => length += query.packet_size(),
-            None => break,
-        }
-    }
-    length
-}
-
-fn responses_length(packet: &DnsPacket) -> usize {
-    let base = 12 + queries_length(packet);
-    let mut length = 0;
-    for _ in 0..packet.get_response_count() {
-        match DnsResponsePacket::new(&packet.packet()[base + length..]) {
-            Some(query) => length += query.packet_size(),
-            None => break,
-        }
-    }
-    length
-}
-
-fn authority_length(packet: &DnsPacket) -> usize {
-    let base = 12 + queries_length(packet) + responses_length(packet);
-    let mut length = 0;
-    for _ in 0..packet.get_authority_rr_count() {
-        match DnsResponsePacket::new(&packet.packet()[base + length..]) {
-            Some(query) => length += query.packet_size(),
-            None => break,
-        }
-    }
-    length
-}
-
-fn additional_length(packet: &DnsPacket) -> usize {
-    let base = 12 + queries_length(packet) + responses_length(packet) + authority_length(packet);
-    let mut length = 0;
-    for _ in 0..packet.get_additional_rr_count() {
-        match DnsResponsePacket::new(&packet.packet()[base + length..]) {
-            Some(query) => length += query.packet_size(),
-            None => break,
-        }
-    }
-    length
 }
 
 /// Represents an DNS operation code.
@@ -371,22 +446,6 @@ pub enum OpCode {
     Unassigned(u8),
 }
 
-impl PrimitiveValues for OpCode {
-    type T = (u8,);
-    fn to_primitive_values(&self) -> (u8,) {
-        match self {
-            Self::Query => (0,),
-            Self::InverseQuery => (1,),
-            Self::Status => (2,),
-            Self::Reserved => (3,),
-            Self::Notify => (4,),
-            Self::Update => (5,),
-            Self::Dso => (6,),
-            Self::Unassigned(n) => (*n,),
-        }
-    }
-}
-
 impl OpCode {
     pub fn new(value: u8) -> Self {
         match value {
@@ -398,6 +457,30 @@ impl OpCode {
             5 => Self::Update,
             6 => Self::Dso,
             _ => Self::Unassigned(value),
+        }
+    }
+    pub fn value(&self) -> u8 {
+        match self {
+            Self::Query => 0,
+            Self::InverseQuery => 1,
+            Self::Status => 2,
+            Self::Reserved => 3,
+            Self::Notify => 4,
+            Self::Update => 5,
+            Self::Dso => 6,
+            Self::Unassigned(v) => *v,
+        }
+    }
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Query => "Query",
+            Self::InverseQuery => "Inverse Query",
+            Self::Status => "Status",
+            Self::Reserved => "Reserved",
+            Self::Notify => "Notify",
+            Self::Update => "Update",
+            Self::Dso => "DSO",
+            Self::Unassigned(_) => "Unassigned",
         }
     }
 }
@@ -429,35 +512,6 @@ pub enum RetCode {
     Unassigned(u8),
 }
 
-impl PrimitiveValues for RetCode {
-    type T = (u8,);
-    fn to_primitive_values(&self) -> (u8,) {
-        match self {
-            Self::NoError => (0,),
-            Self::FormErr => (1,),
-            Self::ServFail => (2,),
-            Self::NXDomain => (3,),
-            Self::NotImp => (4,),
-            Self::Refused => (5,),
-            Self::YXDomain => (6,),
-            Self::YXRRSet => (7,),
-            Self::NXRRSet => (8,),
-            Self::NotAuth => (9,),
-            Self::NotZone => (10,),
-            Self::Dsotypeni => (11,),
-            Self::BadVers => (16,),
-            Self::BadKey => (17,),
-            Self::BadTime => (18,),
-            Self::BadMode => (19,),
-            Self::BadName => (20,),
-            Self::BadAlg => (21,),
-            Self::BadTrunc => (22,),
-            Self::BadCookie => (23,),
-            Self::Unassigned(n) => (*n,),
-        }
-    }
-}
-
 impl RetCode {
     pub fn new(value: u8) -> Self {
         match value {
@@ -473,37 +527,169 @@ impl RetCode {
             9 => Self::NotAuth,
             10 => Self::NotZone,
             11 => Self::Dsotypeni,
-            16 => Self::BadVers,
-            17 => Self::BadKey,
-            18 => Self::BadTime,
-            19 => Self::BadMode,
-            20 => Self::BadName,
-            21 => Self::BadAlg,
-            22 => Self::BadTrunc,
-            23 => Self::BadCookie,
+            12 => Self::BadVers,
+            13 => Self::BadKey,
+            14 => Self::BadTime,
+            15 => Self::BadMode,
+            16 => Self::BadName,
+            17 => Self::BadAlg,
+            18 => Self::BadTrunc,
+            19 => Self::BadCookie,
             _ => Self::Unassigned(value),
+        }
+    }
+
+    pub fn value(&self) -> u8 {
+        match self {
+            Self::NoError => 0,
+            Self::FormErr => 1,
+            Self::ServFail => 2,
+            Self::NXDomain => 3,
+            Self::NotImp => 4,
+            Self::Refused => 5,
+            Self::YXDomain => 6,
+            Self::YXRRSet => 7,
+            Self::NXRRSet => 8,
+            Self::NotAuth => 9,
+            Self::NotZone => 10,
+            Self::Dsotypeni => 11,
+            Self::BadVers => 12,
+            Self::BadKey => 13,
+            Self::BadTime => 14,
+            Self::BadMode => 15,
+            Self::BadName => 16,
+            Self::BadAlg => 17,
+            Self::BadTrunc => 18,
+            Self::BadCookie => 19,
+            Self::Unassigned(v) => *v
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            RetCode::NoError      => "No Error",
+            RetCode::FormErr      => "Format Error",
+            RetCode::ServFail     => "Server Failure",
+            RetCode::NXDomain     => "Non-Existent Domain",
+            RetCode::NotImp      => "Not Implemented",
+            RetCode::Refused      => "Query Refused",
+            RetCode::YXDomain     => "Name Exists When It Shouldn't",
+            RetCode::YXRRSet      => "RR Set Exists When It Shouldn't",
+            RetCode::NXRRSet      => "RR Set Doesn't Exist When It Should",
+            RetCode::NotAuth      => "Not Authorized",
+            RetCode::NotZone      => "Name Not Zone",
+            RetCode::Dsotypeni    => "DSO Type NI",
+            RetCode::BadVers      => "Bad Version",
+            RetCode::BadKey       => "Bad Key",
+            RetCode::BadTime      => "Bad Time",
+            RetCode::BadMode      => "Bad Mode",
+            RetCode::BadName      => "Bad Name",
+            RetCode::BadAlg       => "Bad Algorithm",
+            RetCode::BadTrunc     => "Bad Truncation",
+            RetCode::BadCookie    => "Bad Cookie",
+            RetCode::Unassigned(_) => "Unassigned",
         }
     }
 }
 
 /// DNS query packet structure.
-#[packet]
-pub struct DnsQuery {
-    #[length_fn = "qname_length"]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct DnsQueryPacket {
     pub qname: Vec<u8>,
-    #[construct_with(u16be)]
     pub qtype: DnsType,
-    #[construct_with(u16be)]
     pub qclass: DnsClass,
-    #[payload]
-    pub payload: Vec<u8>,
+    pub payload: Bytes,
 }
 
-fn qname_length(packet: &DnsQueryPacket) -> usize {
-    packet.packet().iter().take_while(|w| *w != &0).count() + 1
+impl Packet for DnsQueryPacket {
+    type Header = ();
+    fn from_buf(buf: &[u8]) -> Option<Self> {
+        let mut pos = 0;
+        let mut qname = Vec::new();
+
+        // Parse the QNAME field
+        loop {
+            if pos >= buf.len() {
+                return None;
+            }
+
+            let len = buf[pos];
+            pos += 1;
+            qname.push(len);
+
+            if len == 0 {
+                break;
+            }
+
+            if pos + len as usize > buf.len() {
+                return None;
+            }
+
+            qname.extend_from_slice(&buf[pos..pos + len as usize]);
+            pos += len as usize;
+        }
+
+        // Read QTYPE and QCLASS
+        if pos + 4 > buf.len() {
+            return None;
+        }
+
+        let qtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+        let qclass = DnsClass::new(u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]));
+        pos += 4;
+
+        // The rest is stored as payload
+        let payload = Bytes::copy_from_slice(&buf[pos..]);
+
+        Some(Self {
+            qname,
+            qtype,
+            qclass,
+            payload,
+        })
+    }
+
+    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&mut bytes)
+    }
+
+    fn to_bytes(&self) -> Bytes {
+        let mut buf = BytesMut::with_capacity(self.qname.len() + 4);
+        buf.extend_from_slice(&self.qname);
+        buf.put_u16(self.qtype.value());
+        buf.put_u16(self.qclass.value());
+        buf.freeze()
+    }
+
+    fn header(&self) -> Bytes {
+        self.to_bytes().slice(0..self.header_len())
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        self.qname.len() + 4
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        let header = ();
+        let payload = self.payload;
+        (header, payload)
+    }
 }
 
-impl DnsQuery {
+impl DnsQueryPacket {
     pub fn get_qname_parsed(&self) -> Result<String, Utf8Error> {
         let name = &self.qname;
         let mut qname = String::new();
@@ -524,308 +710,473 @@ impl DnsQuery {
         }
         Ok(qname)
     }
+    pub fn qname_length(&self) -> usize {
+        self.to_bytes().iter().take_while(|w| *w != &0).count() + 1
+    }
+    pub fn from_buf_mut(buf: &mut &[u8]) -> Option<Self> {
+        let mut qname = Vec::new();
+
+        loop {
+            if buf.is_empty() {
+                return None;
+            }
+            let len = buf[0];
+            *buf = &buf[1..];
+            qname.push(len);
+            if len == 0 {
+                break;
+            }
+            if buf.len() < len as usize {
+                return None;
+            }
+            qname.extend_from_slice(&buf[..len as usize]);
+            *buf = &buf[len as usize..];
+        }
+
+        if buf.len() < 4 {
+            return None;
+        }
+
+        let qtype = DnsType::new(u16::from_be_bytes([buf[0], buf[1]]));
+        *buf = &buf[2..];
+
+        let qclass = DnsClass::new(u16::from_be_bytes([buf[0], buf[1]]));
+        *buf = &buf[2..];
+
+        let payload = Bytes::copy_from_slice(buf);
+
+        Some(Self {
+            qname,
+            qtype,
+            qclass,
+            payload,
+        })
+    }
 }
 
 /// DNS response packet structure.
-#[packet]
-pub struct DnsResponse {
-    #[length_fn = "rname_length"]
-    pub rname: Vec<u8>,
-    #[construct_with(u16be)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct DnsResponsePacket {
+    pub name_tag: u16be,
     pub rtype: DnsType,
-    #[construct_with(u16be)]
     pub rclass: DnsClass,
     pub ttl: u32be,
     pub data_len: u16be,
-    #[length = "data_len"]
     pub data: Vec<u8>,
-    #[payload]
-    pub payload: Vec<u8>,
+    pub payload: Bytes,
 }
 
-/// Parses and Returns the length of the rname field.
-fn rname_length(packet: &DnsResponsePacket) -> usize {
-    let mut offset = 0;
-    let mut size = 0;
-    loop {
-        let label_len = packet.packet()[offset] as usize;
-        if label_len == 0 {
-            size += 1;
-            break;
+impl Packet for DnsResponsePacket {
+    type Header = ();
+    fn from_buf(buf: &[u8]) -> Option<Self> {
+        if buf.len() < 12 {
+            return None;
         }
-        if label_len & 0xC0 == 0xC0 {
-            size += 2;
-            break;
+
+        let mut pos = 0;
+
+        let name_tag = u16::from_be_bytes([buf[pos], buf[pos + 1]]).into();
+        pos += 2;
+
+        let rtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+        pos += 2;
+
+        let rclass = DnsClass::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+        pos += 2;
+
+        let ttl = u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]).into();
+        pos += 4;
+
+        let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]).into();
+        pos += 2;
+
+        let data_len_usize = data_len as usize;
+
+        if buf.len() < pos + data_len_usize {
+            return None;
         }
-        size += label_len + 1;
-        offset += label_len + 1;
+
+        let data = buf[pos..pos + data_len_usize].to_vec();
+        pos += data_len_usize;
+
+        let payload = Bytes::copy_from_slice(&buf[pos..]);
+
+        Some(Self {
+            name_tag,
+            rtype,
+            rclass,
+            ttl,
+            data_len,
+            data,
+            payload,
+        })
     }
-    size
-}
-
-/// Parses the rname field of a DNS packet.
-pub fn parse_name(packet: &DnsPacket, coded_name: &Vec<u8>) -> Result<String, Utf8Error> {
-    // First follow the path in the rname, except if it starts with a C0
-    // then move to using the offsets from the start
-    let start = packet.packet();
-    let mut name = coded_name.as_slice();
-    let mut rname = String::new();
-    let mut offset: usize = 0;
-
-    loop {
-        let label_len: u16 = name[offset] as u16;
-        if label_len == 0 {
-            break;
-        }
-        if (label_len & 0xC0) == 0xC0 {
-            let offset1 = ((label_len & 0x3F) as usize) << 8;
-            let offset2 = name[offset + 1] as usize;
-            offset = offset1 + offset2;
-            // now change name
-            name = start;
-            continue;
-        }
-        if !rname.is_empty() {
-            rname.push('.');
-        }
-        match str::from_utf8(&name[offset + 1..offset + 1 + label_len as usize]) {
-            Ok(label) => rname.push_str(label),
-            Err(e) => return Err(e),
-        }
-        offset += label_len as usize + 1;
+    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&mut bytes)
     }
-    Ok(rname)
-}
 
-/// Represents a DNS TXT record.
-///
-/// TXT records hold descriptive text. The actual text is stored in the `text` field.
-#[packet]
-pub struct DnsRrTXT {
-    pub data_len: u8,
-    #[length = "data_len"]
-    pub text: Vec<u8>,
-    #[payload]
-    pub payload: Vec<u8>,
-}
+    fn to_bytes(&self) -> Bytes {
+        let mut buf = bytes::BytesMut::with_capacity(self.total_len());
 
-/// Represents a DNS SRV record.
-///
-/// SRV records are used to specify the location of services by providing a hostname and port number.
-#[packet]
-pub struct DnsRrSrv {
-    pub priority: u16be,
-    pub weight: u16be,
-    pub port: u16be,
-    #[length_fn = "target_length"]
-    pub target: Vec<u8>,
-    #[payload]
-    pub payload: Vec<u8>,
-}
+        buf.put_u16(self.name_tag.into());
+        buf.put_u16(self.rtype.value());
+        buf.put_u16(self.rclass.value());
+        buf.put_u32(self.ttl.into());
+        buf.put_u16(self.data_len.into());
+        buf.put_slice(&self.data);
 
-fn target_length(packet: &DnsRrSrvPacket) -> usize {
-    let mut offset = 6;
-    let mut size = 0;
-    loop {
-        let label_len = packet.packet()[offset] as usize;
-        if label_len == 0 {
-            size += 1;
-            break;
-        }
-        if label_len & 0xC0 == 0xC0 {
-            size += 2;
-            break;
-        }
-        size += label_len + 1;
-        offset += label_len + 1;
+        buf.freeze()
     }
-    size
+
+    fn header(&self) -> Bytes {
+        self.to_bytes().slice(0..self.total_len())
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        12
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        let header = ();
+        let payload = self.payload;
+        (header, payload)
+    }
 }
 
-/// A structured representation of a Service Name (SRV record content).
-///
-/// Parses and holds components of an SRV record's target domain, which includes service instance, service type, protocol, and domain name.
-/// SRV record name
-#[derive(Debug)]
-pub struct SrvName {
-    pub instance: Option<String>,
-    pub service: Option<String>,
-    pub protocol: Option<String>,
-    pub domain: Option<String>,
+impl DnsResponsePacket {
+    pub fn from_buf_mut(buf: &mut &[u8]) -> Option<Self> {
+        if buf.len() < 12 {
+            return None;
+        }
+
+        // name_tag (2)
+        let name_tag = u16::from_be_bytes([buf[0], buf[1]]).into();
+        *buf = &buf[2..];
+
+        // rtype (2)
+        let rtype = DnsType::new(u16::from_be_bytes([buf[0], buf[1]]));
+        *buf = &buf[2..];
+
+        // rclass (2)
+        let rclass = DnsClass::new(u16::from_be_bytes([buf[0], buf[1]]));
+        *buf = &buf[2..];
+
+        // ttl (4)
+        let ttl = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]).into();
+        *buf = &buf[4..];
+
+        // data_len (2)
+        let data_len = u16::from_be_bytes([buf[0], buf[1]]);
+        *buf = &buf[2..];
+
+        if buf.len() < data_len as usize {
+            return None;
+        }
+
+        // data (data_len)
+        let data = buf[..data_len as usize].to_vec();
+        *buf = &buf[data_len as usize..];
+
+        // Remaining bytes are stored as payload
+        let payload = Bytes::copy_from_slice(buf);
+
+        Some(Self {
+            name_tag,
+            rtype,
+            rclass,
+            ttl,
+            data_len: data_len.into(),
+            data,
+            payload,
+        })
+    }
 }
 
-impl SrvName {
-    pub fn new(name: &str) -> Self {
-        let parts: Vec<&str> = name.split('.').collect();
-        let (instance, service, protocol, domain) = match parts.as_slice() {
-            [instance, service, protocol, domain @ ..]
-                if service.starts_with('_') && protocol.starts_with('_') =>
-            {
-                (
-                    Some(String::from(*instance)),
-                    Some(String::from(*service)),
-                    Some(String::from(*protocol)),
-                    Some(String::from(domain.join("."))),
-                )
-            }
-            [service, protocol, domain @ ..]
-                if service.starts_with('_') && protocol.starts_with('_') =>
-            {
-                (
-                    None,
-                    Some(String::from(*service)),
-                    Some(String::from(*protocol)),
-                    Some(String::from(domain.join("."))),
-                )
-            }
-            [instance, service, protocol, domain @ ..] => (
-                Some(String::from(*instance)),
-                Some(String::from(*service)),
-                Some(String::from(*protocol)),
-                Some(String::from(domain.join("."))),
-            ),
-            _ => (None, None, None, None),
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct DnsHeader {
+    pub id: u16be,
+    pub is_response: u1,
+    pub opcode: OpCode,
+    pub is_authoriative: u1,
+    pub is_truncated: u1,
+    pub is_recursion_desirable: u1,
+    pub is_recursion_available: u1,
+    pub zero_reserved: u1,
+    pub is_answer_authenticated: u1,
+    pub is_non_authenticated_data: u1,
+    pub rcode: RetCode,
+    pub query_count: u16be,
+    pub response_count: u16be,
+    pub authority_rr_count: u16be,
+    pub additional_rr_count: u16be,
+}
+
+/// Represents a DNS packet.
+/// Including its header and all the associated records.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsPacket {
+    pub header: DnsHeader,
+    pub queries: Vec<DnsQueryPacket>,
+    pub responses: Vec<DnsResponsePacket>,
+    pub authorities: Vec<DnsResponsePacket>,
+    pub additionals: Vec<DnsResponsePacket>,
+    pub payload: Bytes,
+}
+
+impl Packet for DnsPacket {
+    type Header = ();
+    fn from_buf(buf: &[u8]) -> Option<Self> {
+        if buf.len() < 12 {
+            return None;
+        }
+
+        let mut cursor = buf;
+
+        // Read DNS header
+        let id = u16::from_be_bytes([cursor[0], cursor[1]]);
+        let flags = u16::from_be_bytes([cursor[2], cursor[3]]);
+        let query_count = u16::from_be_bytes([cursor[4], cursor[5]]);
+        let response_count = u16::from_be_bytes([cursor[6], cursor[7]]);
+        let authority_rr_count = u16::from_be_bytes([cursor[8], cursor[9]]);
+        let additional_rr_count = u16::from_be_bytes([cursor[10], cursor[11]]);
+        cursor = &cursor[12..];
+
+        let header = DnsHeader {
+            id: id.into(),
+            is_response: ((flags >> 15) & 0x1) as u8,
+            opcode: OpCode::new(((flags >> 11) & 0xF) as u8),
+            is_authoriative: ((flags >> 10) & 0x1) as u8,
+            is_truncated: ((flags >> 9) & 0x1) as u8,
+            is_recursion_desirable: ((flags >> 8) & 0x1) as u8,
+            is_recursion_available: ((flags >> 7) & 0x1) as u8,
+            zero_reserved: ((flags >> 6) & 0x1) as u8,
+            is_answer_authenticated: ((flags >> 5) & 0x1) as u8,
+            is_non_authenticated_data: ((flags >> 4) & 0x1) as u8,
+            rcode: RetCode::new((flags & 0xF) as u8),
+            query_count: query_count.into(),
+            response_count: response_count.into(),
+            authority_rr_count: authority_rr_count.into(),
+            additional_rr_count: additional_rr_count.into(),
         };
 
-        SrvName {
-            instance,
-            service,
-            protocol,
-            domain,
+        // Parse each section, passing mutable slices
+        fn parse_queries(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsQueryPacket>> {
+            (0..count).map(|_| DnsQueryPacket::from_buf_mut(buf)).collect()
         }
+
+        fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
+            (0..count).map(|_| DnsResponsePacket::from_buf_mut(buf)).collect()
+        }
+
+        let mut working_buf = cursor;
+
+        let queries = parse_queries(query_count as usize, &mut working_buf)?;
+        let responses = parse_responses(response_count as usize, &mut working_buf)?;
+        let authorities = parse_responses(authority_rr_count as usize, &mut working_buf)?;
+        let additionals = parse_responses(additional_rr_count as usize, &mut working_buf)?;
+
+        // Remaining data becomes the payload
+        let payload = Bytes::copy_from_slice(working_buf);
+
+        Some(Self {
+            header,
+            queries,
+            responses,
+            authorities,
+            additionals,
+            payload,
+        })
+    }
+
+    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&mut bytes)
+    }
+
+    fn to_bytes(&self) -> Bytes {
+        use bytes::{BufMut, BytesMut};
+
+        let mut buf = BytesMut::with_capacity(self.header_len() + self.payload.len());
+
+        // DNS Header
+        let mut flags = 0u16;
+        flags |= (self.header.is_response as u16) << 15;
+        flags |= (self.header.opcode.value() as u16) << 11;
+        flags |= (self.header.is_authoriative as u16) << 10;
+        flags |= (self.header.is_truncated as u16) << 9;
+        flags |= (self.header.is_recursion_desirable as u16) << 8;
+        flags |= (self.header.is_recursion_available as u16) << 7;
+        flags |= (self.header.zero_reserved as u16) << 6;
+        flags |= (self.header.is_answer_authenticated as u16) << 5;
+        flags |= (self.header.is_non_authenticated_data as u16) << 4;
+        flags |= self.header.rcode.value() as u16;
+
+        buf.put_u16(self.header.id.into());
+        buf.put_u16(flags);
+        buf.put_u16(self.header.query_count.into());
+        buf.put_u16(self.header.response_count.into());
+        buf.put_u16(self.header.authority_rr_count.into());
+        buf.put_u16(self.header.additional_rr_count.into());
+
+        // Write all queries
+        for query in &self.queries {
+            buf.extend_from_slice(&query.to_bytes());
+        }
+
+        // Write all responses
+        for response in &self.responses {
+            buf.extend_from_slice(&response.to_bytes());
+        }
+
+        // Write authorities
+        for auth in &self.authorities {
+            buf.extend_from_slice(&auth.to_bytes());
+        }
+
+        // Write additionals
+        for add in &self.additionals {
+            buf.extend_from_slice(&add.to_bytes());
+        }
+
+        Bytes::from(buf)
+    }
+
+    fn header(&self) -> Bytes {
+        self.to_bytes().slice(0..12)
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        12
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        let header = ();
+        let payload = self.payload;
+        (header, payload)
     }
 }
 
-#[test]
-fn test_dns_query_packet() {
-    let packet = DnsPacket::new(b"\x1e\xcb\x01\x20\x00\x01\x00\x00\x00\x00\x00\x01\x0a\x63\x6c\x6f\x75\x64\x66\x6c\x61\x72\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01\x00\x00\x29\x10\x00\x00\x00\x00\x00\x00\x00").unwrap();
-    assert_eq!(packet.get_id(), 7883);
-    assert_eq!(packet.get_is_response(), 0);
-    assert_eq!(packet.get_opcode(), OpCode::Query);
-    assert_eq!(packet.get_is_authoriative(), 0);
-    assert_eq!(packet.get_is_truncated(), 0);
-    assert_eq!(packet.get_is_recursion_desirable(), 1);
-    assert_eq!(packet.get_is_recursion_available(), 0);
-    assert_eq!(packet.get_zero_reserved(), 0);
-    assert_eq!(packet.get_rcode(), RetCode::NoError);
-    assert_eq!(packet.get_query_count(), 1);
-    assert_eq!(packet.get_response_count(), 0);
-    assert_eq!(packet.get_authority_rr_count(), 0);
-    assert_eq!(packet.get_additional_rr_count(), 1);
-    assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(
-        packet.get_queries()[0]
-            .get_qname_parsed()
-            .unwrap_or(String::new()),
-        "cloudflare.com"
-    );
-    assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
-    assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
-    assert_eq!(packet.get_responses().len(), 0);
-    assert_eq!(packet.get_authorities().len(), 0);
-    assert_eq!(packet.get_additionals().len(), 1);
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_dns_reponse_packet() {
-    let packet = DnsPacket::new(b"\x1e\xcb\x81\xa0\x00\x01\x00\x02\x00\x00\x00\x01\x0a\x63\x6c\x6f\x75\x64\x66\x6c\x61\x72\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\xc4\x00\x04h\x10\x85\xe5\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\xc4\x00\x04h\x10\x84\xe5\x00\x00)\x04\xd0\x00\x00\x00\x00\x00\x00").unwrap();
-    assert_eq!(packet.get_id(), 7883);
-    assert_eq!(packet.get_is_response(), 1);
-    assert_eq!(packet.get_opcode(), OpCode::Query);
-    assert_eq!(packet.get_is_authoriative(), 0);
-    assert_eq!(packet.get_is_truncated(), 0);
-    assert_eq!(packet.get_is_recursion_desirable(), 1);
-    assert_eq!(packet.get_is_recursion_available(), 1);
-    assert_eq!(packet.get_zero_reserved(), 0);
-    assert_eq!(packet.get_rcode(), RetCode::NoError);
-    assert_eq!(packet.get_query_count(), 1);
-    assert_eq!(packet.get_response_count(), 2);
-    assert_eq!(packet.get_authority_rr_count(), 0);
-    assert_eq!(packet.get_additional_rr_count(), 1);
-    assert_eq!(packet.get_queries().len(), 1);
-    assert_eq!(
-        packet.get_queries()[0]
-            .get_qname_parsed()
-            .unwrap_or(String::new()),
-        "cloudflare.com"
-    );
-    assert_eq!(packet.get_queries()[0].qtype, DnsTypes::A);
-    assert_eq!(packet.get_queries()[0].qclass, DnsClasses::IN);
-    assert_eq!(packet.get_responses().len(), 2);
-    assert_eq!(packet.get_responses()[0].rtype, DnsTypes::A);
-    assert_eq!(packet.get_responses()[0].rclass, DnsClasses::IN);
-    assert_eq!(packet.get_responses()[0].ttl, 196);
-    assert_eq!(packet.get_responses()[0].data_len, 4);
-    assert_eq!(
-        packet.get_responses()[0].data.as_slice(),
-        [104, 16, 133, 229]
-    );
-    assert_eq!(packet.get_authorities().len(), 0);
-    assert_eq!(packet.get_additionals().len(), 1);
-}
+    #[test]
+    fn test_dns_query() {
+        let bytes = Bytes::from_static(&[
+            0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's',
+            0x04, b'g', b'v', b't', b'2',
+            0x03, b'c', b'o', b'm',
+            0x00, 0x00, 0x41, 0x00, 0x01, // type: HTTPS, class: IN
+        ]);
+        let packet = DnsQueryPacket::from_bytes(bytes).unwrap();
+        assert_eq!(
+            packet.qname,
+            vec![
+                0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's',
+                0x04, b'g', b'v', b't', b'2',
+                0x03, b'c', b'o', b'm',
+                0x00
+            ]
+        );
+        assert_eq!(packet.qtype, DnsType::HTTPS);
+        assert_eq!(packet.qclass, DnsClass::IN);
+    }
 
-#[test]
-fn test_mdns_response() {
-    let data = b"\x00\x00\x84\x00\x00\x00\x00\x04\x00\x00\x00\x00\x0b\x5f\x61\x6d\x7a\x6e\x2d\x61\x6c\x65\x78\x61\x04\x5f\x74\x63\x70\x05\x6c\x6f\x63\x61\x6c\x00\x00\x0c\x00\x01\x00\x00\x11\x94\x00\x0b\x08\x5f\x73\x65\x72\x76\x69\x63\x65\xc0\x0c\xc0\x2e\x00\x10\x80\x01\x00\x00\x11\x94\x00\x0a\x09\x76\x65\x72\x73\x69\x6f\x6e\x3d\x31\xc0\x2e\x00\x21\x80\x01\x00\x00\x00\x78\x00\x1d\x00\x00\x00\x00\x19\x8f\x14\x61\x76\x73\x2d\x66\x66\x72\x65\x67\x2d\x31\x36\x35\x34\x34\x37\x35\x36\x38\x33\xc0\x1d\xc0\x61\x00\x01\x80\x01\x00\x00\x00\x78\x00\x04\xc0\xa8\x01\x06";
-    let packet = DnsPacket::new(data).expect("Failed to parse dns response");
-    assert_eq!(packet.get_id(), 0);
-    assert_eq!(packet.get_is_response(), 1);
-    assert_eq!(packet.get_opcode(), OpCode::Query);
-    assert_eq!(packet.get_is_authoriative(), 1);
-    assert_eq!(packet.get_is_truncated(), 0);
-    assert_eq!(packet.get_is_recursion_desirable(), 0);
-    assert_eq!(packet.get_is_recursion_available(), 0);
-    assert_eq!(packet.get_zero_reserved(), 0);
-    assert_eq!(packet.get_rcode(), RetCode::NoError);
-    assert_eq!(packet.get_query_count(), 0);
-    assert_eq!(packet.get_response_count(), 4);
-    assert_eq!(packet.get_authority_rr_count(), 0);
-    assert_eq!(packet.get_additional_rr_count(), 0);
-    assert_eq!(packet.get_responses().len(), 4);
-    let responses = packet.get_responses();
-    // RR #1
-    assert_eq!(
-        parse_name(&packet, &responses[0].rname).unwrap_or(String::new()),
-        "_amzn-alexa._tcp.local"
-    );
-    assert_eq!(responses[0].rtype, DnsTypes::PTR);
-    assert_eq!(responses[0].rclass, DnsClasses::IN);
-    assert_eq!(responses[0].ttl, 4500);
-    assert_eq!(responses[0].data_len, 11);
-    assert_eq!(
-        parse_name(&packet, &responses[0].data).unwrap_or(String::new()),
-        "_service._amzn-alexa._tcp.local"
-    );
-    // RR #2
-    assert_eq!(
-        parse_name(&packet, &responses[1].rname).unwrap_or(String::new()),
-        "_service._amzn-alexa._tcp.local"
-    );
-    assert_eq!(responses[1].rtype, DnsTypes::TXT);
-    assert_eq!(responses[1].ttl, 4500);
-    assert_eq!(responses[1].data_len, 10);
-    let text_rr = DnsRrTXTPacket::new(&responses[1].data).unwrap();
-    assert_eq!(text_rr.get_data_len(), 9);
-    assert_eq!(String::from_utf8(text_rr.get_text()).unwrap(), "version=1");
-    // RR #3
-    let srv_name = parse_name(&packet, &responses[2].rname).unwrap_or(String::new());
-    assert_eq!(srv_name, "_service._amzn-alexa._tcp.local");
-    assert_eq!(responses[2].rtype, DnsTypes::SRV);
-    assert_eq!(responses[2].data_len, 29);
-    let srv_rr = DnsRrSrvPacket::new(&responses[2].data).unwrap();
-    assert_eq!(srv_rr.get_priority(), 0);
-    assert_eq!(srv_rr.get_weight(), 0);
-    assert_eq!(srv_rr.get_port(), 6543);
-    assert_eq!(
-        parse_name(&packet, &srv_rr.get_target()).unwrap_or(String::new()),
-        "avs-ffreg-1654475683.local"
-    );
-    let srv = SrvName::new(&srv_name);
-    assert_eq!(srv.instance, Some(String::from("_service")));
-    assert_eq!(srv.service, Some(String::from("_amzn-alexa")));
-    assert_eq!(srv.protocol, Some(String::from("_tcp")));
-    assert_eq!(srv.domain, Some(String::from("local")));
-    // RR #4
-    assert_eq!(responses[3].rtype, DnsTypes::A);
-    assert_eq!(responses[3].data.as_slice(), [192, 168, 1, 6]);
+    #[test]
+    fn test_dns_response() {
+        let bytes = Bytes::from_static(&[
+            0xc0, 0x0c, // name_tag
+            0x00, 0x01, // type = A
+            0x00, 0x01, // class = IN
+            0x00, 0x00, 0x00, 0x3c, // TTL = 60
+            0x00, 0x04, // data_len = 4
+            0x0d, 0xe2, 0x02, 0x12, // data
+        ]);
+        let packet = DnsResponsePacket::from_bytes(bytes).unwrap();
+        assert_eq!(packet.rtype, DnsType::A);
+        assert_eq!(packet.rclass, DnsClass::IN);
+        assert_eq!(packet.ttl, 60);
+        assert_eq!(packet.data_len, 4);
+        assert_eq!(packet.data, vec![13, 226, 2, 18]);
+    }
+
+    #[test]
+    fn test_dns_query_packet() {
+        let bytes = Bytes::from_static(&[
+            0x9b, 0xa0, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x05, b'_', b'l', b'd', b'a', b'p',
+            0x04, b'_', b't', b'c', b'p',
+            0x02, b'd', b'c',
+            0x06, b'_', b'm', b's', b'd', b'c', b's',
+            0x05, b'S', b'4', b'D', b'O', b'M',
+            0x07, b'P', b'R', b'I', b'V', b'A', b'T', b'E',
+            0x00, 0x00, 0x21, 0x00, 0x01,
+        ]);
+        let packet = DnsPacket::from_bytes(bytes).unwrap();
+        assert_eq!(packet.header.id, 0x9ba0);
+        assert_eq!(packet.header.is_response, 0);
+        assert_eq!(packet.header.query_count, 1);
+        assert_eq!(packet.queries.len(), 1);
+        assert_eq!(
+            packet.queries[0].get_qname_parsed().unwrap(),
+            "_ldap._tcp.dc._msdcs.S4DOM.PRIVATE"
+        );
+        assert_eq!(packet.queries[0].qtype, DnsType::SRV);
+        assert_eq!(packet.queries[0].qclass, DnsClass::IN);
+    }
+    #[test]
+    fn test_dns_response_packet() {
+        let bytes = Bytes::from_static(&[
+            0xbc, 0x12, 0x85, 0x80, 0x00, 0x01, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00, 0x05, b's', b'4', b'd', b'c', b'1',
+            0x05, b's', b'a', b'm', b'b', b'a',
+            0x08, b'w', b'i', b'n', b'd', b'o', b'w', b's', b'8',
+            0x07, b'p', b'r', b'i', b'v', b'a', b't', b'e',
+            0x00, 0x00, 0x01, 0x00, 0x01,
+            0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01,
+            0x00, 0x00, 0x03, 0x84,
+            0x00, 0x04, 0xc0, 0xa8, 0x7a, 0xbd,
+        ]);
+        let packet = DnsPacket::from_bytes(bytes).unwrap();
+        assert_eq!(packet.header.id, 0xbc12);
+        assert_eq!(packet.header.is_response, 1);
+        assert_eq!(packet.header.query_count, 1);
+        assert_eq!(packet.header.response_count, 1);
+        assert_eq!(packet.queries.len(), 1);
+        assert_eq!(
+            packet.queries[0].get_qname_parsed().unwrap(),
+            "s4dc1.samba.windows8.private"
+        );
+        assert_eq!(packet.queries[0].qtype, DnsType::A);
+        assert_eq!(packet.responses[0].rtype, DnsType::A);
+        assert_eq!(packet.responses[0].rclass, DnsClass::IN);
+        assert_eq!(packet.responses[0].ttl, 900);
+        assert_eq!(packet.responses[0].data_len, 4);
+        assert_eq!(packet.responses[0].data, vec![192, 168, 122, 189]);
+    }
 }

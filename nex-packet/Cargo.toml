@@ -11,12 +11,10 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
-rand = { workspace = true }
-serde = { workspace = true, features = ["derive"], optional = true }
+bytes = { workspace = true }
 nex-core = { workspace = true }
-nex-macro = { workspace = true }
-nex-macro-helper = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+rand = { workspace = true }
 
 [features]
-clippy = []
 serde = ["dep:serde", "nex-core/serde"]

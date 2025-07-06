@@ -1,10 +1,9 @@
-mod socket;
-mod sys;
+//! Convenience sockets built on top of `socket2` and `tokio`.
+//!
+//! This crate provides synchronous and asynchronous helpers for TCP, UDP and
+//! ICMP. The goal is to simplify lower level socket configuration across
+//! platforms while still allowing direct access when needed.
 
-pub use socket::AsyncSocket;
-pub use socket::AsyncTcpStream;
-pub use socket::IpVersion;
-pub use socket::Socket;
-pub use socket::SocketOption;
-pub use socket::SocketType;
-pub use sys::PacketReceiver;
+pub mod icmp;
+pub mod tcp;
+pub mod udp;

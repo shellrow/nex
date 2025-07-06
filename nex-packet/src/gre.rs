@@ -1,18 +1,14 @@
 //! GRE Packet abstraction.
 
-#[cfg(test)]
-use crate::Packet;
-
-use alloc::vec::Vec;
-
-use nex_macro::packet;
-use nex_macro_helper::types::*;
+use bytes::{Buf, Bytes};
+use nex_core::bitfield::{u1, u16be, u3, u32be, u5};
+use crate::packet::Packet;
 
 /// GRE (Generic Routing Encapsulation) Packet.
 ///
 /// See RFCs 1701, 2784, 2890, 7676, 2637
-#[packet]
-pub struct Gre {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrePacket {
     pub checksum_present: u1,
     pub routing_present: u1,
     pub key_present: u1,
@@ -21,101 +17,272 @@ pub struct Gre {
     pub recursion_control: u3,
     pub zero_flags: u5,
     pub version: u3,
-    pub protocol_type: u16be, // 0x800 for ipv4 [basically an ethertype
-    #[length_fn = "gre_checksum_length"]
-    pub checksum: Vec<U16BE>,
-    #[length_fn = "gre_offset_length"]
-    pub offset: Vec<U16BE>,
-    #[length_fn = "gre_key_length"]
-    pub key: Vec<U32BE>,
-    #[length_fn = "gre_sequence_length"]
-    pub sequence: Vec<U32BE>,
-    #[length_fn = "gre_routing_length"]
+    pub protocol_type: u16be, // 0x800 for IPv4
+    pub checksum: Vec<u16be>,
+    pub offset: Vec<u16be>,
+    pub key: Vec<u32be>,
+    pub sequence: Vec<u32be>,
     pub routing: Vec<u8>,
-    #[payload]
-    pub payload: Vec<u8>,
+    pub payload: Bytes,
 }
 
-fn gre_checksum_length(gre: &GrePacket) -> usize {
-    (gre.get_checksum_present() | gre.get_routing_present()) as usize * 2
-}
+impl Packet for GrePacket {
+    type Header = ();
 
-fn gre_offset_length(gre: &GrePacket) -> usize {
-    (gre.get_checksum_present() | gre.get_routing_present()) as usize * 2
-}
+    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
+        if bytes.remaining() < 4 {
+            return None;
+        }
 
-fn gre_key_length(gre: &GrePacket) -> usize {
-    gre.get_key_present() as usize * 4
-}
+        let flags = bytes.get_u16();
+        let protocol_type = bytes.get_u16();
 
-fn gre_sequence_length(gre: &GrePacket) -> usize {
-    gre.get_sequence_present() as usize * 4
-}
+        let checksum_present = ((flags >> 15) & 0x1) as u1;
+        let routing_present = ((flags >> 14) & 0x1) as u1;
+        let key_present = ((flags >> 13) & 0x1) as u1;
+        let sequence_present = ((flags >> 12) & 0x1) as u1;
+        let strict_source_route = ((flags >> 11) & 0x1) as u1;
+        let recursion_control = ((flags >> 8) & 0x7) as u3;
+        let zero_flags = ((flags >> 3) & 0x1f) as u5;
+        let version = (flags & 0x7) as u3;
 
-fn gre_routing_length(gre: &GrePacket) -> usize {
-    if 0 == gre.get_routing_present() {
-        0
-    } else {
-        panic!("Source routed GRE packets not supported")
+        // Retrieve optional fields in order
+        let mut checksum = Vec::new();
+        let mut offset = Vec::new();
+        let mut key = Vec::new();
+        let mut sequence = Vec::new();
+        let routing = Vec::new();
+
+        if checksum_present != 0 || routing_present != 0 {
+            if bytes.remaining() < 4 {
+                return None;
+            }
+            checksum.push(bytes.get_u16());
+            offset.push(bytes.get_u16());
+        }
+
+        if key_present != 0 {
+            if bytes.remaining() < 4 {
+                return None;
+            }
+            key.push(bytes.get_u32());
+        }
+
+        if sequence_present != 0 {
+            if bytes.remaining() < 4 {
+                return None;
+            }
+            sequence.push(bytes.get_u32());
+        }
+
+        if routing_present != 0 {
+            // Not implemented for this crate
+            panic!("Source routed GRE packets not supported");
+        }
+
+        let payload = Bytes::copy_from_slice(bytes);
+
+        Some(Self {
+            checksum_present,
+            routing_present,
+            key_present,
+            sequence_present,
+            strict_source_route,
+            recursion_control,
+            zero_flags,
+            version,
+            protocol_type: protocol_type.into(),
+            checksum,
+            offset,
+            key,
+            sequence,
+            routing,
+            payload,
+        })
+    }
+
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&bytes)
+    }
+
+    fn to_bytes(&self) -> Bytes {
+        use bytes::{BufMut, BytesMut};
+
+        let mut buf = BytesMut::with_capacity(self.header_len());
+
+        // Build the flags field
+        let mut flags: u16 = 0;
+        flags |= (self.checksum_present as u16) << 15;
+        flags |= (self.routing_present as u16) << 14;
+        flags |= (self.key_present as u16) << 13;
+        flags |= (self.sequence_present as u16) << 12;
+        flags |= (self.strict_source_route as u16) << 11;
+        flags |= (self.recursion_control as u16) << 8;
+        flags |= (self.zero_flags as u16) << 3;
+        flags |= self.version as u16;
+
+        buf.put_u16(flags);
+        buf.put_u16(self.protocol_type.into());
+
+        if self.checksum_present != 0 || self.routing_present != 0 {
+            for c in &self.checksum {
+                buf.put_u16(*c);
+            }
+            for o in &self.offset {
+                buf.put_u16(*o);
+            }
+        }
+
+        if self.key_present != 0 {
+            for k in &self.key {
+                buf.put_u32(*k);
+            }
+        }
+
+        if self.sequence_present != 0 {
+            for s in &self.sequence {
+                buf.put_u32(*s);
+            }
+        }
+
+        // Panic if routing_present is set (not supported by this implementation)
+        if self.routing_present != 0 {
+            panic!("to_bytes does not support source routed GRE packets");
+        }
+
+        buf.put_slice(&self.payload);
+
+        buf.freeze()
+    }
+    fn header(&self) -> Bytes {
+        use bytes::{BufMut, BytesMut};
+
+        let mut buf = BytesMut::with_capacity(self.header_len());
+
+        // Build the flags field
+        let mut flags: u16 = 0;
+        flags |= (self.checksum_present as u16) << 15;
+        flags |= (self.routing_present as u16) << 14;
+        flags |= (self.key_present as u16) << 13;
+        flags |= (self.sequence_present as u16) << 12;
+        flags |= (self.strict_source_route as u16) << 11;
+        flags |= (self.recursion_control as u16) << 8;
+        flags |= (self.zero_flags as u16) << 3;
+        flags |= self.version as u16;
+
+        buf.put_u16(flags);
+        buf.put_u16(self.protocol_type.into());
+
+        if self.checksum_present != 0 || self.routing_present != 0 {
+            for c in &self.checksum {
+                buf.put_u16(*c);
+            }
+            for o in &self.offset {
+                buf.put_u16(*o);
+            }
+        }
+
+        if self.key_present != 0 {
+            for k in &self.key {
+                buf.put_u32(*k);
+            }
+        }
+
+        if self.sequence_present != 0 {
+            for s in &self.sequence {
+                buf.put_u32(*s);
+            }
+        }
+
+        // Panic if routing_present is set (not supported by this implementation)
+        if self.routing_present != 0 {
+            panic!("header does not support source routed GRE packets");
+        }
+
+        buf.freeze()
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        4 // base header: 2 bytes flags + 2 bytes protocol_type
+            + self.checksum_length()
+            + self.offset_length()
+            + self.key_length()
+            + self.sequence_length()
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        ((), self.to_bytes())
     }
 }
 
-/// `u16be`, but we can't use that directly in a `Vec` :(
-#[packet]
-pub struct U16BE {
-    number: u16be,
-    #[length = "0"]
-    #[payload]
-    unused: Vec<u8>,
-}
-
-/// `u32be`, but we can't use that directly in a `Vec` :(
-#[packet]
-pub struct U32BE {
-    number: u32be,
-    #[length = "0"]
-    #[payload]
-    unused: Vec<u8>,
-}
-
-#[test]
-fn gre_packet_test() {
-    let mut packet = [0u8; 4];
-    {
-        let mut gre_packet = MutableGrePacket::new(&mut packet[..]).unwrap();
-        gre_packet.set_protocol_type(0x0800);
-        assert_eq!(gre_packet.payload().len(), 0);
+impl GrePacket {
+    pub fn checksum_length(&self) -> usize {
+        (self.checksum_present | self.routing_present) as usize * 2
     }
 
-    let ref_packet = [
-        0x00, /* no flags */
-        0x00, /* no flags, version 0 */
-        0x08, /* protocol 0x0800 */
-        0x00,
-    ];
-
-    assert_eq!(&ref_packet[..], &packet[..]);
-}
-
-#[test]
-fn gre_checksum_test() {
-    let mut packet = [0u8; 8];
-    {
-        let mut gre_packet = MutableGrePacket::new(&mut packet[..]).unwrap();
-        gre_packet.set_checksum_present(1);
-        assert_eq!(gre_packet.payload().len(), 0);
-        assert_eq!(gre_packet.get_checksum().len(), 1);
-        assert_eq!(gre_packet.get_offset().len(), 1);
+    pub fn offset_length(&self) -> usize {
+        (self.checksum_present | self.routing_present) as usize * 2
     }
 
-    let ref_packet = [
-        0x80, /* checksum on */
-        0x00, /* no flags, version 0 */
-        0x00, /* protocol 0x0000 */
-        0x00, 0x00, /* 16 bits of checksum */
-        0x00, 0x00, /* 16 bits of offset */
-        0x00,
-    ];
+    pub fn key_length(&self) -> usize {
+        self.key_present as usize * 4
+    }
 
-    assert_eq!(&ref_packet[..], &packet[..]);
+    pub fn sequence_length(&self) -> usize {
+        self.sequence_present as usize * 4
+    }
+
+    pub fn routing_length(&self) -> usize {
+        if 0 == self.routing_present {
+            0
+        } else {
+            panic!("Source routed GRE packets not supported")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn gre_packet_test() {
+        let packet = Bytes::from_static(&[
+            0x00, /* no flags */
+            0x00, /* no flags, version 0 */
+            0x08, /* protocol 0x0800 */
+            0x00,
+        ]);
+
+        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+
+        assert_eq!(&gre_packet.to_bytes(), &packet);
+    }
+
+    #[test]
+    fn gre_checksum_test() {
+        let packet = Bytes::from_static(&[
+            0x80, /* checksum on */
+            0x00, /* no flags, version 0 */
+            0x00, /* protocol 0x0000 */
+            0x00, 0x00, /* 16 bits of checksum */
+            0x00, 0x00, /* 16 bits of offset */
+            0x00,
+        ]);
+
+        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+
+        assert_eq!(&gre_packet.to_bytes(), &packet);
+    }
 }

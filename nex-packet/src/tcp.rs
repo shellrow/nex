@@ -1,193 +1,25 @@
 //! A TCP packet abstraction.
 
-use crate::ip::IpNextLevelProtocol;
-use crate::Packet;
-use crate::PrimitiveValues;
-
-use alloc::{vec, vec::Vec};
-
-use nex_macro::packet;
-use nex_macro_helper::types::*;
+use crate::ip::IpNextProtocol;
+use crate::packet::Packet;
 
 use crate::util::{self, Octets};
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::net::Ipv6Addr;
 
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use nex_core::bitfield::{u16be, u32be, u4};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Minimum TCP Header Length
-pub const TCP_HEADER_LEN: usize = MutableTcpPacket::minimum_packet_size();
+pub const TCP_HEADER_LEN: usize = 20;
 /// Minimum TCP Data Offset
 pub const TCP_MIN_DATA_OFFSET: u8 = 5;
 /// Maximum TCP Option Length
 pub const TCP_OPTION_MAX_LEN: usize = 40;
 /// Maximum TCP Header Length (with options)
 pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
-
-/// Represents the TCP option header.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct TcpOptionHeader {
-    pub kind: TcpOptionKind,
-    pub length: Option<u8>,
-    pub data: Vec<u8>,
-}
-
-impl TcpOptionHeader {
-    /// Get the timestamp of the TCP option
-    pub fn get_timestamp(&self) -> (u32, u32) {
-        if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
-            let mut my: [u8; 4] = [0; 4];
-            my.copy_from_slice(&self.data[0..4]);
-            let mut their: [u8; 4] = [0; 4];
-            their.copy_from_slice(&self.data[4..8]);
-            (u32::from_be_bytes(my), u32::from_be_bytes(their))
-        } else {
-            return (0, 0);
-        }
-    }
-    /// Get the MSS of the TCP option
-    pub fn get_mss(&self) -> u16 {
-        if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
-            let mut mss: [u8; 2] = [0; 2];
-            mss.copy_from_slice(&self.data[0..2]);
-            u16::from_be_bytes(mss)
-        } else {
-            0
-        }
-    }
-    /// Get the WSCALE of the TCP option
-    pub fn get_wscale(&self) -> u8 {
-        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
-            self.data[0]
-        } else {
-            0
-        }
-    }
-}
-
-/// Represents the TCP header.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct TcpHeader {
-    pub source: u16be,
-    pub destination: u16be,
-    pub sequence: u32be,
-    pub acknowledgement: u32be,
-    pub data_offset: u4,
-    pub reserved: u4,
-    pub flags: u8,
-    pub window: u16be,
-    pub checksum: u16be,
-    pub urgent_ptr: u16be,
-    pub options: Vec<TcpOptionHeader>,
-}
-
-impl TcpHeader {
-    /// Construct a TCP header from a byte slice.
-    pub fn from_bytes(packet: &[u8]) -> Result<TcpHeader, String> {
-        if packet.len() < TCP_HEADER_LEN {
-            return Err("Packet is too small for TCP header".to_string());
-        }
-        match TcpPacket::new(packet) {
-            Some(tcp_packet) => Ok(TcpHeader {
-                source: tcp_packet.get_source(),
-                destination: tcp_packet.get_destination(),
-                sequence: tcp_packet.get_sequence(),
-                acknowledgement: tcp_packet.get_acknowledgement(),
-                data_offset: tcp_packet.get_data_offset(),
-                reserved: tcp_packet.get_reserved(),
-                flags: tcp_packet.get_flags(),
-                window: tcp_packet.get_window(),
-                checksum: tcp_packet.get_checksum(),
-                urgent_ptr: tcp_packet.get_urgent_ptr(),
-                options: tcp_packet
-                    .get_options_iter()
-                    .map(|opt| TcpOptionHeader {
-                        kind: opt.get_kind(),
-                        length: opt.get_length_raw().first().cloned(),
-                        data: opt.payload().to_vec(),
-                    })
-                    .collect(),
-            }),
-            None => Err("Failed to parse TCP packet".to_string()),
-        }
-    }
-    /// Construct a TCP header from a TcpPacket.
-    pub(crate) fn from_packet(tcp_packet: &TcpPacket) -> TcpHeader {
-        TcpHeader {
-            source: tcp_packet.get_source(),
-            destination: tcp_packet.get_destination(),
-            sequence: tcp_packet.get_sequence(),
-            acknowledgement: tcp_packet.get_acknowledgement(),
-            data_offset: tcp_packet.get_data_offset(),
-            reserved: tcp_packet.get_reserved(),
-            flags: tcp_packet.get_flags(),
-            window: tcp_packet.get_window(),
-            checksum: tcp_packet.get_checksum(),
-            urgent_ptr: tcp_packet.get_urgent_ptr(),
-            options: tcp_packet
-                .get_options_iter()
-                .map(|opt| TcpOptionHeader {
-                    kind: opt.get_kind(),
-                    length: opt.get_length_raw().first().cloned(),
-                    data: opt.payload().to_vec(),
-                })
-                .collect(),
-        }
-    }
-}
-
-/// Represents the TCP Flags
-/// <https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-header-flags>
-#[allow(non_snake_case)]
-#[allow(non_upper_case_globals)]
-pub mod TcpFlags {
-    /// CWR – Congestion Window Reduced (CWR) flag is set by the sending
-    /// host to indicate that it received a TCP segment with the ECE flag set
-    /// and had responded in congestion control mechanism.
-    pub const CWR: u8 = 0b10000000;
-    /// ECE – ECN-Echo has a dual role, depending on the value of the
-    /// SYN flag. It indicates:
-    /// If the SYN flag is set (1), that the TCP peer is ECN capable.
-    /// If the SYN flag is clear (0), that a packet with Congestion Experienced
-    /// flag set (ECN=11) in IP header received during normal transmission.
-    pub const ECE: u8 = 0b01000000;
-    /// URG – indicates that the Urgent pointer field is significant.
-    pub const URG: u8 = 0b00100000;
-    /// ACK – indicates that the Acknowledgment field is significant.
-    /// All packets after the initial SYN packet sent by the client should have this flag set.
-    pub const ACK: u8 = 0b00010000;
-    /// PSH – Push function. Asks to push the buffered data to the receiving application.
-    pub const PSH: u8 = 0b00001000;
-    /// RST – Reset the connection.
-    pub const RST: u8 = 0b00000100;
-    /// SYN – Synchronize sequence numbers. Only the first packet sent from each end
-    /// should have this flag set.
-    pub const SYN: u8 = 0b00000010;
-    /// FIN – No more data from sender.
-    pub const FIN: u8 = 0b00000001;
-}
-
-/// Represents a TCP packet.
-#[packet]
-pub struct Tcp {
-    pub source: u16be,
-    pub destination: u16be,
-    pub sequence: u32be,
-    pub acknowledgement: u32be,
-    pub data_offset: u4,
-    pub reserved: u4,
-    pub flags: u8,
-    pub window: u16be,
-    pub checksum: u16be,
-    pub urgent_ptr: u16be,
-    #[length_fn = "tcp_options_length"]
-    pub options: Vec<TcpOption>,
-    #[payload]
-    pub payload: Vec<u8>,
-}
 
 /// Represents a TCP Option Kind.
 /// <https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-parameters-1>
@@ -286,50 +118,97 @@ impl TcpOptionKind {
             _ => TcpOptionKind::RESERVED(n),
         }
     }
+
     /// Get the name of the TCP option kind.
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> &'static str {
         match *self {
-            TcpOptionKind::EOL => String::from("EOL"),
-            TcpOptionKind::NOP => String::from("NOP"),
-            TcpOptionKind::MSS => String::from("MSS"),
-            TcpOptionKind::WSCALE => String::from("WSCALE"),
-            TcpOptionKind::SACK_PERMITTED => String::from("SACK_PERMITTED"),
-            TcpOptionKind::SACK => String::from("SACK"),
-            TcpOptionKind::ECHO => String::from("ECHO"),
-            TcpOptionKind::ECHO_REPLY => String::from("ECHO_REPLY"),
-            TcpOptionKind::TIMESTAMPS => String::from("TIMESTAMPS"),
-            TcpOptionKind::POCP => String::from("POCP"),
-            TcpOptionKind::POSP => String::from("POSP"),
-            TcpOptionKind::CC => String::from("CC"),
-            TcpOptionKind::CC_NEW => String::from("CC_NEW"),
-            TcpOptionKind::CC_ECHO => String::from("CC_ECHO"),
-            TcpOptionKind::ALT_CHECKSUM_REQ => String::from("ALT_CHECKSUM_REQ"),
-            TcpOptionKind::ALT_CHECKSUM_DATA => String::from("ALT_CHECKSUM_DATA"),
-            TcpOptionKind::SKEETER => String::from("SKEETER"),
-            TcpOptionKind::BUBBA => String::from("BUBBA"),
-            TcpOptionKind::TRAILER_CHECKSUM => String::from("TRAILER_CHECKSUM"),
-            TcpOptionKind::MD5_SIGNATURE => String::from("MD5_SIGNATURE"),
-            TcpOptionKind::SCPS_CAPABILITIES => String::from("SCPS_CAPABILITIES"),
-            TcpOptionKind::SELECTIVE_ACK => String::from("SELECTIVE_ACK"),
-            TcpOptionKind::RECORD_BOUNDARIES => String::from("RECORD_BOUNDARIES"),
-            TcpOptionKind::CORRUPTION_EXPERIENCED => String::from("CORRUPTION_EXPERIENCED"),
-            TcpOptionKind::SNAP => String::from("SNAP"),
-            TcpOptionKind::UNASSIGNED => String::from("UNASSIGNED"),
-            TcpOptionKind::TCP_COMPRESSION_FILTER => String::from("TCP_COMPRESSION_FILTER"),
-            TcpOptionKind::QUICK_START => String::from("QUICK_START"),
-            TcpOptionKind::USER_TIMEOUT => String::from("USER_TIMEOUT"),
-            TcpOptionKind::TCP_AO => String::from("TCP_AO"),
-            TcpOptionKind::MPTCP => String::from("MPTCP"),
-            TcpOptionKind::RESERVED_31 => String::from("RESERVED_31"),
-            TcpOptionKind::RESERVED_32 => String::from("RESERVED_32"),
-            TcpOptionKind::RESERVED_33 => String::from("RESERVED_33"),
-            TcpOptionKind::FAST_OPEN_COOKIE => String::from("FAST_OPEN_COOKIE"),
-            TcpOptionKind::TCP_ENO => String::from("TCP_ENO"),
-            TcpOptionKind::ACC_ECNO_0 => String::from("ACC_ECNO_0"),
-            TcpOptionKind::ACC_ECNO_1 => String::from("ACC_ECNO_1"),
-            TcpOptionKind::EXPERIMENT_1 => String::from("EXPERIMENT_1"),
-            TcpOptionKind::EXPERIMENT_2 => String::from("EXPERIMENT_2"),
-            TcpOptionKind::RESERVED(n) => format!("RESERVED_{}", n),
+            TcpOptionKind::EOL => "EOL",
+            TcpOptionKind::NOP => "NOP",
+            TcpOptionKind::MSS => "MSS",
+            TcpOptionKind::WSCALE => "WSCALE",
+            TcpOptionKind::SACK_PERMITTED => "SACK_PERMITTED",
+            TcpOptionKind::SACK => "SACK",
+            TcpOptionKind::ECHO => "ECHO",
+            TcpOptionKind::ECHO_REPLY => "ECHO_REPLY",
+            TcpOptionKind::TIMESTAMPS => "TIMESTAMPS",
+            TcpOptionKind::POCP => "POCP",
+            TcpOptionKind::POSP => "POSP",
+            TcpOptionKind::CC => "CC",
+            TcpOptionKind::CC_NEW => "CC_NEW",
+            TcpOptionKind::CC_ECHO => "CC_ECHO",
+            TcpOptionKind::ALT_CHECKSUM_REQ => "ALT_CHECKSUM_REQ",
+            TcpOptionKind::ALT_CHECKSUM_DATA => "ALT_CHECKSUM_DATA",
+            TcpOptionKind::SKEETER => "SKEETER",
+            TcpOptionKind::BUBBA => "BUBBA",
+            TcpOptionKind::TRAILER_CHECKSUM => "TRAILER_CHECKSUM",
+            TcpOptionKind::MD5_SIGNATURE => "MD5_SIGNATURE",
+            TcpOptionKind::SCPS_CAPABILITIES => "SCPS_CAPABILITIES",
+            TcpOptionKind::SELECTIVE_ACK => "SELECTIVE_ACK",
+            TcpOptionKind::RECORD_BOUNDARIES => "RECORD_BOUNDARIES",
+            TcpOptionKind::CORRUPTION_EXPERIENCED => "CORRUPTION_EXPERIENCED",
+            TcpOptionKind::SNAP => "SNAP",
+            TcpOptionKind::UNASSIGNED => "UNASSIGNED",
+            TcpOptionKind::TCP_COMPRESSION_FILTER => "TCP_COMPRESSION_FILTER",
+            TcpOptionKind::QUICK_START => "QUICK_START",
+            TcpOptionKind::USER_TIMEOUT => "USER_TIMEOUT",
+            TcpOptionKind::TCP_AO => "TCP_AO",
+            TcpOptionKind::MPTCP => "MPTCP",
+            TcpOptionKind::RESERVED_31 => "RESERVED_31",
+            TcpOptionKind::RESERVED_32 => "RESERVED_32",
+            TcpOptionKind::RESERVED_33 => "RESERVED_33",
+            TcpOptionKind::FAST_OPEN_COOKIE => "FAST_OPEN_COOKIE",
+            TcpOptionKind::TCP_ENO => "TCP_ENO",
+            TcpOptionKind::ACC_ECNO_0 => "ACC_ECNO_0",
+            TcpOptionKind::ACC_ECNO_1 => "ACC_ECNO_1",
+            TcpOptionKind::EXPERIMENT_1 => "EXPERIMENT_1",
+            TcpOptionKind::EXPERIMENT_2 => "EXPERIMENT_2",
+            TcpOptionKind::RESERVED(_) => "RESERVED",
+        }
+    }
+    /// Get the value of the TCP option kind.
+    pub fn value(&self) -> u8 {
+        match *self {
+            TcpOptionKind::EOL => 0,
+            TcpOptionKind::NOP => 1,
+            TcpOptionKind::MSS => 2,
+            TcpOptionKind::WSCALE => 3,
+            TcpOptionKind::SACK_PERMITTED => 4,
+            TcpOptionKind::SACK => 5,
+            TcpOptionKind::ECHO => 6,
+            TcpOptionKind::ECHO_REPLY => 7,
+            TcpOptionKind::TIMESTAMPS => 8,
+            TcpOptionKind::POCP => 9,
+            TcpOptionKind::POSP => 10,
+            TcpOptionKind::CC => 11,
+            TcpOptionKind::CC_NEW => 12,
+            TcpOptionKind::CC_ECHO => 13,
+            TcpOptionKind::ALT_CHECKSUM_REQ => 14,
+            TcpOptionKind::ALT_CHECKSUM_DATA => 15,
+            TcpOptionKind::SKEETER => 16,
+            TcpOptionKind::BUBBA => 17,
+            TcpOptionKind::TRAILER_CHECKSUM => 18,
+            TcpOptionKind::MD5_SIGNATURE => 19,
+            TcpOptionKind::SCPS_CAPABILITIES => 20,
+            TcpOptionKind::SELECTIVE_ACK => 21,
+            TcpOptionKind::RECORD_BOUNDARIES => 22,
+            TcpOptionKind::CORRUPTION_EXPERIENCED => 23,
+            TcpOptionKind::SNAP => 24,
+            TcpOptionKind::UNASSIGNED => 25,
+            TcpOptionKind::TCP_COMPRESSION_FILTER => 26,
+            TcpOptionKind::QUICK_START => 27,
+            TcpOptionKind::USER_TIMEOUT => 28,
+            TcpOptionKind::TCP_AO => 29,
+            TcpOptionKind::MPTCP => 30,
+            TcpOptionKind::RESERVED_31 => 31,
+            TcpOptionKind::RESERVED_32 => 32,
+            TcpOptionKind::RESERVED_33 => 33,
+            TcpOptionKind::FAST_OPEN_COOKIE => 34,
+            TcpOptionKind::TCP_ENO => 69,
+            TcpOptionKind::ACC_ECNO_0 => 172,
+            TcpOptionKind::ACC_ECNO_1 => 174,
+            TcpOptionKind::EXPERIMENT_1 => 253,
+            TcpOptionKind::EXPERIMENT_2 => 254,
+            TcpOptionKind::RESERVED(n) => n,
         }
     }
     /// Get size (bytes) of the TCP option.
@@ -357,76 +236,94 @@ impl TcpOptionKind {
     }
 }
 
-impl PrimitiveValues for TcpOptionKind {
-    type T = (u8,);
-    fn to_primitive_values(&self) -> (u8,) {
-        match *self {
-            TcpOptionKind::EOL => (0,),
-            TcpOptionKind::NOP => (1,),
-            TcpOptionKind::MSS => (2,),
-            TcpOptionKind::WSCALE => (3,),
-            TcpOptionKind::SACK_PERMITTED => (4,),
-            TcpOptionKind::SACK => (5,),
-            TcpOptionKind::ECHO => (6,),
-            TcpOptionKind::ECHO_REPLY => (7,),
-            TcpOptionKind::TIMESTAMPS => (8,),
-            TcpOptionKind::POCP => (9,),
-            TcpOptionKind::POSP => (10,),
-            TcpOptionKind::CC => (11,),
-            TcpOptionKind::CC_NEW => (12,),
-            TcpOptionKind::CC_ECHO => (13,),
-            TcpOptionKind::ALT_CHECKSUM_REQ => (14,),
-            TcpOptionKind::ALT_CHECKSUM_DATA => (15,),
-            TcpOptionKind::SKEETER => (16,),
-            TcpOptionKind::BUBBA => (17,),
-            TcpOptionKind::TRAILER_CHECKSUM => (18,),
-            TcpOptionKind::MD5_SIGNATURE => (19,),
-            TcpOptionKind::SCPS_CAPABILITIES => (20,),
-            TcpOptionKind::SELECTIVE_ACK => (21,),
-            TcpOptionKind::RECORD_BOUNDARIES => (22,),
-            TcpOptionKind::CORRUPTION_EXPERIENCED => (23,),
-            TcpOptionKind::SNAP => (24,),
-            TcpOptionKind::UNASSIGNED => (25,),
-            TcpOptionKind::TCP_COMPRESSION_FILTER => (26,),
-            TcpOptionKind::QUICK_START => (27,),
-            TcpOptionKind::USER_TIMEOUT => (28,),
-            TcpOptionKind::TCP_AO => (29,),
-            TcpOptionKind::MPTCP => (30,),
-            TcpOptionKind::RESERVED_31 => (31,),
-            TcpOptionKind::RESERVED_32 => (32,),
-            TcpOptionKind::RESERVED_33 => (33,),
-            TcpOptionKind::FAST_OPEN_COOKIE => (34,),
-            TcpOptionKind::TCP_ENO => (35,),
-            TcpOptionKind::ACC_ECNO_0 => (36,),
-            TcpOptionKind::ACC_ECNO_1 => (37,),
-            TcpOptionKind::EXPERIMENT_1 => (253,),
-            TcpOptionKind::EXPERIMENT_2 => (254,),
-            TcpOptionKind::RESERVED(n) => (n,),
+/// Represents the TCP Flags
+/// <https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml#tcp-header-flags>
+#[allow(non_snake_case)]
+#[allow(non_upper_case_globals)]
+pub mod TcpFlags {
+    /// CWR – Congestion Window Reduced (CWR) flag is set by the sending
+    /// host to indicate that it received a TCP segment with the ECE flag set
+    /// and had responded in congestion control mechanism.
+    pub const CWR: u8 = 0b10000000;
+    /// ECE – ECN-Echo has a dual role, depending on the value of the
+    /// SYN flag. It indicates:
+    /// If the SYN flag is set (1), that the TCP peer is ECN capable.
+    /// If the SYN flag is clear (0), that a packet with Congestion Experienced
+    /// flag set (ECN=11) in IP header received during normal transmission.
+    pub const ECE: u8 = 0b01000000;
+    /// URG – indicates that the Urgent pointer field is significant.
+    pub const URG: u8 = 0b00100000;
+    /// ACK – indicates that the Acknowledgment field is significant.
+    /// All packets after the initial SYN packet sent by the client should have this flag set.
+    pub const ACK: u8 = 0b00010000;
+    /// PSH – Push function. Asks to push the buffered data to the receiving application.
+    pub const PSH: u8 = 0b00001000;
+    /// RST – Reset the connection.
+    pub const RST: u8 = 0b00000100;
+    /// SYN – Synchronize sequence numbers. Only the first packet sent from each end
+    /// should have this flag set.
+    pub const SYN: u8 = 0b00000010;
+    /// FIN – No more data from sender.
+    pub const FIN: u8 = 0b00000001;
+}
+
+/// Represents the TCP option header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct TcpOptionHeader {
+    pub kind: TcpOptionKind,
+    pub length: Option<u8>,
+    pub data: Bytes,
+}
+
+impl TcpOptionHeader {
+    /// Get the timestamp of the TCP option
+    pub fn get_timestamp(&self) -> (u32, u32) {
+        if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
+            let mut my: [u8; 4] = [0; 4];
+            my.copy_from_slice(&self.data[0..4]);
+            let mut their: [u8; 4] = [0; 4];
+            their.copy_from_slice(&self.data[4..8]);
+            (u32::from_be_bytes(my), u32::from_be_bytes(their))
+        } else {
+            return (0, 0);
+        }
+    }
+    /// Get the MSS of the TCP option
+    pub fn get_mss(&self) -> u16 {
+        if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
+            let mut mss: [u8; 2] = [0; 2];
+            mss.copy_from_slice(&self.data[0..2]);
+            u16::from_be_bytes(mss)
+        } else {
+            0
+        }
+    }
+    /// Get the WSCALE of the TCP option
+    pub fn get_wscale(&self) -> u8 {
+        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+            self.data[0]
+        } else {
+            0
         }
     }
 }
 
 /// A TCP option.
-#[packet]
-pub struct TcpOption {
-    #[construct_with(u8)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TcpOptionPacket {
     kind: TcpOptionKind,
-    #[length_fn = "tcp_option_length"]
-    // The length field is an optional field, using a Vec is a way to implement
-    // it
-    length: Vec<u8>,
-    #[length_fn = "tcp_option_payload_length"]
-    #[payload]
-    data: Vec<u8>,
+    length: Option<u8>,
+    data: Bytes,
 }
 
-impl TcpOption {
+impl TcpOptionPacket {
     /// NOP: This may be used to align option fields on 32-bit boundaries for better performance.
     pub fn nop() -> Self {
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::NOP,
-            length: vec![],
-            data: vec![],
+            length: None,
+            data: Bytes::new(),
         }
     }
 
@@ -434,37 +331,37 @@ impl TcpOption {
     /// packets were sent. TCP timestamps are not normally aligned to the system clock and
     /// start at some random value.
     pub fn timestamp(my: u32, their: u32) -> Self {
-        let mut data = vec![];
+        let mut data = BytesMut::new();
         data.extend_from_slice(&my.octets()[..]);
         data.extend_from_slice(&their.octets()[..]);
 
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::TIMESTAMPS,
-            length: vec![10],
-            data: data,
+            length: Some(10),
+            data: data.freeze(),
         }
     }
 
     /// MSS: The maximum segment size (MSS) is the largest amount of data, specified in bytes,
     /// that TCP is willing to receive in a single segment.
     pub fn mss(val: u16) -> Self {
-        let mut data = vec![];
+        let mut data = BytesMut::new();
         data.extend_from_slice(&val.octets()[..]);
 
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::MSS,
-            length: vec![4],
-            data: data,
+            length: Some(4),
+            data: data.freeze(),
         }
     }
 
     /// Window scale: The TCP window scale option, as defined in RFC 1323, is an option used to
     /// increase the maximum window size from 65,535 bytes to 1 gigabyte.
     pub fn wscale(val: u8) -> Self {
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::WSCALE,
-            length: vec![3],
-            data: vec![val],
+            length: Some(3),
+            data: Bytes::from(vec![val]),
         }
     }
 
@@ -472,10 +369,10 @@ impl TcpOption {
     /// discontinuous blocks of packets which were received correctly. This options enables use of
     /// SACK during negotiation.
     pub fn sack_perm() -> Self {
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::SACK_PERMITTED,
-            length: vec![2],
-            data: vec![],
+            length: Some(2),
+            data: Bytes::new(),
         }
     }
 
@@ -484,14 +381,14 @@ impl TcpOption {
     /// a number of SACK blocks, where each SACK block is conveyed by the starting and ending sequence
     /// numbers of a contiguous range that the receiver correctly received.
     pub fn selective_ack(acks: &[u32]) -> Self {
-        let mut data = vec![];
+        let mut data = BytesMut::new();
         for ack in acks {
             data.extend_from_slice(&ack.octets()[..]);
         }
-        TcpOption {
+        TcpOptionPacket {
             kind: TcpOptionKind::SACK,
-            length: vec![1 /* number */ + 1 /* length */ + data.len() as u8],
-            data: data,
+            length: Some(1 /* number */ + 1 /* length */ + data.len() as u8),
+            data: data.freeze(),
         }
     }
     /// Get the TCP option kind.
@@ -500,10 +397,11 @@ impl TcpOption {
     }
     /// Get length of the TCP option.
     pub fn length(&self) -> u8 {
-        if self.length.is_empty() {
-            0
+        if let Some(len) = self.length {
+            len
         } else {
-            self.length[0]
+            // If length is None, it means the option has no length (like NOP).
+            0
         }
     }
     /// Get the timestamp of the TCP option
@@ -538,33 +436,209 @@ impl TcpOption {
     }
 }
 
-/// This function gets the 'length' of the length field of the IPv4Option packet
-/// Few options (EOL, NOP) are 1 bytes long, and then have a length field equal
-/// to 0.
-#[inline]
-fn tcp_option_length(option: &TcpOptionPacket) -> usize {
-    match option.get_kind() {
-        TcpOptionKind::EOL => 0,
-        TcpOptionKind::NOP => 0,
-        _ => 1,
+/// Represents the TCP header.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct TcpHeader {
+    pub source: u16be,
+    pub destination: u16be,
+    pub sequence: u32be,
+    pub acknowledgement: u32be,
+    pub data_offset: u4,
+    pub reserved: u4,
+    pub flags: u8,
+    pub window: u16be,
+    pub checksum: u16be,
+    pub urgent_ptr: u16be,
+    pub options: Vec<TcpOptionPacket>,
+}
+
+/// Represents a TCP packet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TcpPacket {
+    pub header: TcpHeader,
+    pub payload: Bytes,
+}
+
+impl Packet for TcpPacket {
+    type Header = TcpHeader;
+
+    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < TCP_HEADER_LEN {
+            return None;
+        }
+
+        let source = bytes.get_u16();
+        let destination = bytes.get_u16();
+        let sequence = bytes.get_u32();
+        let acknowledgement = bytes.get_u32();
+
+        let offset_reserved = bytes.get_u8();
+        let data_offset = offset_reserved >> 4;
+        let reserved = offset_reserved & 0x0F;
+
+        let flags = bytes.get_u8();
+        let window = bytes.get_u16();
+        let checksum = bytes.get_u16();
+        let urgent_ptr = bytes.get_u16();
+
+        let header_len = data_offset as usize * 4;
+        if header_len < TCP_HEADER_LEN || bytes.len() + 20 < header_len {
+            return None;
+        }
+
+        let mut options = Vec::new();
+        let options_len = header_len - TCP_HEADER_LEN;
+        let (mut options_bytes, rest) = bytes.split_at(options_len);
+        bytes = rest;
+
+        while options_bytes.has_remaining() {
+            let kind = TcpOptionKind::new(options_bytes.get_u8());
+            match kind {
+                TcpOptionKind::EOL => {
+                    options.push(TcpOptionPacket { kind, length: None, data: Bytes::new() });
+                    break;
+                }
+                TcpOptionKind::NOP => {
+                    options.push(TcpOptionPacket { kind, length: None, data: Bytes::new() });
+                }
+                _ => {
+                    if options_bytes.remaining() < 1 {
+                        return None;
+                    }
+                    let len = options_bytes.get_u8();
+                    if len < 2 || (len as usize) > options_bytes.remaining() + 2 {
+                        return None;
+                    }
+                    let data_len = (len - 2) as usize;
+                    let (data_slice, rest) = options_bytes.split_at(data_len);
+                    options_bytes = rest;
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: Some(len),
+                        data: Bytes::copy_from_slice(data_slice),
+                    });
+                }
+            }
+        }
+
+        Some(TcpPacket {
+            header: TcpHeader {
+                source,
+                destination,
+                sequence,
+                acknowledgement,
+                data_offset: u4::from_be(data_offset),
+                reserved: u4::from_be(reserved),
+                flags,
+                window,
+                checksum,
+                urgent_ptr,
+                options,
+            },
+            payload: Bytes::copy_from_slice(bytes),
+        })
+    }
+    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&mut bytes)   
+    }
+    
+    fn to_bytes(&self) -> Bytes {
+        let mut bytes = BytesMut::with_capacity(self.header_len() + self.payload.len());
+
+        bytes.put_u16(self.header.source);
+        bytes.put_u16(self.header.destination);
+        bytes.put_u32(self.header.sequence);
+        bytes.put_u32(self.header.acknowledgement);
+
+        let offset_reserved = (self.header.data_offset.to_be() << 4) | (self.header.reserved.to_be() & 0x0F);
+        bytes.put_u8(offset_reserved);
+
+        bytes.put_u8(self.header.flags);
+        bytes.put_u16(self.header.window);
+        bytes.put_u16(self.header.checksum);
+        bytes.put_u16(self.header.urgent_ptr);
+
+        for option in &self.header.options {
+            bytes.put_u8(option.kind.value());
+            if let Some(length) = option.length {
+                bytes.put_u8(length);
+                bytes.extend_from_slice(&option.data);
+            }
+        }
+
+        // Padding to 4-byte alignment
+        while bytes.len() % 4 != 0 {
+            bytes.put_u8(0);
+        }
+
+        bytes.extend_from_slice(&self.payload);
+
+        bytes.freeze()
+    }
+
+    fn header(&self) -> Bytes {
+        self.to_bytes().slice(..self.header_len())
+    }
+
+    fn payload(&self) -> Bytes {
+        self.payload.clone()
+    }
+
+    fn header_len(&self) -> usize {
+        let base = TCP_HEADER_LEN;
+        let mut opt_len = 0;
+
+        for opt in &self.header.options {
+            match opt.kind {
+                TcpOptionKind::EOL | TcpOptionKind::NOP => {
+                    opt_len += 1; // EOL and NOP are one byte
+                }
+                _ => {
+                    // kind(1B) + length(1B) + payload
+                    if let Some(len) = opt.length {
+                        opt_len += len as usize;
+                    } else {
+                        // Ensure at least 2 bytes (kind + length)
+                        opt_len += 2;
+                    }
+                }
+            }
+        }
+
+        let total = base + opt_len;
+        // The TCP header is always rounded to a 4 byte boundary
+        (total + 3) & !0x03
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn total_len(&self) -> usize {
+        self.header_len() + self.payload_len()
+    }
+
+    fn into_parts(self) -> (Self::Header, Bytes) {
+        (self.header, self.payload)
     }
 }
 
-fn tcp_option_payload_length(ipv4_option: &TcpOptionPacket) -> usize {
-    match ipv4_option.get_length_raw().first() {
-        Some(len) if *len >= 2 => *len as usize - 2,
-        _ => 0,
+impl TcpPacket {
+    pub fn tcp_options_length(&self) -> usize {
+        if self.header.data_offset > 5 {
+            self.header.data_offset as usize * 4 - 20
+        } else {
+            0
+        }
     }
 }
 
-#[inline]
-fn tcp_options_length(tcp: &TcpPacket) -> usize {
-    let data_offset = tcp.get_data_offset();
-
-    if data_offset > 5 {
-        data_offset as usize * 4 - 20
-    } else {
-        0
+pub fn checksum(packet: &TcpPacket, source: &IpAddr, destination: &IpAddr) -> u16 {
+    match (source, destination) {
+        (IpAddr::V4(src), IpAddr::V4(dst)) => ipv4_checksum(packet, src, dst),
+        (IpAddr::V6(src), IpAddr::V6(dst)) => ipv6_checksum(packet, src, dst),
+        _ => 0, // Unsupported IP version
     }
 }
 
@@ -587,12 +661,12 @@ pub fn ipv4_checksum_adv(
     destination: &Ipv4Addr,
 ) -> u16 {
     util::ipv4_checksum(
-        packet.packet(),
+        &packet.to_bytes(),
         8,
         extra_data,
         source,
         destination,
-        IpNextLevelProtocol::Tcp,
+        IpNextProtocol::Tcp,
     )
 }
 
@@ -615,157 +689,92 @@ pub fn ipv6_checksum_adv(
     destination: &Ipv6Addr,
 ) -> u16 {
     util::ipv6_checksum(
-        packet.packet(),
+        &packet.to_bytes(),
         8,
         extra_data,
         source,
         destination,
-        IpNextLevelProtocol::Tcp,
+        IpNextProtocol::Tcp,
     )
 }
 
-#[test]
-fn tcp_header_ipv4_test() {
-    use crate::ip::IpNextLevelProtocol;
-    use crate::ipv4::MutableIpv4Packet;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    const IPV4_HEADER_LEN: usize = 20;
-    const TCP_HEADER_LEN: usize = 32;
-    const TEST_DATA_LEN: usize = 4;
+    #[test]
+    fn test_basic_tcp_parse() {
+        let ref_packet = Bytes::from_static(&[
+            0xc1, 0x67, /* source */
+            0x23, 0x28, /* destination */
+            0x90, 0x37, 0xd2, 0xb8, /* seq */
+            0x94, 0x4b, 0xb2, 0x76, /* ack */
+            0x80, 0x18, 0x0f, 0xaf, /* offset+reserved, flags, win */
+            0xc0, 0x31, /* checksum */
+            0x00, 0x00, /* urg ptr */
+            0x01, 0x01, /* NOP */
+            0x08, 0x0a, 0x2c, 0x57, 0xcd, 0xa5, 0x02, 0xa0, 0x41, 0x92, /* timestamp */
+            0x74, 0x65, 0x73, 0x74, /* payload: "test" */
+        ]);
+        let packet = TcpPacket::from_bytes(ref_packet.clone()).unwrap();
 
-    let mut packet = [0u8; IPV4_HEADER_LEN + TCP_HEADER_LEN + TEST_DATA_LEN];
-    let ipv4_source = Ipv4Addr::new(192, 168, 2, 1);
-    let ipv4_destination = Ipv4Addr::new(192, 168, 111, 51);
-    {
-        let mut ip_header = MutableIpv4Packet::new(&mut packet[..]).unwrap();
-        ip_header.set_next_level_protocol(IpNextLevelProtocol::Tcp);
-        ip_header.set_source(ipv4_source);
-        ip_header.set_destination(ipv4_destination);
+        assert_eq!(packet.header.source, 0xc167);
+        assert_eq!(packet.header.destination, 0x2328);
+        assert_eq!(packet.header.sequence, 0x9037d2b8);
+        assert_eq!(packet.header.acknowledgement, 0x944bb276);
+        assert_eq!(packet.header.data_offset, 8); // adjusted
+        assert_eq!(packet.header.reserved, 0);
+        assert_eq!(packet.header.flags, 0x18); // PSH + ACK
+        assert_eq!(packet.header.window, 0x0faf);
+        assert_eq!(packet.header.checksum, 0xc031);
+        assert_eq!(packet.header.urgent_ptr, 0x0000);
+        assert_eq!(packet.header.options.len(), 3);
+        assert_eq!(packet.header.options[0].kind, TcpOptionKind::NOP);
+        assert_eq!(packet.header.options[1].kind, TcpOptionKind::NOP);
+        assert_eq!(packet.header.options[2].kind, TcpOptionKind::TIMESTAMPS);
+        assert_eq!(
+            packet.header.options[2].get_timestamp(),
+            (0x2c57cda5, 0x02a04192)
+        );
+        assert_eq!(packet.payload, Bytes::from_static(b"test"));
+        assert_eq!(packet.header_len(), 32); // adjusted
+        assert_eq!(packet.to_bytes(), ref_packet);
+        assert_eq!(packet.header().len(), 32); // adjusted
+        assert_eq!(packet.payload().len(), 4);
     }
 
-    // Set data
-    packet[IPV4_HEADER_LEN + TCP_HEADER_LEN] = 't' as u8;
-    packet[IPV4_HEADER_LEN + TCP_HEADER_LEN + 1] = 'e' as u8;
-    packet[IPV4_HEADER_LEN + TCP_HEADER_LEN + 2] = 's' as u8;
-    packet[IPV4_HEADER_LEN + TCP_HEADER_LEN + 3] = 't' as u8;
+    #[test]
+    fn test_basic_tcp_create() {
+        let options = vec![
+            TcpOptionPacket::nop(),
+            TcpOptionPacket::nop(),
+            TcpOptionPacket::timestamp(0x2c57cda5, 0x02a04192),
+        ];
 
-    {
-        let mut tcp_header = MutableTcpPacket::new(&mut packet[IPV4_HEADER_LEN..]).unwrap();
-        tcp_header.set_source(49511);
-        assert_eq!(tcp_header.get_source(), 49511);
+        let packet = TcpPacket {
+            header: TcpHeader {
+                source: 0xc167,
+                destination: 0x2328,
+                sequence: 0x9037d2b8,
+                acknowledgement: 0x944bb276,
+                data_offset: 8.into(), // 8 * 4 = 32 bytes
+                reserved: 0.into(),
+                flags: 0x18, // PSH + ACK
+                window: 0x0faf,
+                checksum: 0xc031,
+                urgent_ptr: 0x0000,
+                options: options.clone(),
+            },
+            payload: Bytes::from_static(b"test"),
+        };
 
-        tcp_header.set_destination(9000);
-        assert_eq!(tcp_header.get_destination(), 9000);
+        let bytes = packet.to_bytes();
+        let parsed = TcpPacket::from_bytes(bytes.clone()).expect("Failed to parse TCP packet");
 
-        tcp_header.set_sequence(0x9037d2b8);
-        assert_eq!(tcp_header.get_sequence(), 0x9037d2b8);
-
-        tcp_header.set_acknowledgement(0x944bb276);
-        assert_eq!(tcp_header.get_acknowledgement(), 0x944bb276);
-
-        tcp_header.set_flags(TcpFlags::PSH | TcpFlags::ACK);
-        assert_eq!(tcp_header.get_flags(), TcpFlags::PSH | TcpFlags::ACK);
-
-        tcp_header.set_window(4015);
-        assert_eq!(tcp_header.get_window(), 4015);
-
-        tcp_header.set_data_offset(8);
-        assert_eq!(tcp_header.get_data_offset(), 8);
-
-        let ts = TcpOption::timestamp(743951781, 44056978);
-        tcp_header.set_options(&vec![TcpOption::nop(), TcpOption::nop(), ts]);
-
-        let checksum = ipv4_checksum(&tcp_header.to_immutable(), &ipv4_source, &ipv4_destination);
-        tcp_header.set_checksum(checksum);
-        assert_eq!(tcp_header.get_checksum(), 0xc031);
-    }
-    let ref_packet = [
-        0xc1, 0x67, /* source */
-        0x23, 0x28, /* destination */
-        0x90, 0x37, 0xd2, 0xb8, /* seq */
-        0x94, 0x4b, 0xb2, 0x76, /* ack */
-        0x80, 0x18, 0x0f, 0xaf, /* length, flags, win */
-        0xc0, 0x31, /* checksum */
-        0x00, 0x00, /* urg ptr */
-        0x01, 0x01, /* options: nop */
-        0x08, 0x0a, 0x2c, 0x57, 0xcd, 0xa5, 0x02, 0xa0, 0x41, 0x92, /* timestamp */
-        0x74, 0x65, 0x73, 0x74, /* "test" */
-    ];
-    assert_eq!(&ref_packet[..], &packet[20..]);
-}
-
-#[test]
-fn tcp_test_options_invalid_offset() {
-    let mut buf = [0; 20]; // no space for options
-    {
-        if let Some(mut tcp) = MutableTcpPacket::new(&mut buf[..]) {
-            tcp.set_data_offset(10); // set invalid offset
-        }
+        assert_eq!(parsed, packet);
+        assert_eq!(parsed.to_bytes(), bytes);
+        assert_eq!(parsed.header.options.len(), 3);
+        assert_eq!(parsed.header.options[2].get_timestamp(), (0x2c57cda5, 0x02a04192));
     }
 
-    if let Some(tcp) = TcpPacket::new(&buf[..]) {
-        let _options = tcp.get_options_iter(); // shouldn't crash here
-    }
-}
-
-#[test]
-fn tcp_test_options_vec_invalid_offset() {
-    let mut buf = [0; 20]; // no space for options
-    {
-        if let Some(mut tcp) = MutableTcpPacket::new(&mut buf[..]) {
-            tcp.set_data_offset(10); // set invalid offset
-        }
-    }
-
-    if let Some(tcp) = TcpPacket::new(&buf[..]) {
-        let _options = tcp.get_options(); // shouldn't crash here
-    }
-}
-
-#[test]
-fn tcp_test_options_slice_invalid_offset() {
-    let mut buf = [0; 20]; // no space for options
-    {
-        if let Some(mut tcp) = MutableTcpPacket::new(&mut buf[..]) {
-            tcp.set_data_offset(10); // set invalid offset
-        }
-    }
-
-    if let Some(tcp) = TcpPacket::new(&buf[..]) {
-        let _options = tcp.get_options_raw(); // shouldn't crash here
-    }
-}
-
-#[test]
-fn tcp_test_option_invalid_len() {
-    use std::println;
-    let mut buf = [0; 24];
-    {
-        if let Some(mut tcp) = MutableTcpPacket::new(&mut buf[..]) {
-            tcp.set_data_offset(6);
-        }
-        buf[20] = 2; // option type
-        buf[21] = 8; // option len, not enough space for it
-    }
-
-    if let Some(tcp) = TcpPacket::new(&buf[..]) {
-        let options = tcp.get_options_iter();
-        for opt in options {
-            println!("{:?}", opt);
-        }
-    }
-}
-
-#[test]
-fn tcp_test_payload_slice_invalid_offset() {
-    let mut buf = [0; 20];
-    {
-        if let Some(mut tcp) = MutableTcpPacket::new(&mut buf[..]) {
-            tcp.set_data_offset(10); // set invalid offset
-        }
-    }
-
-    if let Some(tcp) = TcpPacket::new(&buf[..]) {
-        assert_eq!(tcp.payload().len(), 0);
-    }
 }

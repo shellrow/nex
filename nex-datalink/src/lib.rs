@@ -179,3 +179,21 @@ pub trait RawReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_default_values() {
+        let cfg = Config::default();
+        assert_eq!(cfg.write_buffer_size, 4096);
+        assert_eq!(cfg.read_buffer_size, 4096);
+        assert_eq!(cfg.read_timeout, None);
+        assert_eq!(cfg.write_timeout, None);
+        assert_eq!(cfg.channel_type, ChannelType::Layer2);
+        assert_eq!(cfg.bpf_fd_attempts, 1000);
+        assert!(cfg.linux_fanout.is_none());
+        assert!(cfg.promiscuous);
+    }
+}
