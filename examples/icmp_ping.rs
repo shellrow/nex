@@ -70,7 +70,7 @@ fn main() {
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .culculate_checksum()
+            .calculate_checksum()
             .build()
             .to_bytes(),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
@@ -78,7 +78,7 @@ fn main() {
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .culculate_checksum()
+            .calculate_checksum()
             .build()
             .to_bytes(),
         _ => panic!("Source and destination IP version mismatch"),

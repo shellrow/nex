@@ -4,6 +4,9 @@ use std::net::Ipv4Addr;
 
 use crate::packet::Packet;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Minimum size of an DHCP packet.
 /// Options field is not included in this size.
 pub const DHCP_MIN_PACKET_SIZE: usize = 236;
@@ -11,6 +14,7 @@ pub const DHCP_MIN_PACKET_SIZE: usize = 236;
 // DHCP Operation Codes
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DhcpOperation {
     Request = 1,
     Reply = 2,
@@ -38,6 +42,7 @@ impl DhcpOperation {
 // DHCP Hardware Types
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DhcpHardwareType {
     Ethernet = 1,
     ExperimentalEthernet = 2,
@@ -255,9 +260,12 @@ pub struct DhcpHeader {
     pub siaddr: Ipv4Addr,
     pub giaddr: Ipv4Addr,
     pub chaddr: MacAddr,
-    pub chaddr_pad: [u8; 10],
-    pub sname: [u8; 64],
-    pub file: [u8; 128],
+    /// Client hardware address padding (must be exactly 10 bytes during parsing/building)
+    pub chaddr_pad: Vec<u8>,
+    /// Optional server host name (must be exactly 64 bytes during parsing/building)
+    pub sname: Vec<u8>,
+    /// Boot file name (must be exactly 128 bytes during parsing/building)
+    pub file: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,9 +321,9 @@ impl Packet for DhcpPacket {
             siaddr,
             giaddr,
             chaddr,
-            chaddr_pad,
-            sname,
-            file,
+            chaddr_pad: chaddr_pad.to_vec(),
+            sname: sname.to_vec(),
+            file: file.to_vec(),
         };
 
         Some(Self {

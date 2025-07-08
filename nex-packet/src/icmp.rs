@@ -164,6 +164,7 @@ impl IcmpCode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IcmpHeader {
     pub icmp_type: IcmpType,
     pub icmp_code: IcmpCode,
