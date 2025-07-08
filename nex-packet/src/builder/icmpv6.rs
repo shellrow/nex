@@ -58,7 +58,7 @@ impl Icmpv6PacketBuilder {
         self
     }
 
-    pub fn culculate_checksum(mut self) -> Self {
+    pub fn calculate_checksum(mut self) -> Self {
         // Calculate the checksum and set it in the header
         self.packet.header.checksum = checksum(&self.packet, &self.source, &self.destination);
         self

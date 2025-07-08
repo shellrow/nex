@@ -68,7 +68,7 @@ fn main() {
     let udp_packet = UdpPacketBuilder::new()
         .source(SRC_PORT)
         .destination(DST_PORT)
-        .culculate_checksum(&src_ip, &target_ip)
+        .calculate_checksum(&src_ip, &target_ip)
         .build();
 
     let ip_packet: Bytes = match (src_ip, target_ip) {

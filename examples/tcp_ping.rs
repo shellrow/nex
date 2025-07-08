@@ -118,7 +118,7 @@ fn main() {
             TcpOptionPacket::nop(),
             TcpOptionPacket::wscale(7),
         ])
-        .culculate_checksum(&src_ip, &dst_ip)
+        .calculate_checksum(&src_ip, &dst_ip)
         .build();
 
     let ip_packet: Bytes;

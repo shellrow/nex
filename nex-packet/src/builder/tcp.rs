@@ -83,7 +83,7 @@ impl TcpPacketBuilder {
         self
     }
 
-    pub fn culculate_checksum(mut self, src_ip: &IpAddr, dst_ip: &IpAddr) -> Self {
+    pub fn calculate_checksum(mut self, src_ip: &IpAddr, dst_ip: &IpAddr) -> Self {
         // Calculate the checksum and set it in the header
         self.packet.header.checksum = crate::tcp::checksum(&self.packet, src_ip, dst_ip);
         self
