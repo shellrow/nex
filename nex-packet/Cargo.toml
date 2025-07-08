@@ -17,4 +17,4 @@ serde = { workspace = true, features = ["derive"], optional = true }
 rand = { workspace = true }
 
 [features]
-serde = ["dep:serde", "nex-core/serde"]
+serde = ["dep:serde", "nex-core/serde", "bytes/serde"]

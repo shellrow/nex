@@ -311,6 +311,7 @@ impl TcpOptionHeader {
 
 /// A TCP option.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TcpOptionPacket {
     kind: TcpOptionKind,
     length: Option<u8>,

@@ -4,11 +4,15 @@ use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::{u1, u16be, u32be};
 use crate::packet::Packet;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Represents an DNS operation.
 /// These identifiers correspond to DNS resource record classes.
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-2>
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DnsClass {
     IN = 1,   // Internet
     CS = 2,   // CSNET (Obsolete)
@@ -52,6 +56,7 @@ impl DnsClass {
 #[allow(non_camel_case_types)]
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DnsType {
     A = 1,
     NS = 2,
@@ -435,6 +440,7 @@ impl DnsType {
 /// Represents an DNS operation code.
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5>
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum OpCode {
     Query,
     InverseQuery,
@@ -488,6 +494,7 @@ impl OpCode {
 /// Represents an DNS return code.
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6>
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum RetCode {
     NoError,
     FormErr,

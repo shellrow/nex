@@ -27,9 +27,9 @@ impl DhcpPacketBuilder {
             siaddr: Ipv4Addr::UNSPECIFIED,
             giaddr: Ipv4Addr::UNSPECIFIED,
             chaddr,
-            chaddr_pad: [0u8; 10],
-            sname: [0u8; 64],
-            file: [0u8; 128],
+            chaddr_pad: [0u8; 10].to_vec(),
+            sname: [0u8; 64].to_vec(),
+            file: [0u8; 128].to_vec(),
         };
         Self {
             packet: DhcpPacket {

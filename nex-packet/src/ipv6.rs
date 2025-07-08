@@ -3,9 +3,13 @@ use bytes::{Bytes, BytesMut, BufMut};
 use crate::packet::Packet;
 use crate::ip::IpNextProtocol;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub const IPV6_HEADER_LEN: usize = 40;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv6Header {
     pub version: u8,         // 4 bits
     pub traffic_class: u8,   // 8 bits
