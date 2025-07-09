@@ -7,7 +7,7 @@ use tokio::net::UdpSocket;
 /// Asynchronous UDP socket built on top of Tokio.
 #[derive(Debug)]
 pub struct AsyncUdpSocket {
-    socket: Socket,
+    inner: UdpSocket,
 }
 
 impl AsyncUdpSocket {
@@ -45,14 +45,41 @@ impl AsyncUdpSocket {
 
         socket.set_nonblocking(true)?;
 
-        Ok(Self { socket })
+        #[cfg(windows)]
+        let std_socket = unsafe {
+            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
+            StdUdpSocket::from_raw_socket(socket.into_raw_socket())
+        };
+        #[cfg(unix)]
+        let std_socket = unsafe {
+            use std::os::fd::{FromRawFd, IntoRawFd};
+            StdUdpSocket::from_raw_fd(socket.into_raw_fd())
+        };
+
+        let inner = UdpSocket::from_std(std_socket)?;
+
+        Ok(Self { inner })
     }
 
     /// Create a socket of arbitrary type (DGRAM or RAW).
     pub fn new(domain: Domain, sock_type: SockType) -> io::Result<Self> {
         let socket = Socket::new(domain, sock_type, Some(Protocol::UDP))?;
         socket.set_nonblocking(true)?;
-        Ok(Self { socket })
+
+        #[cfg(windows)]
+        let std_socket = unsafe {
+            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
+            StdUdpSocket::from_raw_socket(socket.into_raw_socket())
+        };
+        #[cfg(unix)]
+        let std_socket = unsafe {
+            use std::os::fd::{FromRawFd, IntoRawFd};
+            StdUdpSocket::from_raw_fd(socket.into_raw_fd())
+        };
+
+        let inner = UdpSocket::from_std(std_socket)?;
+
+        Ok(Self { inner })
     }
 
     /// Convenience constructor for IPv4 DGRAM.
@@ -77,39 +104,32 @@ impl AsyncUdpSocket {
 
     /// Send data asynchronously.
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
-        let std_udp: StdUdpSocket = self.socket.try_clone()?.into();
-        let udp_socket = UdpSocket::from_std(std_udp)?;
-        udp_socket.send_to(buf, target).await
+        self.inner.send_to(buf, target).await
     }
 
     /// Receive data asynchronously.
     pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        let std_udp: StdUdpSocket = self.socket.try_clone()?.into();
-        let udp_socket = UdpSocket::from_std(std_udp)?;
-        udp_socket.recv_from(buf).await
+        self.inner.recv_from(buf).await
     }
 
     /// Retrieve the local socket address.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()?.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Failed to get socket address")
-        })
+        self.inner.local_addr()
     }
 
     pub fn into_tokio_socket(self) -> io::Result<UdpSocket> {
-        let std_socket: StdUdpSocket = self.socket.into();
-        UdpSocket::from_std(std_socket)
+        Ok(self.inner)
     }
 
     #[cfg(unix)]
     pub fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         use std::os::fd::AsRawFd;
-        self.socket.as_raw_fd()
+        self.inner.as_raw_fd()
     }
 
     #[cfg(windows)]
     pub fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
         use std::os::windows::io::AsRawSocket;
-        self.socket.as_raw_socket()
+        self.inner.as_raw_socket()
     }
 }
