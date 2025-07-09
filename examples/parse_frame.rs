@@ -83,7 +83,10 @@ pub fn display_frame(frame: &Frame) {
 
     if let Some(dl) = &frame.datalink {
         if let Some(eth) = &dl.ethernet {
-            println!("  Ethernet: {} > {} ({:?})", eth.source, eth.destination, eth.ethertype);
+            println!(
+                "  Ethernet: {} > {} ({:?})",
+                eth.source, eth.destination, eth.ethertype
+            );
         }
         if let Some(arp) = &dl.arp {
             println!(

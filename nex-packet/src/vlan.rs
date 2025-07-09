@@ -1,5 +1,5 @@
 //! A VLAN (802.1Q) packet abstraction.
-//! 
+//!
 use crate::{ethernet::EtherType, packet::Packet};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use nex_core::bitfield::{u1, u12be};
@@ -15,21 +15,21 @@ pub const VLAN_HEADER_LEN: usize = 4;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ClassOfService {
     // Background
-    BK = 1, 
+    BK = 1,
     // Best Effort
-    BE = 0, 
+    BE = 0,
     // Excellent Effort
-    EE = 2, 
+    EE = 2,
     // Critical Applications
-    CA = 3, 
+    CA = 3,
     // Video
-    VI = 4, 
+    VI = 4,
     // Voice
-    VO = 5, 
+    VO = 5,
     // Internetwork Control
-    IC = 6, 
+    IC = 6,
     // Network Control
-    NC = 7, 
+    NC = 7,
     /// Unknown Class of Service
     Unknown(u8),
 }

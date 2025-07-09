@@ -17,7 +17,11 @@ async fn main() -> std::io::Result<()> {
     for port in ports {
         let addr = SocketAddr::new(ip, port);
         handles.push(tokio::spawn(async move {
-            let cfg = if ip.is_ipv4() { TcpConfig::v4_stream() } else { TcpConfig::v6_stream() };
+            let cfg = if ip.is_ipv4() {
+                TcpConfig::v4_stream()
+            } else {
+                TcpConfig::v6_stream()
+            };
             let sock = AsyncTcpSocket::from_config(&cfg).unwrap();
             match sock.connect_timeout(addr, Duration::from_millis(500)).await {
                 Ok(_) => println!("Port {} is open", port),

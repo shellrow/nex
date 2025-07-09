@@ -2,7 +2,7 @@
 //!
 //! Usage:
 //!   tcp_ping <SOCKET ADDR> <NETWORK INTERFACE>
-//! 
+//!
 //! Example:
 //!
 //! IPv4: tcp_ping 1.1.1.1:80 eth0
@@ -14,14 +14,14 @@ use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
 use nex::net::mac::MacAddr;
-use nex::packet::ethernet::EtherType;
-use nex::packet::frame::{Frame, ParseOption};
-use nex::packet::ip::IpNextProtocol;
-use nex::packet::tcp::{TcpFlags, TcpOptionPacket};
 use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex::packet::builder::ipv4::Ipv4PacketBuilder;
 use nex::packet::builder::ipv6::Ipv6PacketBuilder;
 use nex::packet::builder::tcp::TcpPacketBuilder;
+use nex::packet::ethernet::EtherType;
+use nex::packet::frame::{Frame, ParseOption};
+use nex::packet::ip::IpNextProtocol;
+use nex::packet::tcp::{TcpFlags, TcpOptionPacket};
 use nex_packet::ipv4::Ipv4Flags;
 use nex_packet::packet::Packet;
 use std::env;
@@ -141,8 +141,7 @@ fn main() {
                     process::exit(1);
                 }
             }
-            
-        },
+        }
         IpAddr::V6(dst_ipv6) => {
             match src_ip {
                 IpAddr::V4(_) => {

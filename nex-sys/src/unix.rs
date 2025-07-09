@@ -168,7 +168,9 @@ mod tests {
 
     #[test]
     fn test_ipv4_addr_int() {
-        let addr = InAddr { s_addr: u32::from_be(0x7f000001) };
+        let addr = InAddr {
+            s_addr: u32::from_be(0x7f000001),
+        };
         assert_eq!(ipv4_addr_int(addr), 0x7f000001);
     }
 }

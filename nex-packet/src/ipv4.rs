@@ -204,7 +204,7 @@ pub struct Ipv4Packet {
 
 impl Packet for Ipv4Packet {
     type Header = Ipv4Header;
-    
+
     fn from_buf(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < IPV4_HEADER_LEN {
             return None;
@@ -304,7 +304,7 @@ impl Packet for Ipv4Packet {
             payload,
         })
     }
-    
+
     fn from_bytes(bytes: Bytes) -> Option<Self> {
         Self::from_buf(&bytes)
     }
@@ -314,15 +314,17 @@ impl Packet for Ipv4Packet {
         let mut tmp_buf = BytesMut::with_capacity(60); // max header size
         for option in &self.header.options {
             let number = option.header.number.value();
-            let type_byte = (option.header.copied << 7)
-                | (option.header.class << 5)
-                | (number & 0b0001_1111);
+            let type_byte =
+                (option.header.copied << 7) | (option.header.class << 5) | (number & 0b0001_1111);
             tmp_buf.put_u8(type_byte);
 
             match option.header.number {
                 Ipv4OptionType::EOL | Ipv4OptionType::NOP => {}
                 _ => {
-                    let len = option.header.length.unwrap_or((option.data.len() + 2) as u8);
+                    let len = option
+                        .header
+                        .length
+                        .unwrap_or((option.data.len() + 2) as u8);
                     tmp_buf.put_u8(len);
                     tmp_buf.extend_from_slice(&option.data);
                 }
@@ -428,8 +430,7 @@ mod tests {
             0xc0, 0xa8, 0x00, 0x01, // Source: 192.168.0.1
             0xc0, 0xa8, 0x00, 0xc7, // Destination: 192.168.0.199
             // Payload (8 bytes)
-            0xde, 0xad, 0xbe, 0xef,
-            0xca, 0xfe, 0xba, 0xbe,
+            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
         ]);
 
         let packet = Ipv4Packet::from_bytes(raw.clone()).expect("Failed to parse Ipv4Packet");
@@ -438,7 +439,10 @@ mod tests {
         assert_eq!(packet.header.total_length, 28u16);
         assert_eq!(packet.header.source, Ipv4Addr::new(192, 168, 0, 1));
         assert_eq!(packet.header.destination, Ipv4Addr::new(192, 168, 0, 199));
-        assert_eq!(packet.payload, Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe]));
+        assert_eq!(
+            packet.payload,
+            Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe])
+        );
 
         let serialized = packet.to_bytes();
         assert_eq!(&serialized[..], &raw[..]);
@@ -448,24 +452,23 @@ mod tests {
     fn test_ipv4_packet_with_options_round_trip() {
         let raw = Bytes::from_static(&[
             // IPv4 header (20bytes + 8bytes option + 4bytes payload = 32bytes -> IHL=7)
-            0x47, 0x00, 0x00, 0x20, // [0-3] Version(4), IHL(7=28bytes), DSCP/ECN, Total Length=32 bytes
+            0x47, 0x00, 0x00,
+            0x20, // [0-3] Version(4), IHL(7=28bytes), DSCP/ECN, Total Length=32 bytes
             0x12, 0x34, 0x40, 0x00, // [4-7] Identification, Flags=DF(0x40), Fragment Offset
-            0x40, 0x11, 0x00, 0x00, // [8-11] TTL=64, Protocol=17(UDP), Header Checksum (0 for now)
+            0x40, 0x11, 0x00,
+            0x00, // [8-11] TTL=64, Protocol=17(UDP), Header Checksum (0 for now)
             0xc0, 0xa8, 0x00, 0x01, // [12-15] Source IP = 192.168.0.1
             0xc0, 0xa8, 0x00, 0x02, // [16-19] Destination IP = 192.168.0.2
-
             // IPv4 options (8bytes)
             // Option 1: 1byte NOP
-            0x01,                   // [20] NOP (No Operation)
-
-            // Option 2: 4bytes 
-            0x87, 0x04, 0x12, 0x34, // [21-24] Option Type=RR(7), Copied=1, Class=0, Length=4, Data=[0x12, 0x34]
-
+            0x01, // [20] NOP (No Operation)
+            // Option 2: 4bytes
+            0x87, 0x04, 0x12,
+            0x34, // [21-24] Option Type=RR(7), Copied=1, Class=0, Length=4, Data=[0x12, 0x34]
             // Option 3: EOL (End of Options List) with padding
-            0x00,                   // [25] EOL (End of Options List)
-            0x00,                   // [26] Padding
-            0x00,                   // [27] Padding
-
+            0x00, // [25] EOL (End of Options List)
+            0x00, // [26] Padding
+            0x00, // [27] Padding
             // Payload 4bytes
             0xde, 0xad, 0xbe, 0xef, // [28-31] Payload: deadbeef
         ]);
@@ -510,7 +513,9 @@ mod tests {
         };
 
         let mut buf = BytesMut::new();
-        let ty = (option.header.copied << 7) | (option.header.class << 5) | (option.header.number.value() & 0x1F);
+        let ty = (option.header.copied << 7)
+            | (option.header.class << 5)
+            | (option.header.number.value() & 0x1F);
         buf.put_u8(ty);
         buf.put_u8(3);
         buf.put_slice(&[0x10]);
@@ -542,17 +547,15 @@ mod tests {
         };
 
         // This should panic because the payload length exceeds the total_length specified in the header
-        let _ = packet.to_bytes(); 
+        let _ = packet.to_bytes();
     }
 
     #[test]
     fn test_ipv4_checksum() {
         let raw = Bytes::from_static(&[
-            0x45, 0x00, 0x00, 0x14,
-            0x00, 0x00, 0x40, 0x00,
-            0x40, 0x06, 0x00, 0x00, // checksum: 0
-            0x0a, 0x00, 0x00, 0x01,
-            0x0a, 0x00, 0x00, 0x02,
+            0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x06, 0x00,
+            0x00, // checksum: 0
+            0x0a, 0x00, 0x00, 0x01, 0x0a, 0x00, 0x00, 0x02,
         ]);
 
         let mut packet = Ipv4Packet::from_bytes(raw.clone()).expect("Failed to parse");
@@ -572,5 +575,3 @@ mod tests {
         assert_eq!(&packet.to_bytes()[..], &raw_copy[..]);
     }
 }
-
-

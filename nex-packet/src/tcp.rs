@@ -4,8 +4,8 @@ use crate::ip::IpNextProtocol;
 use crate::packet::Packet;
 
 use crate::util::{self, Octets};
-use std::net::{IpAddr, Ipv4Addr};
 use std::net::Ipv6Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use nex_core::bitfield::{u16be, u32be, u4};
@@ -497,11 +497,19 @@ impl Packet for TcpPacket {
             let kind = TcpOptionKind::new(options_bytes.get_u8());
             match kind {
                 TcpOptionKind::EOL => {
-                    options.push(TcpOptionPacket { kind, length: None, data: Bytes::new() });
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
                     break;
                 }
                 TcpOptionKind::NOP => {
-                    options.push(TcpOptionPacket { kind, length: None, data: Bytes::new() });
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
                 }
                 _ => {
                     if options_bytes.remaining() < 1 {
@@ -541,9 +549,9 @@ impl Packet for TcpPacket {
         })
     }
     fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)   
+        Self::from_buf(&mut bytes)
     }
-    
+
     fn to_bytes(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(self.header_len() + self.payload.len());
 
@@ -552,7 +560,8 @@ impl Packet for TcpPacket {
         bytes.put_u32(self.header.sequence);
         bytes.put_u32(self.header.acknowledgement);
 
-        let offset_reserved = (self.header.data_offset.to_be() << 4) | (self.header.reserved.to_be() & 0x0F);
+        let offset_reserved =
+            (self.header.data_offset.to_be() << 4) | (self.header.reserved.to_be() & 0x0F);
         bytes.put_u8(offset_reserved);
 
         bytes.put_u8(self.header.flags);
@@ -775,7 +784,9 @@ mod tests {
         assert_eq!(parsed, packet);
         assert_eq!(parsed.to_bytes(), bytes);
         assert_eq!(parsed.header.options.len(), 3);
-        assert_eq!(parsed.header.options[2].get_timestamp(), (0x2c57cda5, 0x02a04192));
+        assert_eq!(
+            parsed.header.options[2].get_timestamp(),
+            (0x2c57cda5, 0x02a04192)
+        );
     }
-
 }

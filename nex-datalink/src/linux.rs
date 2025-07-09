@@ -62,8 +62,7 @@ fn poll_timeout_ms(timeout: Option<libc::timespec>) -> libc::c_int {
     timeout
         .map(|to| {
             let ms = (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000);
-            ms.clamp(i64::from(libc::c_int::MIN), i64::from(libc::c_int::MAX))
-                as libc::c_int
+            ms.clamp(i64::from(libc::c_int::MIN), i64::from(libc::c_int::MAX)) as libc::c_int
         })
         .unwrap_or(-1)
 }

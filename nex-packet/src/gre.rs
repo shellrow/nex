@@ -1,8 +1,8 @@
 //! GRE Packet abstraction.
 
+use crate::packet::Packet;
 use bytes::{Buf, Bytes};
 use nex_core::bitfield::{u1, u16be, u3, u32be, u5};
-use crate::packet::Packet;
 
 /// GRE (Generic Routing Encapsulation) Packet.
 ///

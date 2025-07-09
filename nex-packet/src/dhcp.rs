@@ -439,7 +439,10 @@ mod tests {
         assert_eq!(packet.header.htype, DhcpHardwareType::Ethernet);
         assert_eq!(packet.header.hlen, 6);
         assert_eq!(packet.header.xid, 0x12345678);
-        assert_eq!(packet.header.chaddr, MacAddr::new(0x00, 0x11, 0x22, 0x33, 0x44, 0x55));
+        assert_eq!(
+            packet.header.chaddr,
+            MacAddr::new(0x00, 0x11, 0x22, 0x33, 0x44, 0x55)
+        );
 
         let rebuilt = packet.to_bytes();
         assert_eq!(rebuilt, raw);

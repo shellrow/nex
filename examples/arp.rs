@@ -10,9 +10,9 @@ use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::{get_interfaces, Interface};
 use nex::net::mac::MacAddr;
+use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex::packet::ethernet::EtherType;
 use nex::packet::frame::{Frame, ParseOption};
-use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex_packet::arp::ArpOperation;
 use nex_packet::builder::arp::ArpPacketBuilder;
 use nex_packet::packet::Packet;
@@ -47,7 +47,10 @@ fn main() {
         None => Interface::default().expect("Failed to get default interface"),
     };
 
-    let src_mac = interface.mac_addr.clone().expect("No MAC address on interface");
+    let src_mac = interface
+        .mac_addr
+        .clone()
+        .expect("No MAC address on interface");
     let src_ip = interface.ipv4.get(0).expect("No IPv4 address").addr();
 
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
@@ -63,9 +66,7 @@ fn main() {
 
     let arp_builder = ArpPacketBuilder::new(src_mac, src_ip, target_ip);
 
-    let packet = eth_builder
-        .payload(arp_builder.build().to_bytes())
-        .build();
+    let packet = eth_builder.payload(arp_builder.build().to_bytes()).build();
 
     match tx.send(&packet.to_bytes()) {
         Some(_) => println!("ARP Request sent to {}", target_ip),
@@ -83,7 +84,9 @@ fn main() {
                 match &frame.datalink {
                     Some(dlink) => {
                         if let Some(arp) = &dlink.arp {
-                            if arp.operation == ArpOperation::Reply && arp.sender_proto_addr == target_ip {
+                            if arp.operation == ArpOperation::Reply
+                                && arp.sender_proto_addr == target_ip
+                            {
                                 println!("Received ARP Reply from {}", arp.sender_proto_addr);
                                 println!("MAC address: {}", arp.sender_hw_addr);
                                 println!(

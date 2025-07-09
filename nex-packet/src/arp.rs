@@ -1,10 +1,13 @@
 //! ARP packet abstraction.
 
-use crate::{ethernet::{EtherType, ETHERNET_HEADER_LEN}, packet::Packet};
+use crate::{
+    ethernet::{EtherType, ETHERNET_HEADER_LEN},
+    packet::Packet,
+};
 
 use bytes::{Bytes, BytesMut};
-use nex_core::mac::MacAddr;
 use core::fmt;
+use nex_core::mac::MacAddr;
 use std::net::Ipv4Addr;
 
 #[cfg(feature = "serde")]
@@ -230,9 +233,13 @@ impl ArpHardwareType {
             ArpHardwareType::AsynchronousTransmissionMode => "Asynchronous Transmission Mode (ATM)",
             ArpHardwareType::HDLC => "HDLC",
             ArpHardwareType::FibreChannel => "Fibre Channel",
-            ArpHardwareType::AsynchronousTransmissionMode2 => "Asynchronous Transmission Mode (ATM) 2",
+            ArpHardwareType::AsynchronousTransmissionMode2 => {
+                "Asynchronous Transmission Mode (ATM) 2"
+            }
             ArpHardwareType::SerialLine => "Serial Line",
-            ArpHardwareType::AsynchronousTransmissionMode3 => "Asynchronous Transmission Mode (ATM) 3",
+            ArpHardwareType::AsynchronousTransmissionMode3 => {
+                "Asynchronous Transmission Mode (ATM) 3"
+            }
             ArpHardwareType::MILSTD188220 => "MIL-STD-188-220",
             ArpHardwareType::Metricom => "Metricom",
             ArpHardwareType::IEEE13941995 => "IEEE 1394.1995",
@@ -244,7 +251,9 @@ impl ArpHardwareType {
             ArpHardwareType::ARPSec => "ARPSec",
             ArpHardwareType::IPsecTunnel => "IPsec Tunnel",
             ArpHardwareType::InfiniBand => "InfiniBand (TM)",
-            ArpHardwareType::TIA102Project25CommonAirInterface => "TIA-102 Project 25 Common Air Interface",
+            ArpHardwareType::TIA102Project25CommonAirInterface => {
+                "TIA-102 Project 25 Common Air Interface"
+            }
             ArpHardwareType::WiegandInterface => "Wiegand Interface",
             ArpHardwareType::PureIP => "Pure IP",
             ArpHardwareType::HWEXP1 => "HW_EXP1",
@@ -372,7 +381,7 @@ impl Packet for ArpPacket {
         buf.extend_from_slice(&self.header.target_hw_addr.octets());
         buf.extend_from_slice(&self.header.target_proto_addr.octets());
         buf.extend_from_slice(&self.payload);
-        
+
         Bytes::from(buf)
     }
 
@@ -384,7 +393,7 @@ impl Packet for ArpPacket {
         self.payload.clone()
     }
 
-    fn header_len (&self) -> usize {
+    fn header_len(&self) -> usize {
         ARP_HEADER_LEN
     }
     fn payload_len(&self) -> usize {
@@ -447,13 +456,13 @@ mod tests {
         let raw = [
             0x00, 0x01, // Hardware Type: Ethernet
             0x08, 0x00, // Protocol Type: IPv4
-            0x06,       // HW Addr Len
-            0x04,       // Proto Addr Len
+            0x06, // HW Addr Len
+            0x04, // Proto Addr Len
             0x00, 0x01, // Operation: Request
             0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, // Sender MAC
-            192, 168, 1, 1,                    // Sender IP
+            192, 168, 1, 1, // Sender IP
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Target MAC
-            192, 168, 1, 2                     // Target IP
+            192, 168, 1, 2, // Target IP
         ];
 
         let padded = [&raw[..], &[0xde, 0xad, 0xbe, 0xef]].concat();
@@ -464,11 +473,26 @@ mod tests {
         assert_eq!(packet.header.hw_addr_len, 6);
         assert_eq!(packet.header.proto_addr_len, 4);
         assert_eq!(packet.header.operation, ArpOperation::Request);
-        assert_eq!(packet.header.sender_hw_addr, MacAddr::from_octets([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]));
-        assert_eq!(packet.header.sender_proto_addr, Ipv4Addr::new(192, 168, 1, 1));
-        assert_eq!(packet.header.target_hw_addr, MacAddr::from_octets([0, 0, 0, 0, 0, 0]));
-        assert_eq!(packet.header.target_proto_addr, Ipv4Addr::new(192, 168, 1, 2));
-        assert_eq!(packet.payload, Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(
+            packet.header.sender_hw_addr,
+            MacAddr::from_octets([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])
+        );
+        assert_eq!(
+            packet.header.sender_proto_addr,
+            Ipv4Addr::new(192, 168, 1, 1)
+        );
+        assert_eq!(
+            packet.header.target_hw_addr,
+            MacAddr::from_octets([0, 0, 0, 0, 0, 0])
+        );
+        assert_eq!(
+            packet.header.target_proto_addr,
+            Ipv4Addr::new(192, 168, 1, 2)
+        );
+        assert_eq!(
+            packet.payload,
+            Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef])
+        );
     }
 
     #[test]
@@ -504,14 +528,9 @@ mod tests {
         let raw = [
             0x99, 0x99, // Hardware Type: unknown
             0x08, 0x00, // Protocol Type: IPv4
-            0x06,
-            0x04,
-            0x99, 0x99, // Operation: unknown
-            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-            192, 168, 1, 1,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            192, 168, 1, 2,
-            0x00, 0x01, 0x02, 0x03
+            0x06, 0x04, 0x99, 0x99, // Operation: unknown
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 192, 168, 1, 1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            192, 168, 1, 2, 0x00, 0x01, 0x02, 0x03,
         ];
 
         let packet = ArpPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
@@ -525,5 +544,3 @@ mod tests {
         }
     }
 }
-
-

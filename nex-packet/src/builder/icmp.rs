@@ -1,7 +1,10 @@
 use std::net::Ipv4Addr;
 
-use bytes::{Bytes, BytesMut, BufMut};
-use crate::{icmp::{self, checksum, IcmpCode, IcmpHeader, IcmpPacket, IcmpType}, packet::Packet};
+use crate::{
+    icmp::{self, checksum, IcmpCode, IcmpHeader, IcmpPacket, IcmpType},
+    packet::Packet,
+};
+use bytes::{BufMut, Bytes, BytesMut};
 
 /// Builder for constructing ICMP packets
 #[derive(Debug, Clone)]

@@ -79,3 +79,7 @@ path = "../examples/async_icmp_socket.rs"
 [[example]]
 name = "async_tcp_socket"
 path = "../examples/async_tcp_socket.rs"
+
+[[example]]
+name = "async_udp_socket"
+path = "../examples/async_udp_socket.rs"

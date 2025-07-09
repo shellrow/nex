@@ -1,4 +1,4 @@
-//! Entry point for the nex-next collection of crates.
+//! Entry point for the nex crate collection.
 //!
 //! This crate re-exports the core modules so applications can simply depend on
 //! `nex` and gain access to packet parsing, datalink channels and socket helpers.

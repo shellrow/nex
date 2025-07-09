@@ -608,4 +608,3 @@ impl IpNextProtocol {
         *self as u8
     }
 }
-

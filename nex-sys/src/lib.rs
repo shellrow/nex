@@ -1,3 +1,5 @@
+//! Cross-platform system helpers and low-level wrappers used internally by the nex crates.
+
 #[cfg(not(target_os = "windows"))]
 mod unix;
 #[cfg(not(target_os = "windows"))]

@@ -1,9 +1,9 @@
-use bytes::Bytes;
 use crate::{
+    arp::{ArpHardwareType, ArpHeader, ArpOperation, ArpPacket},
     ethernet::EtherType,
     packet::Packet,
-    arp::{ArpHeader, ArpPacket, ArpHardwareType, ArpOperation},
 };
+use bytes::Bytes;
 use nex_core::mac::MacAddr;
 use std::net::Ipv4Addr;
 

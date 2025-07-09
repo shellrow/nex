@@ -1,6 +1,6 @@
 //! An ICMP packet abstraction.
-use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
 use crate::ipv4::IPV4_HEADER_LEN;
+use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::u16be;
@@ -234,7 +234,6 @@ impl Packet for IcmpPacket {
     fn into_parts(self) -> (Self::Header, Bytes) {
         (self.header, self.payload)
     }
-
 }
 
 impl IcmpPacket {
@@ -322,7 +321,6 @@ pub mod echo_request {
             })
         }
     }
-
 }
 
 pub mod echo_reply {
@@ -396,7 +394,6 @@ pub mod echo_reply {
             })
         }
     }
-
 }
 
 pub mod destination_unreachable {
@@ -471,7 +468,6 @@ pub mod destination_unreachable {
             })
         }
     }
-
 }
 
 pub mod time_exceeded {
@@ -531,8 +527,8 @@ mod tests {
     fn test_echo_request_from_bytes() {
         let raw_bytes = Bytes::from_static(&[
             8, 0, 0x3a, 0xbc, // Type = 8 (Echo Request), Code = 0, Checksum = 0x3abc
-            0x04, 0xd2,       // Identifier = 0x04d2 (1234)
-            0x00, 0x2a,       // Sequence = 0x002a (42)
+            0x04, 0xd2, // Identifier = 0x04d2 (1234)
+            0x00, 0x2a, // Sequence = 0x002a (42)
             b'p', b'i', b'n', b'g',
         ]);
 
@@ -564,7 +560,11 @@ mod tests {
         buf.put_u16(sequence);
         buf.extend_from_slice(&payload);
 
-        let pkt = IcmpPacket { header, payload: buf.freeze() }.with_computed_checksum();
+        let pkt = IcmpPacket {
+            header,
+            payload: buf.freeze(),
+        }
+        .with_computed_checksum();
         let bytes = pkt.to_bytes();
 
         let parsed = IcmpPacket::from_bytes(bytes.clone()).expect("Failed to parse ICMP");
@@ -592,9 +592,14 @@ mod tests {
         buf.put_u16(mtu);
         buf.extend_from_slice(&payload);
 
-        let pkt = IcmpPacket { header, payload: buf.freeze() }.with_computed_checksum();
+        let pkt = IcmpPacket {
+            header,
+            payload: buf.freeze(),
+        }
+        .with_computed_checksum();
         let parsed = IcmpPacket::from_bytes(pkt.to_bytes()).unwrap();
-        let unreachable = destination_unreachable::DestinationUnreachablePacket::try_from(parsed).unwrap();
+        let unreachable =
+            destination_unreachable::DestinationUnreachablePacket::try_from(parsed).unwrap();
 
         assert_eq!(unreachable.next_hop_mtu, mtu);
         assert_eq!(unreachable.payload, payload);
@@ -615,7 +620,11 @@ mod tests {
         buf.put_u32(unused);
         buf.extend_from_slice(&payload);
 
-        let pkt = IcmpPacket { header, payload: buf.freeze() }.with_computed_checksum();
+        let pkt = IcmpPacket {
+            header,
+            payload: buf.freeze(),
+        }
+        .with_computed_checksum();
         let parsed = IcmpPacket::from_bytes(pkt.to_bytes()).unwrap();
         let exceeded = time_exceeded::TimeExceededPacket::try_from(parsed).unwrap();
 

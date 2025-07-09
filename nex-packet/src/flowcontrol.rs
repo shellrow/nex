@@ -7,7 +7,7 @@ use nex_core::bitfield::u16be;
 use crate::packet::Packet;
 
 /// Represents the opcode field in an Ethernet Flow Control packet.
-/// 
+///
 /// Flow control opcodes are defined in IEEE 802.3x
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
@@ -34,15 +34,19 @@ impl FlowControlOpcode {
 
 impl fmt::Display for FlowControlOpcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            FlowControlOpcode::Pause => "pause",
-            FlowControlOpcode::Unknown(_) => "unknown",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                FlowControlOpcode::Pause => "pause",
+                FlowControlOpcode::Unknown(_) => "unknown",
+            }
+        )
     }
 }
 
 /// Represents an Ethernet Flow Control packet defined by IEEE 802.3x.
-/// 
+///
 /// [EtherTypes::FlowControl](crate::ethernet::EtherTypes::FlowControl) ethertype (0x8808).
 pub struct FlowControlPacket {
     pub command: FlowControlOpcode,
@@ -120,8 +124,8 @@ mod tests {
     #[test]
     fn flowcontrol_pause_test() {
         let packet = Bytes::from_static(&[
-            0x00, 0x01,       // Opcode: Pause
-            0x12, 0x34,       // Quanta: 0x1234
+            0x00, 0x01, // Opcode: Pause
+            0x12, 0x34, // Quanta: 0x1234
             0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, // Padding ...
         ]);
 

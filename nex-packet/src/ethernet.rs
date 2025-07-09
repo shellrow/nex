@@ -1,7 +1,7 @@
 //! An ethernet packet abstraction.
 
-use core::fmt;
 use bytes::Bytes;
+use core::fmt;
 use nex_core::mac::MacAddr;
 
 #[cfg(feature = "serde")]
@@ -198,7 +198,8 @@ impl Packet for EthernetPacket {
             return None;
         }
         let destination = MacAddr::from_octets(bytes[0..MAC_ADDR_LEN].try_into().unwrap());
-        let source = MacAddr::from_octets(bytes[MAC_ADDR_LEN..2 * MAC_ADDR_LEN].try_into().unwrap());
+        let source =
+            MacAddr::from_octets(bytes[MAC_ADDR_LEN..2 * MAC_ADDR_LEN].try_into().unwrap());
         let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
         let payload = Bytes::copy_from_slice(&bytes[ETHERNET_HEADER_LEN..]);
 
@@ -294,12 +295,18 @@ mod tests {
         let raw = [
             0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, // dst
             0x11, 0x22, 0x33, 0x44, 0x55, 0x66, // src
-            0x08, 0x00,                         // EtherType: IPv4
-            0xde, 0xad, 0xbe, 0xef              // Payload (dummy)
+            0x08, 0x00, // EtherType: IPv4
+            0xde, 0xad, 0xbe, 0xef, // Payload (dummy)
         ];
         let packet = EthernetPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
-        assert_eq!(packet.get_destination(), MacAddr::from_octets([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]));
-        assert_eq!(packet.get_source(), MacAddr::from_octets([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]));
+        assert_eq!(
+            packet.get_destination(),
+            MacAddr::from_octets([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])
+        );
+        assert_eq!(
+            packet.get_source(),
+            MacAddr::from_octets([0x11, 0x22, 0x33, 0x44, 0x55, 0x66])
+        );
         assert_eq!(packet.get_ethertype(), EtherType::Ipv4);
         assert_eq!(packet.payload.len(), 4);
     }
@@ -344,10 +351,9 @@ mod tests {
     #[test]
     fn test_ethernet_unknown_ethertype() {
         let raw = [
-            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
-            0xde, 0xad, // Unknown EtherType
-            0x00, 0x11, 0x22, 0x33
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0xde,
+            0xad, // Unknown EtherType
+            0x00, 0x11, 0x22, 0x33,
         ];
         let packet = EthernetPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
         match packet.get_ethertype() {

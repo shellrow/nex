@@ -12,14 +12,14 @@ use nex::datalink;
 use nex::datalink::Channel::Ethernet;
 use nex::net::interface::Interface;
 use nex::net::mac::MacAddr;
-use nex::packet::ethernet::EtherType;
-use nex::packet::frame::{Frame, ParseOption};
-use nex::packet::icmp::IcmpType;
-use nex::packet::icmpv6::Icmpv6Type;
 use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex::packet::builder::ipv4::Ipv4PacketBuilder;
 use nex::packet::builder::ipv6::Ipv6PacketBuilder;
 use nex::packet::builder::udp::UdpPacketBuilder;
+use nex::packet::ethernet::EtherType;
+use nex::packet::frame::{Frame, ParseOption};
+use nex::packet::icmp::IcmpType;
+use nex::packet::icmpv6::Icmpv6Type;
 use nex_packet::ip::IpNextProtocol;
 use nex_packet::ipv4::Ipv4Flags;
 use nex_packet::packet::Packet;
@@ -132,7 +132,10 @@ fn main() {
                 if let Some(ip_layer) = &frame.ip {
                     if let Some(icmp) = &ip_layer.icmp {
                         if icmp.icmp_type == IcmpType::DestinationUnreachable {
-                            println!("Received ICMP Port Unreachable (v4) from {}", ip_layer.ipv4.as_ref().unwrap().source);
+                            println!(
+                                "Received ICMP Port Unreachable (v4) from {}",
+                                ip_layer.ipv4.as_ref().unwrap().source
+                            );
                             println!(
                                 "---- Interface: {}, Total Length: {} bytes ----",
                                 interface.name,
@@ -144,7 +147,10 @@ fn main() {
                     }
                     if let Some(icmpv6) = &ip_layer.icmpv6 {
                         if icmpv6.icmpv6_type == Icmpv6Type::DestinationUnreachable {
-                            println!("Received ICMP Port Unreachable (v6) from {}", ip_layer.ipv6.as_ref().unwrap().source);
+                            println!(
+                                "Received ICMP Port Unreachable (v6) from {}",
+                                ip_layer.ipv6.as_ref().unwrap().source
+                            );
                             println!(
                                 "---- Interface: {}, Total Length: {} bytes ----",
                                 interface.name,

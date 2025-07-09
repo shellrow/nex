@@ -1,13 +1,9 @@
-use bytes::Bytes;
-use std::net::Ipv6Addr;
-use nex_core::mac::MacAddr;
-use crate::icmpv6::{
-    self, checksum, Icmpv6Header, Icmpv6Packet, Icmpv6Type
-};
-use crate::icmpv6::ndp::{
-    NdpOptionPacket, NdpOptionTypes, NeighborSolicitPacket
-};
+use crate::icmpv6::ndp::{NdpOptionPacket, NdpOptionTypes, NeighborSolicitPacket};
+use crate::icmpv6::{self, checksum, Icmpv6Header, Icmpv6Packet, Icmpv6Type};
 use crate::packet::Packet;
+use bytes::Bytes;
+use nex_core::mac::MacAddr;
+use std::net::Ipv6Addr;
 
 /// Length rounded up to an 8-byte multiple (for option length)
 fn octets_len(len: usize) -> u8 {

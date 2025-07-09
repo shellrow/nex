@@ -114,7 +114,7 @@ fn vxlan_packet_test() {
         0x08, // I flag
         0x00, 0x00, 0x00, // Reserved
         0x12, 0x34, 0x56, // VNI
-        0x00 // Reserved
+        0x00, // Reserved
     ]);
     let vxlan_packet = Vxlan::from_bytes(packet.clone()).unwrap();
     assert_eq!(vxlan_packet.to_bytes(), packet);

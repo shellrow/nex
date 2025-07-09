@@ -4,16 +4,16 @@
 //! Example: async_icmp_socket 192.168.1
 
 use bytes::Bytes;
-use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
+use nex::net::interface::{get_interfaces, Interface};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::icmp::{self, IcmpType};
+use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::env;
-use nex::net::interface::{Interface, get_interfaces};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
-use rand::{Rng, thread_rng};
 use tokio::sync::Mutex;
 use tokio::time;
 
@@ -24,7 +24,10 @@ async fn main() -> std::io::Result<()> {
     assert!(parts.len() == 3, "prefix must be a.b.c");
 
     let interface = match env::args().nth(2) {
-        Some(name) => get_interfaces().into_iter().find(|i| i.name == name).expect("interface not found"),
+        Some(name) => get_interfaces()
+            .into_iter()
+            .find(|i| i.name == name)
+            .expect("interface not found"),
         None => Interface::default().expect("default interface"),
     };
 
