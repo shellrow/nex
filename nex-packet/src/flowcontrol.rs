@@ -47,7 +47,7 @@ impl fmt::Display for FlowControlOpcode {
 
 /// Represents an Ethernet Flow Control packet defined by IEEE 802.3x.
 ///
-/// [EtherTypes::FlowControl](crate::ethernet::EtherTypes::FlowControl) ethertype (0x8808).
+/// [EtherType::FlowControl](crate::ethernet::EtherType::FlowControl) ethertype (0x8808).
 pub struct FlowControlPacket {
     pub command: FlowControlOpcode,
     pub quanta: u16be,
