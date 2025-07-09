@@ -1,7 +1,18 @@
 use bytes::Bytes;
 use nex_core::mac::MacAddr;
 
-use crate::{arp::{ArpHeader, ArpPacket}, ethernet::{EtherType, EthernetHeader, EthernetPacket}, icmp::{IcmpHeader, IcmpPacket}, icmpv6::{Icmpv6Header, Icmpv6Packet}, ip::IpNextProtocol, ipv4::{Ipv4Header, Ipv4Packet}, ipv6::{Ipv6Header, Ipv6Packet}, packet::Packet, tcp::{TcpHeader, TcpPacket}, udp::{UdpHeader, UdpPacket}};
+use crate::{
+    arp::{ArpHeader, ArpPacket},
+    ethernet::{EtherType, EthernetHeader, EthernetPacket},
+    icmp::{IcmpHeader, IcmpPacket},
+    icmpv6::{Icmpv6Header, Icmpv6Packet},
+    ip::IpNextProtocol,
+    ipv4::{Ipv4Header, Ipv4Packet},
+    ipv6::{Ipv6Header, Ipv6Packet},
+    packet::Packet,
+    tcp::{TcpHeader, TcpPacket},
+    udp::{UdpHeader, UdpPacket},
+};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -38,7 +49,10 @@ pub struct ParseOption {
 
 impl Default for ParseOption {
     fn default() -> Self {
-        Self { from_ip_packet: false, offset: 0 }
+        Self {
+            from_ip_packet: false,
+            offset: 0,
+        }
     }
 }
 

@@ -3,23 +3,34 @@
 //! Usage: icmp_socket <TARGET IP> <INTERFACE>
 
 use bytes::Bytes;
-use nex_socket::icmp::{IcmpConfig, IcmpKind, IcmpSocket};
+use nex::net::interface::{get_interfaces, Interface};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::builder::icmpv6::Icmpv6PacketBuilder;
 use nex_packet::{icmp, icmpv6};
-use nex::net::interface::{Interface, get_interfaces};
+use nex_socket::icmp::{IcmpConfig, IcmpKind, IcmpSocket};
 use std::env;
 use std::net::{IpAddr, SocketAddr};
 
 fn main() -> std::io::Result<()> {
-    let target_ip: IpAddr = env::args().nth(1).expect("Missing target IP").parse().expect("parse ip");
+    let target_ip: IpAddr = env::args()
+        .nth(1)
+        .expect("Missing target IP")
+        .parse()
+        .expect("parse ip");
     let interface = match env::args().nth(2) {
-        Some(name) => get_interfaces().into_iter().find(|i| i.name == name).expect("interface not found"),
+        Some(name) => get_interfaces()
+            .into_iter()
+            .find(|i| i.name == name)
+            .expect("interface not found"),
         None => Interface::default().expect("default interface"),
     };
 
     let src_ip = match target_ip {
-        IpAddr::V4(_) => interface.ipv4.get(0).map(|v| IpAddr::V4(v.addr())).expect("No IPv4 address"),
+        IpAddr::V4(_) => interface
+            .ipv4
+            .get(0)
+            .map(|v| IpAddr::V4(v.addr()))
+            .expect("No IPv4 address"),
         IpAddr::V6(_) => interface
             .ipv6
             .iter()
@@ -28,7 +39,11 @@ fn main() -> std::io::Result<()> {
             .expect("No global IPv6 address"),
     };
 
-    let kind = if target_ip.is_ipv4() { IcmpKind::V4 } else { IcmpKind::V6 };
+    let kind = if target_ip.is_ipv4() {
+        IcmpKind::V4
+    } else {
+        IcmpKind::V6
+    };
     let socket = IcmpSocket::new(&IcmpConfig::new(kind))?;
 
     let packet = match (src_ip, target_ip) {

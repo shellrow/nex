@@ -17,7 +17,7 @@ use nex_core::mac::MacAddr;
 use nex_packet::ethernet::EthernetHeader;
 use nex_packet::packet::Packet;
 use std::env;
-use std::net::{IpAddr};
+use std::net::IpAddr;
 
 fn main() {
     let interface: Interface = match env::args().nth(1) {
@@ -50,7 +50,8 @@ fn main() {
                 );
 
                 let eth_packet = if interface.is_tun()
-                    || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback())
+                    || (cfg!(any(target_os = "macos", target_os = "ios"))
+                        && interface.is_loopback())
                 {
                     let offset = if interface.is_loopback() { 14 } else { 0 };
                     let payload = Bytes::copy_from_slice(&packet[offset..]);
@@ -59,7 +60,11 @@ fn main() {
                         header: EthernetHeader {
                             destination: MacAddr::zero(),
                             source: MacAddr::zero(),
-                            ethertype: if version == 4 { EtherType::Ipv4 } else { EtherType::Ipv6 },
+                            ethertype: if version == 4 {
+                                EtherType::Ipv4
+                            } else {
+                                EtherType::Ipv6
+                            },
                         },
                         payload,
                     }
@@ -69,11 +74,19 @@ fn main() {
 
                 if let EtherType::Ipv4 = eth_packet.header.ethertype {
                     if let Some(ipv4) = Ipv4Packet::from_bytes(eth_packet.payload.clone()) {
-                        handle_udp(ipv4.payload, IpAddr::V4(ipv4.header.source), IpAddr::V4(ipv4.header.destination));
+                        handle_udp(
+                            ipv4.payload,
+                            IpAddr::V4(ipv4.header.source),
+                            IpAddr::V4(ipv4.header.destination),
+                        );
                     }
                 } else if let EtherType::Ipv6 = eth_packet.header.ethertype {
                     if let Some(ipv6) = Ipv6Packet::from_bytes(eth_packet.payload.clone()) {
-                        handle_udp(ipv6.payload, IpAddr::V6(ipv6.header.source), IpAddr::V6(ipv6.header.destination));
+                        handle_udp(
+                            ipv6.payload,
+                            IpAddr::V6(ipv6.header.source),
+                            IpAddr::V6(ipv6.header.destination),
+                        );
                     }
                 }
             }
@@ -86,24 +99,38 @@ fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
     if let Some(udp) = UdpPacket::from_bytes(packet.clone()) {
         if udp.payload.len() > 0 {
             if let Some(dns) = DnsPacket::from_bytes(udp.payload.clone()) {
-                println!("DNS Packet: {}:{} > {}:{}", src, udp.header.source, dst, udp.header.destination);
+                println!(
+                    "DNS Packet: {}:{} > {}:{}",
+                    src, udp.header.source, dst, udp.header.destination
+                );
 
                 for query in &dns.queries {
-                    println!("  Query: {:?} (type: {:?}, class: {:?})", query.get_qname_parsed(), query.qtype, query.qclass);
+                    println!(
+                        "  Query: {:?} (type: {:?}, class: {:?})",
+                        query.get_qname_parsed(),
+                        query.qtype,
+                        query.qclass
+                    );
                 }
 
                 for response in &dns.responses {
                     match response.rtype {
                         DnsType::A | DnsType::AAAA => {
                             if let Some(ip) = response.get_ip() {
-                                println!("  Response: {} (type: {:?}, ttl: {})", ip, response.rtype, response.ttl);
+                                println!(
+                                    "  Response: {} (type: {:?}, ttl: {})",
+                                    ip, response.rtype, response.ttl
+                                );
                             } else {
                                 println!("  Invalid IP data for type: {:?}", response.rtype);
                             }
                         }
                         DnsType::CNAME | DnsType::NS | DnsType::PTR => {
                             if let Some(name) = response.get_name() {
-                                println!("  Response: {} (type: {:?}, ttl: {})", name, response.rtype, response.ttl);
+                                println!(
+                                    "  Response: {} (type: {:?}, ttl: {})",
+                                    name, response.rtype, response.ttl
+                                );
                             } else {
                                 println!("  Invalid name data for type: {:?}", response.rtype);
                             }

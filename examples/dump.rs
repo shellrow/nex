@@ -12,9 +12,9 @@ use nex::packet::icmpv6::Icmpv6Packet;
 use nex::packet::ip::IpNextProtocol;
 use nex::packet::ipv4::Ipv4Packet;
 use nex::packet::ipv6::Ipv6Packet;
+use nex::packet::packet::Packet;
 use nex::packet::tcp::TcpPacket;
 use nex::packet::udp::UdpPacket;
-use nex::packet::packet::Packet;
 use nex_packet::ethernet::EthernetHeader;
 use nex_packet::{icmp, icmpv6};
 use std::env;
@@ -61,7 +61,7 @@ fn main() {
                     capture_no,
                     packet.len()
                 );
-                
+
                 if interface.is_tun()
                     || (cfg!(any(target_os = "macos", target_os = "ios"))
                         && interface.is_loopback())
@@ -74,14 +74,16 @@ fn main() {
                     }
                     let payload = Bytes::copy_from_slice(&packet[payload_offset..]);
                     if packet.len() > payload_offset {
-                        let version = Ipv4Packet::from_buf(packet)
-                            .unwrap()
-                            .header.version;
+                        let version = Ipv4Packet::from_buf(packet).unwrap().header.version;
                         let fake_eth = EthernetPacket {
                             header: EthernetHeader {
                                 destination: MacAddr::zero(),
                                 source: MacAddr::zero(),
-                                ethertype: if version == 4 { EtherType::Ipv4 } else { EtherType::Ipv6 },
+                                ethertype: if version == 4 {
+                                    EtherType::Ipv4
+                                } else {
+                                    EtherType::Ipv6
+                                },
                             },
                             payload,
                         };
@@ -220,7 +222,8 @@ fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
         let total_len = icmp_packet.total_len();
         match icmp_packet.header.icmp_type {
             IcmpType::EchoRequest => {
-                let echo_request_packet = icmp::echo_request::EchoRequestPacket::try_from(icmp_packet).unwrap();
+                let echo_request_packet =
+                    icmp::echo_request::EchoRequestPacket::try_from(icmp_packet).unwrap();
                 println!(
                     "ICMP echo request {} -> {} (seq={:?}, id={:?}), length: {}",
                     source,
@@ -231,7 +234,8 @@ fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
                 );
             }
             IcmpType::EchoReply => {
-                let echo_reply_packet = icmp::echo_reply::EchoReplyPacket::try_from(icmp_packet).unwrap();
+                let echo_reply_packet =
+                    icmp::echo_reply::EchoReplyPacket::try_from(icmp_packet).unwrap();
                 println!(
                     "ICMP echo reply {} -> {} (seq={:?}, id={:?}), length: {}",
                     source,
@@ -242,7 +246,11 @@ fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
                 );
             }
             IcmpType::DestinationUnreachable => {
-                let unreachable_packet = icmp::destination_unreachable::DestinationUnreachablePacket::try_from(icmp_packet).unwrap();
+                let unreachable_packet =
+                    icmp::destination_unreachable::DestinationUnreachablePacket::try_from(
+                        icmp_packet,
+                    )
+                    .unwrap();
                 println!(
                     "ICMP destination unreachable {} -> {} (code={:?}), next_hop_mtu={}, length: {}",
                     source,
@@ -253,22 +261,17 @@ fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
                 );
             }
             IcmpType::TimeExceeded => {
-                let time_exceeded_packet = icmp::time_exceeded::TimeExceededPacket::try_from(icmp_packet).unwrap();
+                let time_exceeded_packet =
+                    icmp::time_exceeded::TimeExceededPacket::try_from(icmp_packet).unwrap();
                 println!(
                     "ICMP time exceeded {} -> {} (code={:?}), length: {}",
-                    source,
-                    destination,
-                    time_exceeded_packet.header.icmp_code,
-                    total_len
+                    source, destination, time_exceeded_packet.header.icmp_code, total_len
                 );
             }
             _ => {
                 println!(
                     "ICMP packet {} -> {} (type={:?}), length: {}",
-                    source,
-                    destination,
-                    icmp_packet.header.icmp_type,
-                    total_len
+                    source, destination, icmp_packet.header.icmp_type, total_len
                 )
             }
         }
@@ -282,7 +285,8 @@ fn handle_icmpv6_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
     if let Some(icmpv6_packet) = icmpv6_packet {
         match icmpv6_packet.header.icmpv6_type {
             nex::packet::icmpv6::Icmpv6Type::EchoRequest => {
-                let echo_request_packet = icmpv6::echo_request::EchoRequestPacket::try_from(icmpv6_packet).unwrap();
+                let echo_request_packet =
+                    icmpv6::echo_request::EchoRequestPacket::try_from(icmpv6_packet).unwrap();
                 println!(
                     "ICMPv6 echo request {} -> {} (type={:?}), length: {}",
                     source,
@@ -292,7 +296,8 @@ fn handle_icmpv6_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
                 );
             }
             nex::packet::icmpv6::Icmpv6Type::EchoReply => {
-                let echo_reply_packet = icmpv6::echo_reply::EchoReplyPacket::try_from(icmpv6_packet).unwrap();
+                let echo_reply_packet =
+                    icmpv6::echo_reply::EchoReplyPacket::try_from(icmpv6_packet).unwrap();
                 println!(
                     "ICMPv6 echo reply {} -> {} (type={:?}), length: {}",
                     source,
@@ -302,7 +307,8 @@ fn handle_icmpv6_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
                 );
             }
             nex::packet::icmpv6::Icmpv6Type::NeighborSolicitation => {
-                let ns_packet = icmpv6::ndp::NeighborSolicitPacket::try_from(icmpv6_packet).unwrap();
+                let ns_packet =
+                    icmpv6::ndp::NeighborSolicitPacket::try_from(icmpv6_packet).unwrap();
                 println!(
                     "ICMPv6 neighbor solicitation {} -> {} (type={:?}), length: {}",
                     source,

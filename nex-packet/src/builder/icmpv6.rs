@@ -1,15 +1,15 @@
 use std::net::Ipv6Addr;
 
-use bytes::{Bytes, BytesMut, BufMut};
 use crate::{
     icmpv6::{self, checksum, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
     packet::Packet,
 };
+use bytes::{BufMut, Bytes, BytesMut};
 
 /// Builder for constructing ICMPv6 packets
 #[derive(Debug, Clone)]
 pub struct Icmpv6PacketBuilder {
-    source: Ipv6Addr, 
+    source: Ipv6Addr,
     destination: Ipv6Addr,
     packet: Icmpv6Packet,
 }

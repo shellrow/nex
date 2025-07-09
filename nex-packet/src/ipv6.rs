@@ -1,7 +1,7 @@
-use std::net::Ipv6Addr;
-use bytes::{Bytes, BytesMut, BufMut};
-use crate::packet::Packet;
 use crate::ip::IpNextProtocol;
+use crate::packet::Packet;
+use bytes::{BufMut, Bytes, BytesMut};
+use std::net::Ipv6Addr;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -11,9 +11,9 @@ pub const IPV6_HEADER_LEN: usize = 40;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ipv6Header {
-    pub version: u8,         // 4 bits
-    pub traffic_class: u8,   // 8 bits
-    pub flow_label: u32,     // 20 bits
+    pub version: u8,       // 4 bits
+    pub traffic_class: u8, // 8 bits
+    pub flow_label: u32,   // 20 bits
     pub payload_length: u16,
     pub next_header: IpNextProtocol,
     pub hop_limit: u8,
@@ -30,7 +30,7 @@ pub struct Ipv6Packet {
 
 impl Packet for Ipv6Packet {
     type Header = Ipv6Header;
-    
+
     fn from_buf(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < IPV6_HEADER_LEN {
             return None;
@@ -39,7 +39,8 @@ impl Packet for Ipv6Packet {
         // --- Parse the header section ---
         let version_traffic_flow = &bytes[..4];
         let version = version_traffic_flow[0] >> 4;
-        let traffic_class = ((version_traffic_flow[0] & 0x0F) << 4) | (version_traffic_flow[1] >> 4);
+        let traffic_class =
+            ((version_traffic_flow[0] & 0x0F) << 4) | (version_traffic_flow[1] >> 4);
         let flow_label = u32::from(version_traffic_flow[1] & 0x0F) << 16
             | u32::from(version_traffic_flow[2]) << 8
             | u32::from(version_traffic_flow[3]);
@@ -68,7 +69,9 @@ impl Packet for Ipv6Packet {
 
         loop {
             match next_header {
-                IpNextProtocol::Hopopt | IpNextProtocol::Ipv6Route | IpNextProtocol::Ipv6Frag
+                IpNextProtocol::Hopopt
+                | IpNextProtocol::Ipv6Route
+                | IpNextProtocol::Ipv6Frag
                 | IpNextProtocol::Ipv6Opts => {
                     if offset + 2 > bytes.len() {
                         return None;
@@ -84,13 +87,18 @@ impl Packet for Ipv6Packet {
                                 return None;
                             }
 
-                            let data = Bytes::copy_from_slice(&bytes[offset + 2 .. offset + total_len]);
+                            let data =
+                                Bytes::copy_from_slice(&bytes[offset + 2..offset + total_len]);
                             let ext = match next_header {
-                                IpNextProtocol::Hopopt => Ipv6ExtensionHeader::HopByHop { next: nh, data },
-                                IpNextProtocol::Ipv6Opts => Ipv6ExtensionHeader::Destination { next: nh, data },
-                                _ => Ipv6ExtensionHeader::Raw { 
-                                    next: nh, 
-                                    raw: Bytes::copy_from_slice(&bytes[offset .. offset + total_len]), 
+                                IpNextProtocol::Hopopt => {
+                                    Ipv6ExtensionHeader::HopByHop { next: nh, data }
+                                }
+                                IpNextProtocol::Ipv6Opts => {
+                                    Ipv6ExtensionHeader::Destination { next: nh, data }
+                                }
+                                _ => Ipv6ExtensionHeader::Raw {
+                                    next: nh,
+                                    raw: Bytes::copy_from_slice(&bytes[offset..offset + total_len]),
                                 },
                             };
 
@@ -111,7 +119,8 @@ impl Packet for Ipv6Packet {
                                 return None;
                             }
 
-                            let data = Bytes::copy_from_slice(&bytes[offset + 4 .. offset + total_len]);
+                            let data =
+                                Bytes::copy_from_slice(&bytes[offset + 4..offset + total_len]);
                             extensions.push(Ipv6ExtensionHeader::Routing {
                                 next: nh,
                                 routing_type,
@@ -129,12 +138,15 @@ impl Packet for Ipv6Packet {
                             }
 
                             //let reserved = bytes[offset + 1];
-                            let frag_off_flags = u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]);
+                            let frag_off_flags =
+                                u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]);
                             let offset_val = frag_off_flags >> 3;
                             let more = (frag_off_flags & 0x1) != 0;
                             let id = u32::from_be_bytes([
-                                bytes[offset + 4], bytes[offset + 5],
-                                bytes[offset + 6], bytes[offset + 7],
+                                bytes[offset + 4],
+                                bytes[offset + 5],
+                                bytes[offset + 6],
+                                bytes[offset + 7],
                             ]);
 
                             extensions.push(Ipv6ExtensionHeader::Fragment {
@@ -172,7 +184,8 @@ impl Packet for Ipv6Packet {
 
         // --- 1. Basic header (first 40 bytes) ---
         let vtf_1 = (self.header.version << 4) | (self.header.traffic_class >> 4);
-        let vtf_2 = ((self.header.traffic_class & 0x0F) << 4) | ((self.header.flow_label >> 16) as u8);
+        let vtf_2 =
+            ((self.header.traffic_class & 0x0F) << 4) | ((self.header.flow_label >> 16) as u8);
         let vtf_3 = (self.header.flow_label >> 8) as u8;
         let vtf_4 = self.header.flow_label as u8;
 
@@ -182,7 +195,9 @@ impl Packet for Ipv6Packet {
         buf.put_u8(vtf_4);
         buf.put_u16(self.header.payload_length);
         // First next_header (first extension header if present)
-        let first_next_header = self.extensions.first()
+        let first_next_header = self
+            .extensions
+            .first()
             .map(|ext| ext.next_protocol())
             .unwrap_or(self.header.next_header);
         buf.put_u8(first_next_header.value());
@@ -222,7 +237,12 @@ impl Packet for Ipv6Packet {
                     }
                 }
 
-                Ipv6ExtensionHeader::Fragment { next, offset, more, id } => {
+                Ipv6ExtensionHeader::Fragment {
+                    next,
+                    offset,
+                    more,
+                    id,
+                } => {
                     buf.put_u8(next.value());
                     buf.put_u8(0); // reserved
                     let offset_flags = (offset << 3) | if *more { 1 } else { 0 };
@@ -290,11 +310,30 @@ pub enum ExtensionHeaderType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ipv6ExtensionHeader {
-    HopByHop { next: IpNextProtocol, data: Bytes },
-    Destination { next: IpNextProtocol, data: Bytes },
-    Routing { next: IpNextProtocol, routing_type: u8, segments_left: u8, data: Bytes },
-    Fragment { next: IpNextProtocol, offset: u16, more: bool, id: u32 },
-    Raw { next: IpNextProtocol, raw: Bytes },
+    HopByHop {
+        next: IpNextProtocol,
+        data: Bytes,
+    },
+    Destination {
+        next: IpNextProtocol,
+        data: Bytes,
+    },
+    Routing {
+        next: IpNextProtocol,
+        routing_type: u8,
+        segments_left: u8,
+        data: Bytes,
+    },
+    Fragment {
+        next: IpNextProtocol,
+        offset: u16,
+        more: bool,
+        id: u32,
+    },
+    Raw {
+        next: IpNextProtocol,
+        raw: Bytes,
+    },
 }
 
 impl Ipv6ExtensionHeader {
@@ -389,20 +428,14 @@ mod tests {
 
         let raw_bytes = Bytes::from_static(&[
             // Version(6), Traffic Class(0xa), Flow Label(0x12345)
-            0x60, 0xA1, 0x23, 0x45,
-            // Payload Length: 8 bytes
-            0x00, 0x08,
-            // Next Header: TCP (6)
-            0x06,
-            // Hop Limit
-            0x40,
-            // Source IP
-            0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x02, 0x1a, 0x2b, 0xff, 0xfe, 0x1a, 0x2b, 0x3c,
-            // Destination IP
-            0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
-            // Payload (dummy 8 bytes)
+            0x60, 0xA1, 0x23, 0x45, // Payload Length: 8 bytes
+            0x00, 0x08, // Next Header: TCP (6)
+            0x06, // Hop Limit
+            0x40, // Source IP
+            0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1a, 0x2b, 0xff, 0xfe, 0x1a,
+            0x2b, 0x3c, // Destination IP
+            0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x02, // Payload (dummy 8 bytes)
             b'H', b'e', b'l', b'l', b'o', b'!', b'!', b'\n',
         ]);
 

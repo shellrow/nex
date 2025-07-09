@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use socket2::Type as SockType;
+use std::net::SocketAddr;
 
 /// ICMP protocol version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,7 +27,7 @@ impl IcmpConfig {
             ttl: None,
             interface: None,
             sock_type_hint: SockType::DGRAM, // DGRAM preferred on Linux, RAW fallback on macOS/Windows
-            fib: None, // FreeBSD only
+            fib: None,                       // FreeBSD only
         }
     }
 
@@ -76,4 +76,3 @@ mod tests {
         assert_eq!(cfg.sock_type_hint, Type::RAW);
     }
 }
-

@@ -46,5 +46,4 @@ pub trait Packet: Sized {
     }
 
     fn into_parts(self) -> (Self::Header, Bytes);
-    
 }

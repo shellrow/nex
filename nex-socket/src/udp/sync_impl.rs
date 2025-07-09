@@ -89,18 +89,19 @@ impl UdpSocket {
         };
 
         let (n, addr) = self.socket.recv_from(buf_maybe)?;
-        let addr = addr.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid address format")
-        })?;
+        let addr = addr
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid address format"))?;
 
         Ok((n, addr))
     }
 
     /// Retrieve the local socket address.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()?.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Failed to get socket address")
-        })
+        self.socket
+            .local_addr()?
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get socket address"))
     }
 
     /// Convert into a raw `std::net::UdpSocket`.
@@ -132,4 +133,3 @@ mod tests {
         assert!(addr.is_ipv4());
     }
 }
-

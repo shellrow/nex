@@ -1,6 +1,6 @@
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
-use std::net::{SocketAddr, TcpStream, TcpListener};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
 
 use crate::tcp::TcpConfig;
@@ -97,7 +97,10 @@ impl TcpSocket {
         // Try to connect first
         match self.socket.connect(&target.into()) {
             Ok(_) => { /* succeeded immediately */ }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock || err.raw_os_error() == Some(libc::EINPROGRESS) => {
+            Err(err)
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.raw_os_error() == Some(libc::EINPROGRESS) =>
+            {
                 // Continue waiting
             }
             Err(e) => return Err(e),
@@ -107,7 +110,10 @@ impl TcpSocket {
         let timeout_ms = timeout.as_millis() as i32;
         use std::os::unix::io::BorrowedFd;
         // Safety: raw_fd is valid for the lifetime of this scope
-        let mut fds = [PollFd::new(unsafe { BorrowedFd::borrow_raw(raw_fd) }, PollFlags::POLLOUT)];
+        let mut fds = [PollFd::new(
+            unsafe { BorrowedFd::borrow_raw(raw_fd) },
+            PollFlags::POLLOUT,
+        )];
         let n = poll(&mut fds, Some(timeout_ms as u16))?;
 
         if n == 0 {
@@ -115,7 +121,11 @@ impl TcpSocket {
         }
 
         // Check the result with `SO_ERROR`
-        let err: i32 = self.socket.take_error()?.map(|e| e.raw_os_error().unwrap_or(0)).unwrap_or(0);
+        let err: i32 = self
+            .socket
+            .take_error()?
+            .map(|e| e.raw_os_error().unwrap_or(0))
+            .unwrap_or(0);
         if err != 0 {
             return Err(io::Error::from_raw_os_error(err));
         }
@@ -134,12 +144,11 @@ impl TcpSocket {
 
     #[cfg(windows)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+        use std::mem::size_of;
         use std::os::windows::io::AsRawSocket;
         use windows_sys::Win32::Networking::WinSock::{
-            WSAPOLLFD, WSAPoll, POLLWRNORM, SOCKET_ERROR, SO_ERROR, SOL_SOCKET,
-            getsockopt, SOCKET,
+            getsockopt, WSAPoll, POLLWRNORM, SOCKET, SOCKET_ERROR, SOL_SOCKET, SO_ERROR, WSAPOLLFD,
         };
-        use std::mem::size_of;
 
         let sock = self.socket.as_raw_socket() as SOCKET;
         self.socket.set_nonblocking(true)?;
@@ -222,9 +231,9 @@ impl TcpSocket {
         };
 
         let (n, addr) = self.socket.recv_from(buf_maybe)?;
-        let addr = addr.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid address format")
-        })?;
+        let addr = addr
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid address format"))?;
 
         Ok((n, addr))
     }
@@ -254,16 +263,20 @@ impl TcpSocket {
         #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "fuchsia")))]
         {
             let _ = iface;
-            Err(io::Error::new(io::ErrorKind::Unsupported, "bind_device not supported on this OS"))
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "bind_device not supported on this OS",
+            ))
         }
     }
 
     // --- information helpers ---
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()?.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Failed to retrieve local address")
-        })
+        self.socket
+            .local_addr()?
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to retrieve local address"))
     }
 
     #[cfg(unix)]

@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
-use crate::udp::{UdpPacket, UdpHeader, UDP_HEADER_LEN};
 use crate::packet::Packet;
+use crate::udp::{UdpHeader, UdpPacket, UDP_HEADER_LEN};
 use bytes::Bytes;
 
 /// Builder for constructing UDP packets
@@ -87,10 +87,9 @@ mod tests {
         let pkt = UdpPacketBuilder::new()
             .source(1)
             .destination(2)
-            .payload(Bytes::from_static(&[1,2,3]))
+            .payload(Bytes::from_static(&[1, 2, 3]))
             .build();
         assert_eq!(pkt.header.length, (UDP_HEADER_LEN + 3) as u16);
-        assert_eq!(pkt.payload, Bytes::from_static(&[1,2,3]));
+        assert_eq!(pkt.payload, Bytes::from_static(&[1, 2, 3]));
     }
 }
-

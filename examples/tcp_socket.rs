@@ -9,7 +9,11 @@ use std::net::{IpAddr, SocketAddr};
 
 fn main() -> std::io::Result<()> {
     let ip: IpAddr = env::args().nth(1).expect("IP").parse().expect("ip");
-    let port: u16 = env::args().nth(2).unwrap_or_else(|| "80".into()).parse().expect("port");
+    let port: u16 = env::args()
+        .nth(2)
+        .unwrap_or_else(|| "80".into())
+        .parse()
+        .expect("port");
     let addr = SocketAddr::new(ip, port);
 
     let socket = match addr {
@@ -24,6 +28,10 @@ fn main() -> std::io::Result<()> {
 
     let mut buf = [0u8; 512];
     let n = stream.read(&mut buf)?;
-    println!("Received {} bytes:\n{}", n, String::from_utf8_lossy(&buf[..n]));
+    println!(
+        "Received {} bytes:\n{}",
+        n,
+        String::from_utf8_lossy(&buf[..n])
+    );
     Ok(())
 }

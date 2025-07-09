@@ -1,10 +1,10 @@
-use std::net::Ipv6Addr;
-use bytes::Bytes;
 use crate::{
     ip::IpNextProtocol,
-    ipv6::{Ipv6Header, Ipv6Packet, Ipv6ExtensionHeader},
+    ipv6::{Ipv6ExtensionHeader, Ipv6Header, Ipv6Packet},
     packet::Packet,
 };
+use bytes::Bytes;
+use std::net::Ipv6Addr;
 
 /// Builder for constructing IPv6 packets
 #[derive(Debug, Clone)]
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn ipv6_builder_payload_len() {
-        let payload = Bytes::from_static(&[1,2,3,4]);
+        let payload = Bytes::from_static(&[1, 2, 3, 4]);
         let pkt = Ipv6PacketBuilder::new()
             .source(Ipv6Addr::LOCALHOST)
             .destination(Ipv6Addr::LOCALHOST)
@@ -116,4 +116,3 @@ mod tests {
         assert_eq!(pkt.payload, payload);
     }
 }
-

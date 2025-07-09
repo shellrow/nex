@@ -1,7 +1,7 @@
 use crate::tcp::TcpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
-use std::net::{SocketAddr, TcpStream as StdTcpStream, TcpListener as StdTcpListener};
+use std::net::{SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 
@@ -76,7 +76,10 @@ impl AsyncTcpSocket {
                 let std_stream: StdTcpStream = self.socket.into();
                 return TcpStream::from_std(std_stream);
             }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.raw_os_error() == Some(libc::EINPROGRESS) => {
+            Err(e)
+                if e.kind() == io::ErrorKind::WouldBlock
+                    || e.raw_os_error() == Some(libc::EINPROGRESS) =>
+            {
                 // wait until writable
                 let std_stream: StdTcpStream = self.socket.into();
                 let stream = TcpStream::from_std(std_stream)?;
@@ -97,10 +100,17 @@ impl AsyncTcpSocket {
     }
 
     /// Connect with a timeout to the target address.
-    pub async fn connect_timeout(self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+    pub async fn connect_timeout(
+        self,
+        target: SocketAddr,
+        timeout: Duration,
+    ) -> io::Result<TcpStream> {
         match tokio::time::timeout(timeout, self.connect(target)).await {
             Ok(result) => result,
-            Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "connection timed out",
+            )),
         }
     }
 
@@ -128,9 +138,9 @@ impl AsyncTcpSocket {
         };
 
         let (n, addr) = self.socket.recv_from(buf_maybe)?;
-        let addr = addr.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid address format")
-        })?;
+        let addr = addr
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid address format"))?;
 
         Ok((n, addr))
     }
@@ -160,15 +170,19 @@ impl AsyncTcpSocket {
         #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "fuchsia")))]
         {
             let _ = iface;
-            Err(io::Error::new(io::ErrorKind::Unsupported, "bind_device not supported on this OS"))
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "bind_device not supported on this OS",
+            ))
         }
     }
 
     /// Retrieve the local address of the socket.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()?.as_socket().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Failed to get socket address")
-        })
+        self.socket
+            .local_addr()?
+            .as_socket()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get socket address"))
     }
 
     /// Convert the internal socket into a Tokio `TcpStream`.

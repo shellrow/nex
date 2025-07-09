@@ -1,7 +1,7 @@
 //! An ICMPv6 packet abstraction.
 
-use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
 use crate::ipv6::IPV6_HEADER_LEN;
+use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
 use std::net::Ipv6Addr;
 
 use bytes::Bytes;
@@ -127,15 +127,23 @@ impl Icmpv6Type {
             Icmpv6Type::RouterRenumbering => "Router Renumbering",
             Icmpv6Type::NodeInformationQuery => "Node Information Query",
             Icmpv6Type::NodeInformationResponse => "Node Information Response",
-            Icmpv6Type::InverseNeighborDiscoverySolicitation => "Inverse Neighbor Discovery Solicitation",
-            Icmpv6Type::InverseNeighborDiscoveryAdvertisement => "Inverse Neighbor Discovery Advertisement",
+            Icmpv6Type::InverseNeighborDiscoverySolicitation => {
+                "Inverse Neighbor Discovery Solicitation"
+            }
+            Icmpv6Type::InverseNeighborDiscoveryAdvertisement => {
+                "Inverse Neighbor Discovery Advertisement"
+            }
             Icmpv6Type::Version2MulticastListenerReport => "Version 2 Multicast Listener Report",
             Icmpv6Type::HomeAgentAddressDiscoveryRequest => "Home Agent Address Discovery Request",
             Icmpv6Type::HomeAgentAddressDiscoveryReply => "Home Agent Address Discovery Reply",
             Icmpv6Type::MobilePrefixSolicitation => "Mobile Prefix Solicitation",
             Icmpv6Type::MobilePrefixAdvertisement => "Mobile Prefix Advertisement",
-            Icmpv6Type::CertificationPathSolicitationMessage => "Certification Path Solicitation Message",
-            Icmpv6Type::CertificationPathAdvertisementMessage => "Certification Path Advertisement Message",
+            Icmpv6Type::CertificationPathSolicitationMessage => {
+                "Certification Path Solicitation Message"
+            }
+            Icmpv6Type::CertificationPathAdvertisementMessage => {
+                "Certification Path Advertisement Message"
+            }
             Icmpv6Type::ExperimentalMobilityProtocols => "Experimental Mobility Protocols",
             Icmpv6Type::MulticastRouterAdvertisement => "Multicast Router Advertisement",
             Icmpv6Type::MulticastRouterSolicitation => "Multicast Router Solicitation",
@@ -551,7 +559,6 @@ pub mod ndp {
     }
 
     /// Calculate a length of a `NdpOption`'s payload.
-    
 
     /// Router Solicitation Message [RFC 4861 § 4.1]
     ///
@@ -583,13 +590,27 @@ pub mod ndp {
             if value.payload.len() < 8 {
                 return Err("Payload too short for Router Solicitation");
             }
-            let reserved = u32::from_be_bytes([value.payload[0], value.payload[1], value.payload[2], value.payload[3]]);
-            let options = value.payload.slice(4..).chunks(8).map(|chunk| {
-                let option_type = NdpOptionType::new(chunk[0]);
-                let length = chunk[1];
-                let payload = Bytes::from(chunk[2..].to_vec());
-                NdpOptionPacket { option_type, length, payload }
-            }).collect();
+            let reserved = u32::from_be_bytes([
+                value.payload[0],
+                value.payload[1],
+                value.payload[2],
+                value.payload[3],
+            ]);
+            let options = value
+                .payload
+                .slice(4..)
+                .chunks(8)
+                .map(|chunk| {
+                    let option_type = NdpOptionType::new(chunk[0]);
+                    let length = chunk[1];
+                    let payload = Bytes::from(chunk[2..].to_vec());
+                    NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    }
+                })
+                .collect();
             Ok(RouterSolicitPacket {
                 header: value.header,
                 reserved,
@@ -752,14 +773,33 @@ pub mod ndp {
             let hop_limit = value.payload[0];
             let flags = value.payload[1];
             let lifetime = u16::from_be_bytes([value.payload[2], value.payload[3]]);
-            let reachable_time = u32::from_be_bytes([value.payload[4], value.payload[5], value.payload[6], value.payload[7]]);
-            let retrans_time = u32::from_be_bytes([value.payload[8], value.payload[9], value.payload[10], value.payload[11]]);
-            let options = value.payload.slice(12..).chunks(8).map(|chunk| {
-                let option_type = NdpOptionType::new(chunk[0]);
-                let length = chunk[1];
-                let payload = Bytes::from(chunk[2..].to_vec());
-                NdpOptionPacket { option_type, length, payload }
-            }).collect();
+            let reachable_time = u32::from_be_bytes([
+                value.payload[4],
+                value.payload[5],
+                value.payload[6],
+                value.payload[7],
+            ]);
+            let retrans_time = u32::from_be_bytes([
+                value.payload[8],
+                value.payload[9],
+                value.payload[10],
+                value.payload[11],
+            ]);
+            let options = value
+                .payload
+                .slice(12..)
+                .chunks(8)
+                .map(|chunk| {
+                    let option_type = NdpOptionType::new(chunk[0]);
+                    let length = chunk[1];
+                    let payload = Bytes::from(chunk[2..].to_vec());
+                    NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    }
+                })
+                .collect();
             Ok(RouterAdvertPacket {
                 header: value.header,
                 hop_limit,
@@ -923,7 +963,12 @@ pub mod ndp {
             if value.payload.len() < 24 {
                 return Err("Payload too short for Neighbor Solicitation");
             }
-            let reserved = u32::from_be_bytes([value.payload[0], value.payload[1], value.payload[2], value.payload[3]]);
+            let reserved = u32::from_be_bytes([
+                value.payload[0],
+                value.payload[1],
+                value.payload[2],
+                value.payload[3],
+            ]);
             let target_addr = Ipv6Addr::new(
                 u16::from_be_bytes([value.payload[4], value.payload[5]]),
                 u16::from_be_bytes([value.payload[6], value.payload[7]]),
@@ -934,12 +979,21 @@ pub mod ndp {
                 u16::from_be_bytes([value.payload[16], value.payload[17]]),
                 u16::from_be_bytes([value.payload[18], value.payload[19]]),
             );
-            let options = value.payload.slice(20..).chunks(8).map(|chunk| {
-                let option_type = NdpOptionType::new(chunk[0]);
-                let length = chunk[1];
-                let payload: Bytes = Bytes::from(chunk[2..].to_vec());
-                NdpOptionPacket { option_type, length, payload }
-            }).collect();
+            let options = value
+                .payload
+                .slice(20..)
+                .chunks(8)
+                .map(|chunk| {
+                    let option_type = NdpOptionType::new(chunk[0]);
+                    let length = chunk[1];
+                    let payload: Bytes = Bytes::from(chunk[2..].to_vec());
+                    NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    }
+                })
+                .collect();
             Ok(NeighborSolicitPacket {
                 header: value.header,
                 reserved,
@@ -1122,7 +1176,11 @@ pub mod ndp {
                 return Err("Payload too short for Neighbor Advert");
             }
             let flags = value.payload[0];
-            let reserved = bitfield::utils::u24be_from_bytes([value.payload[1], value.payload[2], value.payload[3]]);
+            let reserved = bitfield::utils::u24be_from_bytes([
+                value.payload[1],
+                value.payload[2],
+                value.payload[3],
+            ]);
             let target_addr = Ipv6Addr::new(
                 u16::from_be_bytes([value.payload[4], value.payload[5]]),
                 u16::from_be_bytes([value.payload[6], value.payload[7]]),
@@ -1133,12 +1191,21 @@ pub mod ndp {
                 u16::from_be_bytes([value.payload[16], value.payload[17]]),
                 u16::from_be_bytes([value.payload[18], value.payload[19]]),
             );
-            let options = value.payload.slice(20..).chunks(8).map(|chunk| {
-                let option_type = NdpOptionType::new(chunk[0]);
-                let length = chunk[1];
-                let payload = Bytes::from(chunk[2..].to_vec());
-                NdpOptionPacket { option_type, length, payload }
-            }).collect();
+            let options = value
+                .payload
+                .slice(20..)
+                .chunks(8)
+                .map(|chunk| {
+                    let option_type = NdpOptionType::new(chunk[0]);
+                    let length = chunk[1];
+                    let payload = Bytes::from(chunk[2..].to_vec());
+                    NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    }
+                })
+                .collect();
             Ok(NeighborAdvertPacket {
                 header: value.header,
                 flags,
@@ -1149,7 +1216,7 @@ pub mod ndp {
             })
         }
     }
-    
+
     impl Packet for NeighborAdvertPacket {
         type Header = ();
         fn from_buf(bytes: &[u8]) -> Option<Self> {
@@ -1321,7 +1388,12 @@ pub mod ndp {
             if value.payload.len() < 40 {
                 return Err("Payload too short for Redirect");
             }
-            let reserved = u32be::from_be_bytes([value.payload[0], value.payload[1], value.payload[2], value.payload[3]]);
+            let reserved = u32be::from_be_bytes([
+                value.payload[0],
+                value.payload[1],
+                value.payload[2],
+                value.payload[3],
+            ]);
             let target_addr = Ipv6Addr::new(
                 u16::from_be_bytes([value.payload[4], value.payload[5]]),
                 u16::from_be_bytes([value.payload[6], value.payload[7]]),
@@ -1342,12 +1414,21 @@ pub mod ndp {
                 u16::from_be_bytes([value.payload[32], value.payload[33]]),
                 u16::from_be_bytes([value.payload[34], value.payload[35]]),
             );
-            let options = value.payload.slice(36..).chunks(8).map(|chunk| {
-                let option_type = NdpOptionType::new(chunk[0]);
-                let length = chunk[1];
-                let payload = Bytes::from(chunk[2..].to_vec());
-                NdpOptionPacket { option_type, length, payload }
-            }).collect();
+            let options = value
+                .payload
+                .slice(36..)
+                .chunks(8)
+                .map(|chunk| {
+                    let option_type = NdpOptionType::new(chunk[0]);
+                    let length = chunk[1];
+                    let payload = Bytes::from(chunk[2..].to_vec());
+                    NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    }
+                })
+                .collect();
             Ok(RedirectPacket {
                 header: value.header,
                 reserved,
@@ -1528,13 +1609,19 @@ pub mod ndp {
             let option = &pkg.options[0];
             assert_eq!(option.option_type, NdpOptionTypes::TargetLLAddr);
             assert_eq!(option.length, 0x01);
-            assert_eq!(option.payload.as_ref(), &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+            assert_eq!(
+                option.payload.as_ref(),
+                &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            );
             assert_eq!(option.payload.len(), 6);
 
             let option = &pkg.options[1];
             assert_eq!(option.option_type, NdpOptionTypes::SourceLLAddr);
             assert_eq!(option.length, 1);
-            assert_eq!(option.payload.as_ref(), &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+            assert_eq!(
+                option.payload.as_ref(),
+                &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            );
         }
 
         #[test]
@@ -1563,7 +1650,7 @@ pub mod ndp {
             let expected = Bytes::from_static(&[
                 0x85, 0x00, 0x00, 0x00, // Type, Code, Checksum
                 0x00, 0x00, 0x00, 0x00, // Reserved
-                0x01, 0x01,             // Option Type, Length
+                0x01, 0x01, // Option Type, Length
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Option Data
             ]);
 
@@ -1598,17 +1685,23 @@ pub mod ndp {
             let option = &pkg.options[0];
             assert_eq!(option.option_type, NdpOptionTypes::SourceLLAddr);
             assert_eq!(option.length, 1);
-            assert_eq!(option.payload.as_ref(), &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+            assert_eq!(
+                option.payload.as_ref(),
+                &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            );
 
             let option = &pkg.options[1];
             assert_eq!(option.option_type, NdpOptionTypes::MTU);
             assert_eq!(option.length, 1);
-            assert_eq!(option.payload.as_ref(), &[0x00, 0x00, 0x57, 0x68, 0x61, 0x74]);
+            assert_eq!(
+                option.payload.as_ref(),
+                &[0x00, 0x00, 0x57, 0x68, 0x61, 0x74]
+            );
         }
 
         #[test]
         fn basic_ra_create() {
-            use crate::icmpv6::ndp::{NdpOptionPacket, RouterAdvertPacket, RouterAdvertFlags};
+            use crate::icmpv6::ndp::{NdpOptionPacket, RouterAdvertFlags, RouterAdvertPacket};
 
             let options = vec![NdpOptionPacket {
                 option_type: NdpOptionTypes::MTU,
@@ -1637,7 +1730,7 @@ pub mod ndp {
                 0xff, 0x80, 0x00, 0x00, // hop limit, flags, lifetime
                 0x00, 0x00, 0x00, 0x00, // reachable
                 0x00, 0x00, 0x00, 0x00, // retrans
-                0x05, 0x01,             // option type + len
+                0x05, 0x01, // option type + len
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // option data
             ]);
 
@@ -1655,10 +1748,7 @@ pub mod ndp {
             assert_eq!(pkg.header.icmpv6_code, Icmpv6Code(0));
             assert_eq!(pkg.header.checksum, 0x00);
             assert_eq!(pkg.reserved, 0x00);
-            assert_eq!(
-                pkg.target_addr,
-                Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1)
-            );
+            assert_eq!(pkg.target_addr, Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1));
         }
 
         #[test]
@@ -1682,10 +1772,8 @@ pub mod ndp {
             let expected = Bytes::from_static(&[
                 0x87, 0x00, 0x00, 0x00, // header
                 0x00, 0x00, 0x00, 0x00, // reserved
-                0xff, 0x02, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x01, // target
+                0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x01, // target
             ]);
 
             assert_eq!(bytes, expected);
@@ -1703,15 +1791,12 @@ pub mod ndp {
             assert_eq!(pkg.header.checksum, 0x00);
             assert_eq!(pkg.reserved, 0x00);
             assert_eq!(pkg.flags, 0x80);
-            assert_eq!(
-                pkg.target_addr,
-                Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1)
-            );
+            assert_eq!(pkg.target_addr, Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1));
         }
 
         #[test]
         fn basic_na_create() {
-            use crate::icmpv6::ndp::{NeighborAdvertPacket, NeighborAdvertFlags};
+            use crate::icmpv6::ndp::{NeighborAdvertFlags, NeighborAdvertPacket};
 
             let packet = NeighborAdvertPacket {
                 header: Icmpv6Header {
@@ -1731,10 +1816,8 @@ pub mod ndp {
             let expected = Bytes::from_static(&[
                 0x88, 0x00, 0x00, 0x00, // header
                 0x80, 0x00, 0x00, 0x00, // flags + reserved
-                0xff, 0x02, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x01,
+                0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x01,
             ]);
 
             assert_eq!(bytes, expected);
@@ -1752,10 +1835,7 @@ pub mod ndp {
             assert_eq!(pkg.header.icmpv6_code, Icmpv6Code(0));
             assert_eq!(pkg.header.checksum, 0x00);
             assert_eq!(pkg.reserved, 0x00);
-            assert_eq!(
-                pkg.target_addr,
-                Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1)
-            );
+            assert_eq!(pkg.target_addr, Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 1));
             assert_eq!(pkg.dest_addr, Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0));
         }
 
@@ -1781,14 +1861,10 @@ pub mod ndp {
             let expected = Bytes::from_static(&[
                 0x89, 0x00, 0x00, 0x00, // header
                 0x00, 0x00, 0x00, 0x00, // reserved
-                0xff, 0x02, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x01, // target
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, // dest
+                0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x01, // target
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, // dest
             ]);
 
             assert_eq!(bytes, expected);
@@ -1811,7 +1887,10 @@ pub mod echo_request {
 
     use bytes::Bytes;
 
-    use crate::{icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type}, packet::Packet};
+    use crate::{
+        icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
+        packet::Packet,
+    };
 
     /// Represents the identifier field.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1944,7 +2023,6 @@ pub mod echo_request {
             ((), self.payload)
         }
     }
-
 }
 
 pub mod echo_reply {
@@ -1959,10 +2037,13 @@ pub mod echo_reply {
     //! |     Data ...
     //! +-+-+-+-+-
     //! ```
-    
+
     use bytes::Bytes;
 
-    use crate::{icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type}, packet::Packet};
+    use crate::{
+        icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
+        packet::Packet,
+    };
     /// Represents the identifier field.
     #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Identifier(pub u16);
@@ -2079,7 +2160,7 @@ pub mod echo_reply {
         fn header_len(&self) -> usize {
             8 // Header length for echo reply
         }
-        
+
         fn payload_len(&self) -> usize {
             self.payload.len()
         }
@@ -2092,24 +2173,26 @@ pub mod echo_reply {
             ((), self.payload)
         }
     }
-
 }
 
 #[cfg(test)]
 mod echo_tests {
     use super::*;
-    use crate::icmpv6::{echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket, Icmpv6Code, Icmpv6Type};
-    
+    use crate::icmpv6::{
+        echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket, Icmpv6Code, Icmpv6Type,
+    };
+
     #[test]
     fn test_echo_request_parse() {
         let raw = Bytes::from_static(&[
             0x80, 0x00, 0xbe, 0xef, // header: type, code, checksum
-            0x12, 0x34,             // identifier
-            0x56, 0x78,             // sequence number
+            0x12, 0x34, // identifier
+            0x56, 0x78, // sequence number
             b'p', b'i', b'n', b'g', b'!',
         ]);
 
-        let parsed = EchoRequestPacket::from_bytes(raw.clone()).expect("Failed to parse Echo Request packet");
+        let parsed = EchoRequestPacket::from_bytes(raw.clone())
+            .expect("Failed to parse Echo Request packet");
 
         assert_eq!(parsed.header.icmpv6_type, Icmpv6Type::EchoRequest);
         assert_eq!(parsed.header.icmpv6_code, Icmpv6Code(0));
@@ -2144,12 +2227,13 @@ mod echo_tests {
     fn test_echo_reply_parse() {
         let raw = Bytes::from_static(&[
             0x81, 0x00, 0x12, 0x34, // header: type, code, checksum
-            0xab, 0xcd,             // identifier
-            0x56, 0x78,             // sequence number
+            0xab, 0xcd, // identifier
+            0x56, 0x78, // sequence number
             b'h', b'e', b'l', b'l', b'o',
         ]);
 
-        let parsed = EchoReplyPacket::from_bytes(raw.clone()).expect("Failed to parse Echo Reply packet");
+        let parsed =
+            EchoReplyPacket::from_bytes(raw.clone()).expect("Failed to parse Echo Reply packet");
 
         assert_eq!(parsed.header.icmpv6_type, Icmpv6Type::EchoReply);
         assert_eq!(parsed.header.icmpv6_code, Icmpv6Code(0));

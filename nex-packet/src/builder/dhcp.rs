@@ -3,7 +3,10 @@ use std::net::Ipv4Addr;
 use bytes::Bytes;
 use nex_core::mac::MacAddr;
 
-use crate::{dhcp::{DhcpHardwareType, DhcpHeader, DhcpOperation, DhcpPacket}, packet::Packet};
+use crate::{
+    dhcp::{DhcpHardwareType, DhcpHeader, DhcpOperation, DhcpPacket},
+    packet::Packet,
+};
 
 /// Builder for constructing DHCP packets
 #[derive(Debug, Clone)]

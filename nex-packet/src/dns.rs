@@ -1,8 +1,11 @@
-use core::str;
-use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr}, str::Utf8Error};
-use bytes::{BufMut, Bytes, BytesMut};
-use nex_core::bitfield::{u1, u16be, u32be};
 use crate::packet::Packet;
+use bytes::{BufMut, Bytes, BytesMut};
+use core::str;
+use nex_core::bitfield::{u1, u16be, u32be};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    str::Utf8Error,
+};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -14,10 +17,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DnsClass {
-    IN = 1,   // Internet
-    CS = 2,   // CSNET (Obsolete)
-    CH = 3,   // Chaos
-    HS = 4,   // Hesiod
+    IN = 1, // Internet
+    CS = 2, // CSNET (Obsolete)
+    CH = 3, // Chaos
+    HS = 4, // Hesiod
     Unknown(u16),
 }
 
@@ -343,97 +346,97 @@ impl DnsType {
 
     pub fn name(&self) -> &'static str {
         match self {
-                DnsType::A => "A",                   // 1
-                DnsType::NS => "NS",                 // 2
-                DnsType::MD => "MD",                 // 3
-                DnsType::MF => "MF",                 // 4
-                DnsType::CNAME => "CNAME",           // 5
-                DnsType::SOA => "SOA",               // 6
-                DnsType::MB => "MB",                 // 7
-                DnsType::MG => "MG",                 // 8
-                DnsType::MR => "MR",                 // 9
-                DnsType::NULL => "NULL",             // 10
-                DnsType::WKS => "WKS",               // 11
-                DnsType::PTR => "PTR",               // 12
-                DnsType::HINFO => "HINFO",           // 13
-                DnsType::MINFO => "MINFO",           // 14
-                DnsType::MX => "MX",                 // 15
-                DnsType::TXT => "TXT",               // 16
-                DnsType::RP => "RP",                 // 17
-                DnsType::AFSDB => "AFSDB",           // 18
-                DnsType::X25 => "X25",               // 19
-                DnsType::ISDN => "ISDN",             // 20
-                DnsType::RT => "RT",                 // 21
-                DnsType::NSAP => "NSAP",             // 22
-                DnsType::NSAP_PTR => "NSAP_PTR",     // 23
-                DnsType::SIG => "SIG",               // 24
-                DnsType::KEY => "KEY",               // 25
-                DnsType::PX => "PX",                 // 26
-                DnsType::GPOS => "GPOS",             // 27
-                DnsType::AAAA => "AAAA",             // 28
-                DnsType::LOC => "LOC",               // 29
-                DnsType::NXT => "NXT",               // 30
-                DnsType::EID => "EID",               // 31
-                DnsType::NIMLOC => "NIMLOC",         // 32
-                DnsType::SRV => "SRV",               // 33
-                DnsType::ATMA => "ATMA",             // 34
-                DnsType::NAPTR => "NAPTR",           // 35
-                DnsType::KX => "KX",                 // 36
-                DnsType::CERT => "CERT",             // 37
-                DnsType::A6 => "A6",                 // 38
-                DnsType::DNAME => "DNAME",           // 39
-                DnsType::SINK => "SINK",             // 40
-                DnsType::OPT => "OPT",               // 41
-                DnsType::APL => "APL",               // 42
-                DnsType::DS => "DS",                 // 43
-                DnsType::SSHFP => "SSHFP",           // 44
-                DnsType::IPSECKEY => "IPSECKEY",     // 45
-                DnsType::RRSIG => "RRSIG",           // 46
-                DnsType::NSEC => "NSEC",             // 47
-                DnsType::DNSKEY => "DNSKEY",         // 48
-                DnsType::DHCID => "DHCID",           // 49
-                DnsType::NSEC3 => "NSEC3",           // 50
-                DnsType::NSEC3PARAM => "NSEC3PARAM", // 51
-                DnsType::TLSA => "TLSA",             // 52
-                DnsType::SMIMEA => "SMIMEA",         // 53
-                DnsType::HIP => "HIP",               // 55
-                DnsType::NINFO => "NINFO",           // 56
-                DnsType::RKEY => "RKEY",             // 57
-                DnsType::TALINK => "TALINK",         // 58
-                DnsType::CDS => "CDS",               // 59
-                DnsType::CDNSKEY => "CDNSKEY",       // 60
-                DnsType::OPENPGPKEY => "OPENPGPKEY", // 61
-                DnsType::CSYNC => "CSYNC",           // 62
-                DnsType::ZONEMD => "ZONEMD",         // 63
-                DnsType::SVCB => "SVCB",             // 64
-                DnsType::HTTPS => "HTTPS",           // 65
-                DnsType::SPF => "SPF",               // 99
-                DnsType::UINFO => "UINFO",           // 100
-                DnsType::UID => "UID",               // 101
-                DnsType::GID => "GID",               // 102
-                DnsType::UNSPEC => "UNSPEC",         // 103
-                DnsType::NID => "NID",               // 104
-                DnsType::L32 => "L32",               // 105
-                DnsType::L64 => "L64",               // 106
-                DnsType::LP => "LP",                 // 107
-                DnsType::EUI48 => "EUI48",           // 108
-                DnsType::EUI64 => "EUI64",           // 109
-                DnsType::TKEY => "TKEY",             // 249
-                DnsType::TSIG => "TSIG",             // 250
-                DnsType::IXFR => "IXFR",             // 251
-                DnsType::AXFR => "AXFR",             // 252
-                DnsType::MAILB => "MAILB",           // 253
-                DnsType::MAILA => "MAILA",           // 254
-                DnsType::ANY => "ANY",               // 255
-                DnsType::URI => "URI",               // 256
-                DnsType::CAA => "CAA",               // 257
-                DnsType::AVC => "AVC",               // 258
-                DnsType::DOA => "DOA",               // 259
-                DnsType::AMTRELAY => "AMTRELAY",     // 260
-                DnsType::TA => "TA",                 // 32768
-                DnsType::DLV => "DLV",               // 32769
-                _ => "unknown",
-            }
+            DnsType::A => "A",                   // 1
+            DnsType::NS => "NS",                 // 2
+            DnsType::MD => "MD",                 // 3
+            DnsType::MF => "MF",                 // 4
+            DnsType::CNAME => "CNAME",           // 5
+            DnsType::SOA => "SOA",               // 6
+            DnsType::MB => "MB",                 // 7
+            DnsType::MG => "MG",                 // 8
+            DnsType::MR => "MR",                 // 9
+            DnsType::NULL => "NULL",             // 10
+            DnsType::WKS => "WKS",               // 11
+            DnsType::PTR => "PTR",               // 12
+            DnsType::HINFO => "HINFO",           // 13
+            DnsType::MINFO => "MINFO",           // 14
+            DnsType::MX => "MX",                 // 15
+            DnsType::TXT => "TXT",               // 16
+            DnsType::RP => "RP",                 // 17
+            DnsType::AFSDB => "AFSDB",           // 18
+            DnsType::X25 => "X25",               // 19
+            DnsType::ISDN => "ISDN",             // 20
+            DnsType::RT => "RT",                 // 21
+            DnsType::NSAP => "NSAP",             // 22
+            DnsType::NSAP_PTR => "NSAP_PTR",     // 23
+            DnsType::SIG => "SIG",               // 24
+            DnsType::KEY => "KEY",               // 25
+            DnsType::PX => "PX",                 // 26
+            DnsType::GPOS => "GPOS",             // 27
+            DnsType::AAAA => "AAAA",             // 28
+            DnsType::LOC => "LOC",               // 29
+            DnsType::NXT => "NXT",               // 30
+            DnsType::EID => "EID",               // 31
+            DnsType::NIMLOC => "NIMLOC",         // 32
+            DnsType::SRV => "SRV",               // 33
+            DnsType::ATMA => "ATMA",             // 34
+            DnsType::NAPTR => "NAPTR",           // 35
+            DnsType::KX => "KX",                 // 36
+            DnsType::CERT => "CERT",             // 37
+            DnsType::A6 => "A6",                 // 38
+            DnsType::DNAME => "DNAME",           // 39
+            DnsType::SINK => "SINK",             // 40
+            DnsType::OPT => "OPT",               // 41
+            DnsType::APL => "APL",               // 42
+            DnsType::DS => "DS",                 // 43
+            DnsType::SSHFP => "SSHFP",           // 44
+            DnsType::IPSECKEY => "IPSECKEY",     // 45
+            DnsType::RRSIG => "RRSIG",           // 46
+            DnsType::NSEC => "NSEC",             // 47
+            DnsType::DNSKEY => "DNSKEY",         // 48
+            DnsType::DHCID => "DHCID",           // 49
+            DnsType::NSEC3 => "NSEC3",           // 50
+            DnsType::NSEC3PARAM => "NSEC3PARAM", // 51
+            DnsType::TLSA => "TLSA",             // 52
+            DnsType::SMIMEA => "SMIMEA",         // 53
+            DnsType::HIP => "HIP",               // 55
+            DnsType::NINFO => "NINFO",           // 56
+            DnsType::RKEY => "RKEY",             // 57
+            DnsType::TALINK => "TALINK",         // 58
+            DnsType::CDS => "CDS",               // 59
+            DnsType::CDNSKEY => "CDNSKEY",       // 60
+            DnsType::OPENPGPKEY => "OPENPGPKEY", // 61
+            DnsType::CSYNC => "CSYNC",           // 62
+            DnsType::ZONEMD => "ZONEMD",         // 63
+            DnsType::SVCB => "SVCB",             // 64
+            DnsType::HTTPS => "HTTPS",           // 65
+            DnsType::SPF => "SPF",               // 99
+            DnsType::UINFO => "UINFO",           // 100
+            DnsType::UID => "UID",               // 101
+            DnsType::GID => "GID",               // 102
+            DnsType::UNSPEC => "UNSPEC",         // 103
+            DnsType::NID => "NID",               // 104
+            DnsType::L32 => "L32",               // 105
+            DnsType::L64 => "L64",               // 106
+            DnsType::LP => "LP",                 // 107
+            DnsType::EUI48 => "EUI48",           // 108
+            DnsType::EUI64 => "EUI64",           // 109
+            DnsType::TKEY => "TKEY",             // 249
+            DnsType::TSIG => "TSIG",             // 250
+            DnsType::IXFR => "IXFR",             // 251
+            DnsType::AXFR => "AXFR",             // 252
+            DnsType::MAILB => "MAILB",           // 253
+            DnsType::MAILA => "MAILA",           // 254
+            DnsType::ANY => "ANY",               // 255
+            DnsType::URI => "URI",               // 256
+            DnsType::CAA => "CAA",               // 257
+            DnsType::AVC => "AVC",               // 258
+            DnsType::DOA => "DOA",               // 259
+            DnsType::AMTRELAY => "AMTRELAY",     // 260
+            DnsType::TA => "TA",                 // 32768
+            DnsType::DLV => "DLV",               // 32769
+            _ => "unknown",
+        }
     }
 }
 
@@ -568,32 +571,32 @@ impl RetCode {
             Self::BadAlg => 17,
             Self::BadTrunc => 18,
             Self::BadCookie => 19,
-            Self::Unassigned(v) => *v
+            Self::Unassigned(v) => *v,
         }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            RetCode::NoError      => "No Error",
-            RetCode::FormErr      => "Format Error",
-            RetCode::ServFail     => "Server Failure",
-            RetCode::NXDomain     => "Non-Existent Domain",
-            RetCode::NotImp      => "Not Implemented",
-            RetCode::Refused      => "Query Refused",
-            RetCode::YXDomain     => "Name Exists When It Shouldn't",
-            RetCode::YXRRSet      => "RR Set Exists When It Shouldn't",
-            RetCode::NXRRSet      => "RR Set Doesn't Exist When It Should",
-            RetCode::NotAuth      => "Not Authorized",
-            RetCode::NotZone      => "Name Not Zone",
-            RetCode::Dsotypeni    => "DSO Type NI",
-            RetCode::BadVers      => "Bad Version",
-            RetCode::BadKey       => "Bad Key",
-            RetCode::BadTime      => "Bad Time",
-            RetCode::BadMode      => "Bad Mode",
-            RetCode::BadName      => "Bad Name",
-            RetCode::BadAlg       => "Bad Algorithm",
-            RetCode::BadTrunc     => "Bad Truncation",
-            RetCode::BadCookie    => "Bad Cookie",
+            RetCode::NoError => "No Error",
+            RetCode::FormErr => "Format Error",
+            RetCode::ServFail => "Server Failure",
+            RetCode::NXDomain => "Non-Existent Domain",
+            RetCode::NotImp => "Not Implemented",
+            RetCode::Refused => "Query Refused",
+            RetCode::YXDomain => "Name Exists When It Shouldn't",
+            RetCode::YXRRSet => "RR Set Exists When It Shouldn't",
+            RetCode::NXRRSet => "RR Set Doesn't Exist When It Should",
+            RetCode::NotAuth => "Not Authorized",
+            RetCode::NotZone => "Name Not Zone",
+            RetCode::Dsotypeni => "DSO Type NI",
+            RetCode::BadVers => "Bad Version",
+            RetCode::BadKey => "Bad Key",
+            RetCode::BadTime => "Bad Time",
+            RetCode::BadMode => "Bad Mode",
+            RetCode::BadName => "Bad Name",
+            RetCode::BadAlg => "Bad Algorithm",
+            RetCode::BadTrunc => "Bad Truncation",
+            RetCode::BadCookie => "Bad Cookie",
             RetCode::Unassigned(_) => "Unassigned",
         }
     }
@@ -911,7 +914,12 @@ impl DnsResponsePacket {
     /// Returns the IPv4 address if the record type is A and data length is 4 bytes.
     pub fn get_ipv4(&self) -> Option<Ipv4Addr> {
         if self.rtype == DnsType::A && self.data.len() == 4 {
-            Some(Ipv4Addr::new(self.data[0], self.data[1], self.data[2], self.data[3]))
+            Some(Ipv4Addr::new(
+                self.data[0],
+                self.data[1],
+                self.data[2],
+                self.data[3],
+            ))
         } else {
             None
         }
@@ -937,9 +945,7 @@ impl DnsResponsePacket {
     /// Returns the DNS name if the record type is CNAME, NS, or PTR.
     pub fn get_name(&self) -> Option<DnsName> {
         match self.rtype {
-            DnsType::CNAME | DnsType::NS | DnsType::PTR => {
-                DnsName::from_bytes(&self.data).ok()
-            }
+            DnsType::CNAME | DnsType::NS | DnsType::PTR => DnsName::from_bytes(&self.data).ok(),
             _ => None,
         }
     }
@@ -1042,7 +1048,9 @@ impl Packet for DnsPacket {
 
         // Parse each section, passing mutable slices
         fn parse_queries(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsQueryPacket>> {
-            (0..count).map(|_| DnsQueryPacket::from_buf_mut(buf)).collect()
+            (0..count)
+                .map(|_| DnsQueryPacket::from_buf_mut(buf))
+                .collect()
         }
 
         fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
@@ -1192,7 +1200,6 @@ impl DnsName {
     pub fn labels(&self) -> Vec<&str> {
         self.0.split('.').collect()
     }
-
 }
 
 impl std::fmt::Display for DnsName {
@@ -1208,19 +1215,15 @@ mod tests {
     #[test]
     fn test_dns_query() {
         let bytes = Bytes::from_static(&[
-            0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's',
-            0x04, b'g', b'v', b't', b'2',
-            0x03, b'c', b'o', b'm',
-            0x00, 0x00, 0x41, 0x00, 0x01, // type: HTTPS, class: IN
+            0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's', 0x04, b'g', b'v', b't', b'2', 0x03,
+            b'c', b'o', b'm', 0x00, 0x00, 0x41, 0x00, 0x01, // type: HTTPS, class: IN
         ]);
         let packet = DnsQueryPacket::from_bytes(bytes).unwrap();
         assert_eq!(
             packet.qname,
             vec![
-                0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's',
-                0x04, b'g', b'v', b't', b'2',
-                0x03, b'c', b'o', b'm',
-                0x00
+                0x07, b'b', b'e', b'a', b'c', b'o', b'n', b's', 0x04, b'g', b'v', b't', b'2', 0x03,
+                b'c', b'o', b'm', 0x00
             ]
         );
         assert_eq!(packet.qtype, DnsType::HTTPS);
@@ -1248,14 +1251,10 @@ mod tests {
     #[test]
     fn test_dns_query_packet() {
         let bytes = Bytes::from_static(&[
-            0x9b, 0xa0, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x05, b'_', b'l', b'd', b'a', b'p',
-            0x04, b'_', b't', b'c', b'p',
-            0x02, b'd', b'c',
-            0x06, b'_', b'm', b's', b'd', b'c', b's',
-            0x05, b'S', b'4', b'D', b'O', b'M',
-            0x07, b'P', b'R', b'I', b'V', b'A', b'T', b'E',
-            0x00, 0x00, 0x21, 0x00, 0x01,
+            0x9b, 0xa0, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, b'_',
+            b'l', b'd', b'a', b'p', 0x04, b'_', b't', b'c', b'p', 0x02, b'd', b'c', 0x06, b'_',
+            b'm', b's', b'd', b'c', b's', 0x05, b'S', b'4', b'D', b'O', b'M', 0x07, b'P', b'R',
+            b'I', b'V', b'A', b'T', b'E', 0x00, 0x00, 0x21, 0x00, 0x01,
         ]);
         let packet = DnsPacket::from_bytes(bytes).unwrap();
         assert_eq!(packet.header.id, 0x9ba0);
@@ -1272,14 +1271,10 @@ mod tests {
     #[test]
     fn test_dns_response_packet() {
         let bytes = Bytes::from_static(&[
-            0xbc, 0x12, 0x85, 0x80, 0x00, 0x01, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00, 0x05, b's', b'4', b'd', b'c', b'1',
-            0x05, b's', b'a', b'm', b'b', b'a',
-            0x08, b'w', b'i', b'n', b'd', b'o', b'w', b's', b'8',
-            0x07, b'p', b'r', b'i', b'v', b'a', b't', b'e',
-            0x00, 0x00, 0x01, 0x00, 0x01,
-            0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01,
-            0x00, 0x00, 0x03, 0x84,
+            0xbc, 0x12, 0x85, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x05, b's',
+            b'4', b'd', b'c', b'1', 0x05, b's', b'a', b'm', b'b', b'a', 0x08, b'w', b'i', b'n',
+            b'd', b'o', b'w', b's', b'8', 0x07, b'p', b'r', b'i', b'v', b'a', b't', b'e', 0x00,
+            0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x03, 0x84,
             0x00, 0x04, 0xc0, 0xa8, 0x7a, 0xbd,
         ]);
         let packet = DnsPacket::from_bytes(bytes).unwrap();

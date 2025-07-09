@@ -1,4 +1,8 @@
-use crate::{ipv4::{Ipv4Header, Ipv4Packet, Ipv4OptionPacket, Ipv4OptionType}, ip::IpNextProtocol, packet::Packet};
+use crate::{
+    ip::IpNextProtocol,
+    ipv4::{Ipv4Header, Ipv4OptionPacket, Ipv4OptionType, Ipv4Packet},
+    packet::Packet,
+};
 use bytes::Bytes;
 use nex_core::bitfield::*;
 use std::net::Ipv4Addr;
@@ -72,12 +76,19 @@ impl Ipv4PacketBuilder {
 
     pub fn options(mut self, options: Vec<Ipv4OptionPacket>) -> Self {
         self.packet.header.options = options;
-        self.packet.header.header_length = ((20 + self.packet.header.options.iter().map(|opt| {
-            match opt.header.number {
-                Ipv4OptionType::EOL | Ipv4OptionType::NOP => 1,
-                _ => 2 + opt.data.len(),
-            }
-        }).sum::<usize>() + 3) / 4) as u4; // includes padding
+        self.packet.header.header_length = ((20
+            + self
+                .packet
+                .header
+                .options
+                .iter()
+                .map(|opt| match opt.header.number {
+                    Ipv4OptionType::EOL | Ipv4OptionType::NOP => 1,
+                    _ => 2 + opt.data.len(),
+                })
+                .sum::<usize>()
+            + 3)
+            / 4) as u4; // includes padding
         self
     }
 
@@ -108,15 +119,17 @@ mod tests {
 
     #[test]
     fn ipv4_builder_total_length() {
-        let payload = Bytes::from_static(&[1,2]);
+        let payload = Bytes::from_static(&[1, 2]);
         let pkt = Ipv4PacketBuilder::new()
-            .source(Ipv4Addr::new(1,1,1,1))
-            .destination(Ipv4Addr::new(2,2,2,2))
+            .source(Ipv4Addr::new(1, 1, 1, 1))
+            .destination(Ipv4Addr::new(2, 2, 2, 2))
             .protocol(IpNextProtocol::Udp)
             .payload(payload.clone())
             .build();
-        assert_eq!(pkt.header.total_length, (pkt.header_len() + payload.len()) as u16);
+        assert_eq!(
+            pkt.header.total_length,
+            (pkt.header_len() + payload.len()) as u16
+        );
         assert_eq!(pkt.payload, payload);
     }
 }
-

@@ -69,7 +69,7 @@ impl AsyncIcmpSocket {
         #[cfg(unix)]
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
-            
+
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())
         };
 

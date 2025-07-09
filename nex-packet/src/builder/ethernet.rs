@@ -1,6 +1,9 @@
-use crate::{ethernet::{EtherType, EthernetHeader, EthernetPacket}, packet::Packet};
-use nex_core::mac::MacAddr;
+use crate::{
+    ethernet::{EtherType, EthernetHeader, EthernetPacket},
+    packet::Packet,
+};
 use bytes::Bytes;
+use nex_core::mac::MacAddr;
 
 /// Builder for constructing Ethernet packets.
 #[derive(Debug, Clone)]

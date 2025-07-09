@@ -1,8 +1,8 @@
 use std::net::IpAddr;
 
-use crate::tcp::{TcpPacket, TcpHeader, TcpOptionPacket};
-use bytes::Bytes;
 use crate::packet::Packet;
+use crate::tcp::{TcpHeader, TcpOptionPacket, TcpPacket};
+use bytes::Bytes;
 
 /// Builder for constructing TCP packets
 #[derive(Debug, Clone)]
@@ -72,7 +72,13 @@ impl TcpPacketBuilder {
         self.packet.header.options = options;
         // Recalculate data offset (header length is in 4-byte units)
         let base_len = 20; // base header
-        let opt_len: usize = self.packet.header.options.iter().map(|opt| opt.length() as usize).sum();
+        let opt_len: usize = self
+            .packet
+            .header
+            .options
+            .iter()
+            .map(|opt| opt.length() as usize)
+            .sum();
         let total = base_len + opt_len;
         self.packet.header.data_offset = ((total + 3) / 4) as u8; // round up
         self
@@ -123,4 +129,3 @@ mod tests {
         assert_eq!(pkt.payload, Bytes::from_static(b"abc"));
     }
 }
-
