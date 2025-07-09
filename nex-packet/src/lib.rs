@@ -1,3 +1,5 @@
+//! Packet parsing and construction utilities for common network protocols.
+
 pub mod packet;
 pub mod ethernet;
 pub mod arp;
