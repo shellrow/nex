@@ -6,8 +6,11 @@
 use bytes::Bytes;
 use nex::net::interface::{get_interfaces, Interface};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
-use nex_packet::icmp::{self, IcmpType};
+use nex_packet::icmp::echo_reply::EchoReplyPacket;
+use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
+use nex_packet::ipv4::Ipv4Packet;
+use nex_packet::packet::Packet;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::env;
@@ -51,6 +54,21 @@ async fn main() -> std::io::Result<()> {
         loop {
             if let Ok((n, from)) = socket_clone.recv_from(&mut buf).await {
                 println!("Received {} bytes from {}", n, from.ip());
+                if let Some(ipv4_packet) = Ipv4Packet::from_buf(&buf[..n]) {
+                    if ipv4_packet.header.next_level_protocol == nex_packet::ip::IpNextProtocol::Icmp {
+                        if let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload()) {
+                            println!("\t{:?} from: {:?} to {:?}, TTL: {}", icmp_packet.header.icmp_type, ipv4_packet.header.source, ipv4_packet.header.destination, ipv4_packet.header.ttl);
+                            match EchoReplyPacket::try_from(icmp_packet) {
+                                Ok(reply) => {
+                                    println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                                }
+                                Err(_) => {
+                                    println!("\tReceived non-echo-reply ICMP packet");
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     });

@@ -6,6 +6,10 @@ use bytes::Bytes;
 use nex::net::interface::{get_interfaces, Interface};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::builder::icmpv6::Icmpv6PacketBuilder;
+use nex_packet::icmp::IcmpPacket;
+use nex_packet::icmpv6::Icmpv6Packet;
+use nex_packet::ipv4::Ipv4Packet;
+use nex_packet::packet::Packet;
 use nex_packet::{icmp, icmpv6};
 use nex_socket::icmp::{IcmpConfig, IcmpKind, IcmpSocket};
 use std::env;
@@ -68,7 +72,43 @@ fn main() -> std::io::Result<()> {
     println!("Sent echo request to {}", target_ip);
 
     let mut buf = [0u8; 1500];
-    let (_n, from) = socket.recv_from(&mut buf)?;
-    println!("Received reply from {}", from.ip());
+    let (n, from) = socket.recv_from(&mut buf)?;
+    println!("Received {} bytes from {}", n, from.ip());
+    let packet: &[u8] = &buf[..n];
+    match kind {
+        IcmpKind::V4 => {
+            // Parse IPv4 + ICMP
+            if let Some(ipv4_packet) = Ipv4Packet::from_buf(packet) {
+                if ipv4_packet.header.next_level_protocol == nex_packet::ip::IpNextProtocol::Icmp {
+                    if let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload()) {
+                        println!("\t{:?} from: {:?} to {:?}, TTL: {}", icmp_packet.header.icmp_type, ipv4_packet.header.source, ipv4_packet.header.destination, ipv4_packet.header.ttl);
+                        match icmp::echo_reply::EchoReplyPacket::try_from(icmp_packet) {
+                            Ok(reply) => {
+                                println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                            }
+                            Err(_) => {
+                                println!("\tReceived non-echo-reply ICMP packet");
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        IcmpKind::V6 => {
+            // Parse ICMPv6 
+            // The IPv6 header is automatically cropped off when recvfrom() is used.
+            if let Some(icmpv6_packet) = Icmpv6Packet::from_buf(packet) {
+                println!("\t{:?} from: {:?}", icmpv6_packet.header.icmpv6_type, from.ip());
+                match icmpv6::echo_reply::EchoReplyPacket::from_buf(packet) {
+                    Some(reply) => {
+                        println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                    }
+                    None => {
+                        println!("\tReceived non-echo-reply ICMPv6 packet");
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
