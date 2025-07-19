@@ -213,8 +213,14 @@ impl Packet for Ipv4Packet {
         let version = (bytes[0] & 0xF0) >> 4;
         let header_length = (bytes[0] & 0x0F) as usize;
         let total_length = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
+        let total_length = if total_length > bytes.len() {
+            // fallback
+            bytes.len()
+        } else {
+            total_length
+        };
 
-        if bytes.len() < total_length || header_length < 5 {
+        if header_length < 5 {
             return None;
         }
 
