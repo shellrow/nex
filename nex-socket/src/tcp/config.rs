@@ -1,42 +1,75 @@
-use socket2::{Domain, Type as SockType};
+use socket2::Type as SockType;
 use std::net::SocketAddr;
 use std::time::Duration;
+
+use crate::SocketFamily;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TcpSocketType {
+    Stream,
+    Raw,
+}
+
+impl TcpSocketType {
+    pub fn is_stream(&self) -> bool {
+        matches!(self, TcpSocketType::Stream)
+    }
+
+    pub fn is_raw(&self) -> bool {
+        matches!(self, TcpSocketType::Raw)
+    }
+
+    pub(crate) fn to_sock_type(&self) -> SockType {
+        match self {
+            TcpSocketType::Stream => SockType::STREAM,
+            TcpSocketType::Raw => SockType::RAW,
+        }
+    }
+}
 
 /// Configuration options for a TCP socket.
 #[derive(Debug, Clone)]
 pub struct TcpConfig {
-    pub domain: Domain,
-    pub sock_type: SockType,
+    pub socket_family: SocketFamily,
+    pub socket_type: TcpSocketType,
     pub bind_addr: Option<SocketAddr>,
     pub nonblocking: bool,
     pub reuseaddr: Option<bool>,
     pub nodelay: Option<bool>,
     pub linger: Option<Duration>,
     pub ttl: Option<u32>,
+    pub hoplimit: Option<u32>,
+    pub read_timeout: Option<Duration>,
+    pub write_timeout: Option<Duration>,
     pub bind_device: Option<String>,
+    pub keepalive: Option<bool>,
 }
 
 impl TcpConfig {
     /// Create a STREAM socket for IPv4.
     pub fn v4_stream() -> Self {
         Self {
-            domain: Domain::IPV4,
-            sock_type: SockType::STREAM,
+            socket_family: SocketFamily::IPV4,
+            socket_type: TcpSocketType::Stream,
             bind_addr: None,
             nonblocking: false,
             reuseaddr: None,
             nodelay: None,
             linger: None,
             ttl: None,
+            hoplimit: None,
+            read_timeout: None,
+            write_timeout: None,
             bind_device: None,
+            keepalive: None,
         }
     }
 
     /// Create a RAW socket. Requires administrator privileges.
     pub fn raw_v4() -> Self {
         Self {
-            domain: Domain::IPV4,
-            sock_type: SockType::RAW,
+            socket_family: SocketFamily::IPV4,
+            socket_type: TcpSocketType::Raw,
             ..Self::v4_stream()
         }
     }
@@ -44,8 +77,8 @@ impl TcpConfig {
     /// Create a STREAM socket for IPv6.
     pub fn v6_stream() -> Self {
         Self {
-            domain: Domain::IPV6,
-            sock_type: SockType::STREAM,
+            socket_family: SocketFamily::IPV6,
+            socket_type: TcpSocketType::Stream,
             ..Self::v4_stream()
         }
     }
@@ -53,8 +86,8 @@ impl TcpConfig {
     /// Create a RAW socket for IPv6. Requires administrator privileges.
     pub fn raw_v6() -> Self {
         Self {
-            domain: Domain::IPV6,
-            sock_type: SockType::RAW,
+            socket_family: SocketFamily::IPV6,
+            socket_type: TcpSocketType::Raw,
             ..Self::v4_stream()
         }
     }
@@ -91,6 +124,26 @@ impl TcpConfig {
         self
     }
 
+    pub fn with_hoplimit(mut self, hops: u32) -> Self {
+        self.hoplimit = Some(hops);
+        self
+    }
+
+    pub fn with_keepalive(mut self, on: bool) -> Self {
+        self.keepalive = Some(on);
+        self
+    }
+
+    pub fn with_read_timeout(mut self, timeout: Duration) -> Self {
+        self.read_timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
+        self.write_timeout = Some(timeout);
+        self
+    }
+
     pub fn with_bind_device(mut self, iface: impl Into<String>) -> Self {
         self.bind_device = Some(iface.into());
         self
@@ -111,8 +164,8 @@ mod tests {
             .with_nodelay(true)
             .with_ttl(10);
 
-        assert_eq!(cfg.domain, Domain::IPV4);
-        assert_eq!(cfg.sock_type, SockType::STREAM);
+        assert_eq!(cfg.socket_family, SocketFamily::IPV4);
+        assert_eq!(cfg.socket_type, TcpSocketType::Stream);
         assert_eq!(cfg.bind_addr, Some(addr));
         assert!(cfg.nonblocking);
         assert_eq!(cfg.reuseaddr, Some(true));

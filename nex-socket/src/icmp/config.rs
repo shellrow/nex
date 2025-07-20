@@ -1,5 +1,7 @@
 use socket2::Type as SockType;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
+
+use crate::SocketFamily;
 
 /// ICMP protocol version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,23 +13,41 @@ pub enum IcmpKind {
 /// Configuration for an ICMP socket.
 #[derive(Debug, Clone)]
 pub struct IcmpConfig {
-    pub kind: IcmpKind,
+    /// The socket family.
+    pub socket_family: SocketFamily,
+    /// Optional bind address for the socket.
     pub bind: Option<SocketAddr>,
+    /// Time-to-live for IPv4 packets.
     pub ttl: Option<u32>,
+    /// Hop limit for IPv6 packets.
+    pub hoplimit: Option<u32>,
+    /// Read timeout for the socket.
+    pub read_timeout: Option<Duration>,
+    /// Write timeout for the socket.
+    pub write_timeout: Option<Duration>,
+    /// Network interface to use for the socket.
     pub interface: Option<String>,
+    /// Socket type hint, DGRAM preferred on Linux, RAW fallback on macOS/Windows.
     pub sock_type_hint: SockType,
+    /// FreeBSD only: optional FIB (Forwarding Information Base) support.
     pub fib: Option<u32>,
 }
 
 impl IcmpConfig {
     pub fn new(kind: IcmpKind) -> Self {
         Self {
-            kind,
+            socket_family: match kind {
+                IcmpKind::V4 => SocketFamily::IPV4,
+                IcmpKind::V6 => SocketFamily::IPV6,
+            },
             bind: None,
             ttl: None,
+            hoplimit: None,
+            read_timeout: None,
+            write_timeout: None,
             interface: None,
-            sock_type_hint: SockType::DGRAM, // DGRAM preferred on Linux, RAW fallback on macOS/Windows
-            fib: None,                       // FreeBSD only
+            sock_type_hint: SockType::DGRAM,
+            fib: None,
         }
     }
 
@@ -38,6 +58,21 @@ impl IcmpConfig {
 
     pub fn with_ttl(mut self, ttl: u32) -> Self {
         self.ttl = Some(ttl);
+        self
+    }
+
+    pub fn with_hoplimit(mut self, hops: u32) -> Self {
+        self.hoplimit = Some(hops);
+        self
+    }
+
+    pub fn with_read_timeout(mut self, timeout: Duration) -> Self {
+        self.read_timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
+        self.write_timeout = Some(timeout);
         self
     }
 
@@ -69,7 +104,7 @@ mod tests {
             .with_ttl(4)
             .with_interface("eth0")
             .with_sock_type(Type::RAW);
-        assert_eq!(cfg.kind, IcmpKind::V4);
+        assert_eq!(cfg.socket_family, SocketFamily::IPV4);
         assert_eq!(cfg.bind, Some(addr));
         assert_eq!(cfg.ttl, Some(4));
         assert_eq!(cfg.interface.as_deref(), Some("eth0"));

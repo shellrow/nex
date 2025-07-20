@@ -20,7 +20,9 @@ pub struct TcpSocket {
 impl TcpSocket {
     /// Build a socket according to `TcpSocketConfig`.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.domain, config.sock_type, Some(Protocol::TCP))?;
+        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::TCP))?;
+
+        socket.set_nonblocking(config.nonblocking)?;
 
         // Apply all configuration options
         if let Some(flag) = config.reuseaddr {
@@ -35,6 +37,18 @@ impl TcpSocket {
         if let Some(ttl) = config.ttl {
             socket.set_ttl(ttl)?;
         }
+        if let Some(hoplimit) = config.hoplimit {
+            socket.set_unicast_hops_v6(hoplimit)?;
+        }
+        if let Some(keepalive) = config.keepalive {
+            socket.set_keepalive(keepalive)?;
+        }
+        if let Some(timeout) = config.read_timeout {
+            socket.set_read_timeout(Some(timeout))?;
+        }
+        if let Some(timeout) = config.write_timeout {
+            socket.set_write_timeout(Some(timeout))?;
+        }
 
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         if let Some(iface) = &config.bind_device {
@@ -45,9 +59,6 @@ impl TcpSocket {
         if let Some(addr) = config.bind_addr {
             socket.bind(&addr.into())?;
         }
-
-        // Set non blocking mode
-        socket.set_nonblocking(config.nonblocking)?;
 
         Ok(Self { socket })
     }
@@ -238,6 +249,10 @@ impl TcpSocket {
         Ok((n, addr))
     }
 
+    pub fn shutdown(&self, how: std::net::Shutdown) -> io::Result<()> {
+        self.socket.shutdown(how)
+    }
+
     // --- option helpers ---
 
     pub fn set_reuseaddr(&self, on: bool) -> io::Result<()> {
@@ -256,6 +271,14 @@ impl TcpSocket {
         self.socket.set_ttl(ttl)
     }
 
+    pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
+        self.socket.set_unicast_hops_v6(hops)
+    }
+
+    pub fn set_keepalive(&self, on: bool) -> io::Result<()> {
+        self.socket.set_keepalive(on)
+    }
+
     pub fn set_bind_device(&self, iface: &str) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         return self.socket.bind_device(Some(iface.as_bytes()));
@@ -269,8 +292,6 @@ impl TcpSocket {
             ))
         }
     }
-
-    // --- information helpers ---
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.socket

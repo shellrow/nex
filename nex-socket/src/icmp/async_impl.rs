@@ -1,4 +1,5 @@
 use crate::icmp::{IcmpConfig, IcmpKind};
+use crate::SocketFamily;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
 use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
@@ -9,15 +10,15 @@ use tokio::net::UdpSocket;
 pub struct AsyncIcmpSocket {
     inner: UdpSocket,
     sock_type: SockType,
-    kind: IcmpKind,
+    socket_family: SocketFamily,
 }
 
 impl AsyncIcmpSocket {
     /// Create a new asynchronous ICMP socket.
     pub async fn new(config: &IcmpConfig) -> io::Result<Self> {
-        let (domain, proto) = match config.kind {
-            IcmpKind::V4 => (Domain::IPV4, Some(Protocol::ICMPV4)),
-            IcmpKind::V6 => (Domain::IPV6, Some(Protocol::ICMPV6)),
+        let (domain, proto) = match config.socket_family {
+            SocketFamily::IPV4 => (Domain::IPV4, Some(Protocol::ICMPV4)),
+            SocketFamily::IPV6 => (Domain::IPV6, Some(Protocol::ICMPV6)),
         };
 
         // Build the socket with DGRAM preferred and RAW as a fallback
@@ -35,9 +36,26 @@ impl AsyncIcmpSocket {
 
         socket.set_nonblocking(true)?;
 
-        // bind
-        if let Some(addr) = &config.bind {
-            socket.bind(&(*addr).into())?;
+        // TTL for IPv4
+        if let Some(ttl) = config.ttl {
+            socket.set_ttl(ttl)?;
+        }
+        // Hop limit for IPv6
+        if let Some(hoplimit) = config.hoplimit {
+            socket.set_unicast_hops_v6(hoplimit)?;
+        }
+        // Read timeout
+        if let Some(timeout) = config.read_timeout {
+            socket.set_read_timeout(Some(timeout))?;
+        }
+        // Write timeout
+        if let Some(timeout) = config.write_timeout {
+            socket.set_write_timeout(Some(timeout))?;
+        }
+        // FreeBSD only: optional FIB support
+        #[cfg(target_os = "freebsd")]
+        if let Some(fib) = config.fib {
+            socket.set_fib(fib)?;
         }
 
         // Linux: optional interface name
@@ -46,15 +64,9 @@ impl AsyncIcmpSocket {
             socket.bind_device(Some(interface.as_bytes()))?;
         }
 
-        // TTL
-        if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
-        }
-
-        // FreeBSD only: optional FIB support
-        #[cfg(target_os = "freebsd")]
-        if let Some(fib) = config.fib {
-            socket.set_fib(fib)?;
+        // bind
+        if let Some(addr) = &config.bind {
+            socket.bind(&(*addr).into())?;
         }
 
         let socket_type = socket.r#type()?;
@@ -73,13 +85,13 @@ impl AsyncIcmpSocket {
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())
         };
 
-        // std → tokio::net::UdpSocket
+        // std -> tokio::net::UdpSocket
         let inner = UdpSocket::from_std(std_socket)?;
 
         Ok(Self {
             inner,
             sock_type: socket_type,
-            kind: config.kind,
+            socket_family: config.socket_family,
         })
     }
 
@@ -103,9 +115,17 @@ impl AsyncIcmpSocket {
         self.sock_type
     }
 
-    /// Return the ICMP version.
-    pub fn kind(&self) -> IcmpKind {
-        self.kind
+    /// Return the socket family.
+    pub fn socket_family(&self) -> SocketFamily {
+        self.socket_family
+    }
+
+    /// Return the ICMP kind.
+    pub fn icmp_kind(&self) -> IcmpKind {
+        match self.socket_family {
+            SocketFamily::IPV4 => IcmpKind::V4,
+            SocketFamily::IPV6 => IcmpKind::V6,
+        }
     }
 
     /// Access the native socket for low level operations.

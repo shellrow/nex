@@ -14,8 +14,10 @@ pub struct AsyncTcpSocket {
 impl AsyncTcpSocket {
     /// Create a socket from the given configuration without connecting.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.domain, config.sock_type, Some(Protocol::TCP))?;
+        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::TCP))?;
 
+        socket.set_nonblocking(true)?;
+        
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
@@ -24,6 +26,18 @@ impl AsyncTcpSocket {
         }
         if let Some(ttl) = config.ttl {
             socket.set_ttl(ttl)?;
+        }
+        if let Some(hoplimit) = config.hoplimit {
+            socket.set_unicast_hops_v6(hoplimit)?;
+        }
+        if let Some(keepalive) = config.keepalive {
+            socket.set_keepalive(keepalive)?;
+        }
+        if let Some(timeout) = config.read_timeout {
+            socket.set_read_timeout(Some(timeout))?;
+        }
+        if let Some(timeout) = config.write_timeout {
+            socket.set_write_timeout(Some(timeout))?;
         }
 
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
@@ -34,8 +48,6 @@ impl AsyncTcpSocket {
         if let Some(addr) = config.bind_addr {
             socket.bind(&addr.into())?;
         }
-
-        socket.set_nonblocking(true)?;
 
         Ok(Self { socket })
     }
@@ -145,6 +157,10 @@ impl AsyncTcpSocket {
         Ok((n, addr))
     }
 
+    pub fn shutdown(&self, how: std::net::Shutdown) -> io::Result<()> {
+        self.socket.shutdown(how)
+    }
+
     // --- option helpers ---
 
     pub fn set_reuseaddr(&self, on: bool) -> io::Result<()> {
@@ -161,6 +177,14 @@ impl AsyncTcpSocket {
 
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
         self.socket.set_ttl(ttl)
+    }
+
+    pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
+        self.socket.set_unicast_hops_v6(hops)
+    }
+
+    pub fn set_keepalive(&self, on: bool) -> io::Result<()> {
+        self.socket.set_keepalive(on)
     }
 
     pub fn set_bind_device(&self, iface: &str) -> io::Result<()> {
