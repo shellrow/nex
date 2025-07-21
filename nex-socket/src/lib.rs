@@ -44,6 +44,7 @@ impl SocketFamily {
         matches!(self, SocketFamily::IPV6)
     }
 
+    /// Converts the socket family to a `socket2::Domain`.
     pub(crate) fn to_domain(&self) -> socket2::Domain {
         match self {
             SocketFamily::IPV4 => socket2::Domain::IPV4,

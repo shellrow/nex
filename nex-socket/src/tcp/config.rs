@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::SocketFamily;
 
+/// TCP socket type, either STREAM or RAW.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TcpSocketType {
     Stream,
@@ -11,14 +12,17 @@ pub enum TcpSocketType {
 }
 
 impl TcpSocketType {
+    /// Returns true if the socket type is STREAM.
     pub fn is_stream(&self) -> bool {
         matches!(self, TcpSocketType::Stream)
     }
 
+    /// Returns true if the socket type is RAW.
     pub fn is_raw(&self) -> bool {
         matches!(self, TcpSocketType::Raw)
     }
 
+    /// Converts the TCP socket type to a `socket2::Type`.
     pub(crate) fn to_sock_type(&self) -> SockType {
         match self {
             TcpSocketType::Stream => SockType::STREAM,
@@ -30,18 +34,31 @@ impl TcpSocketType {
 /// Configuration options for a TCP socket.
 #[derive(Debug, Clone)]
 pub struct TcpConfig {
+    /// The socket family, either IPv4 or IPv6.
     pub socket_family: SocketFamily,
+    /// The type of TCP socket, either STREAM or RAW.
     pub socket_type: TcpSocketType,
+    /// Optional address to bind the socket to.
     pub bind_addr: Option<SocketAddr>,
+    /// Whether the socket should be non-blocking.
     pub nonblocking: bool,
+    /// Whether to allow address reuse.
     pub reuseaddr: Option<bool>,
+    /// Whether to disable Nagle's algorithm (TCP_NODELAY).
     pub nodelay: Option<bool>,
+    /// Optional linger duration for the socket.
     pub linger: Option<Duration>,
+    /// Optional Time-To-Live (TTL) for the socket.
     pub ttl: Option<u32>,
+    /// Optional Hop Limit for the socket (IPv6).
     pub hoplimit: Option<u32>,
+    /// Optional read timeout for the socket.
     pub read_timeout: Option<Duration>,
+    /// Optional write timeout for the socket.
     pub write_timeout: Option<Duration>,
+    /// Optional device to bind the socket to.
     pub bind_device: Option<String>,
+    /// Whether to enable TCP keepalive.
     pub keepalive: Option<bool>,
 }
 

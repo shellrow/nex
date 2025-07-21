@@ -1,4 +1,4 @@
-use crate::icmp::{IcmpConfig, IcmpKind};
+use crate::icmp::{IcmpConfig, IcmpKind, IcmpSocketType};
 use crate::SocketFamily;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
@@ -8,7 +8,7 @@ use std::net::{SocketAddr, UdpSocket};
 #[derive(Debug)]
 pub struct IcmpSocket {
     inner: UdpSocket,
-    sock_type: SockType,
+    socket_type: IcmpSocketType,
     socket_family: SocketFamily,
 }
 
@@ -20,10 +20,10 @@ impl IcmpSocket {
             SocketFamily::IPV6 => (Domain::IPV6, Some(Protocol::ICMPV6)),
         };
 
-        let socket = match Socket::new(domain, config.sock_type_hint, proto) {
+        let socket = match Socket::new(domain, config.sock_type_hint.to_sock_type(), proto) {
             Ok(s) => s,
             Err(_) => {
-                let alt_type = if config.sock_type_hint == SockType::DGRAM {
+                let alt_type = if config.sock_type_hint.is_dgram() {
                     SockType::RAW
                 } else {
                     SockType::DGRAM
@@ -34,19 +34,16 @@ impl IcmpSocket {
 
         socket.set_nonblocking(false)?;
 
-        // TTL for IPv4
+        // Set socket options based on configuration
         if let Some(ttl) = config.ttl {
             socket.set_ttl(ttl)?;
         }
-        // Hop limit for IPv6
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
         }
-        // Read timeout
         if let Some(timeout) = config.read_timeout {
             socket.set_read_timeout(Some(timeout))?;
         }
-        // Write timeout
         if let Some(timeout) = config.write_timeout {
             socket.set_write_timeout(Some(timeout))?;
         }
@@ -55,24 +52,25 @@ impl IcmpSocket {
         if let Some(fib) = config.fib {
             socket.set_fib(fib)?;
         }
-        
         // Linux: optional interface name
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         if let Some(interface) = &config.interface {
             socket.bind_device(Some(interface.as_bytes()))?;
         }
 
-        // bind
+        // bind to the specified address if provided
         if let Some(addr) = &config.bind {
             socket.bind(&(*addr).into())?;
         }
+
+        let sock_type = socket.r#type()?;
 
         // Convert socket2::Socket into std::net::UdpSocket
         let std_socket: UdpSocket = socket.into();
 
         Ok(Self {
             inner: std_socket,
-            sock_type: config.sock_type_hint,
+            socket_type: IcmpSocketType::from_sock_type(sock_type),
             socket_family: config.socket_family,
         })
     }
@@ -93,8 +91,8 @@ impl IcmpSocket {
     }
 
     /// Return the socket type.
-    pub fn sock_type(&self) -> SockType {
-        self.sock_type
+    pub fn socket_type(&self) -> IcmpSocketType {
+        self.socket_type
     }
 
     /// Return the socket family.
@@ -110,13 +108,14 @@ impl IcmpSocket {
         }
     }
 
-    /// Access the underlying socket.
+    /// Extract the RAW file descriptor for Unix.
     #[cfg(unix)]
     pub fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         use std::os::fd::AsRawFd;
         self.inner.as_raw_fd()
     }
 
+    /// Extract the RAW socket handle for Windows.
     #[cfg(windows)]
     pub fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
         use std::os::windows::io::AsRawSocket;

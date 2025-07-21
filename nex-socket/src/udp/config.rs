@@ -4,6 +4,7 @@ use socket2::Type as SockType;
 
 use crate::SocketFamily;
 
+/// UDP socket type, either DGRAM or RAW.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UdpSocketType {
     Dgram,
@@ -11,14 +12,17 @@ pub enum UdpSocketType {
 }
 
 impl UdpSocketType {
+    /// Returns true if the socket type is DGRAM.
     pub fn is_dgram(&self) -> bool {
         matches!(self, UdpSocketType::Dgram)
     }
 
+    /// Returns true if the socket type is RAW.
     pub fn is_raw(&self) -> bool {
         matches!(self, UdpSocketType::Raw)
     }
 
+    /// Converts the UDP socket type to a `socket2::Type`.
     pub(crate) fn to_sock_type(&self) -> SockType {
         match self {
             UdpSocketType::Dgram => SockType::DGRAM,
@@ -36,22 +40,18 @@ pub struct UdpConfig {
     pub socket_type: UdpSocketType,
     /// Address to bind. If `None`, the operating system chooses the address.
     pub bind_addr: Option<SocketAddr>,
-
     /// Enable address reuse (`SO_REUSEADDR`).
     pub reuseaddr: Option<bool>,
-
     /// Allow broadcast (`SO_BROADCAST`).
     pub broadcast: Option<bool>,
-
     /// Time to live value.
     pub ttl: Option<u32>,
-
     /// Hop limit value.
     pub hoplimit: Option<u32>,
-
+    /// Read timeout for the socket.
     pub read_timeout: Option<Duration>,
+    /// Write timeout for the socket.
     pub write_timeout: Option<Duration>,
-
     /// Bind to a specific interface (Linux only).
     pub bind_device: Option<String>,
 }

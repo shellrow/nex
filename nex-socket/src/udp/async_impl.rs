@@ -17,6 +17,7 @@ impl AsyncUdpSocket {
 
         socket.set_nonblocking(true)?;
         
+        // Set socket options based on configuration
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
@@ -36,11 +37,13 @@ impl AsyncUdpSocket {
             socket.set_write_timeout(Some(timeout))?;
         }
 
+        // Linux: optional interface name
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         if let Some(iface) = &config.bind_device {
             socket.bind_device(Some(iface.as_bytes()))?;
         }
 
+        // bind to the specified address if provided
         if let Some(addr) = config.bind_addr {
             socket.bind(&addr.into())?;
         }
