@@ -12,7 +12,7 @@ members = [
 [workspace.package]
 version = "0.21.0"
 edition = "2021"
-authors = ["shellrow <shellrow@fortnium.com>"]
+authors = ["shellrow <shellrow@foctal.com>"]
 
 [workspace.dependencies]
 nex-core = { version = "0.21.0", path = "nex-core" }
