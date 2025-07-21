@@ -13,10 +13,14 @@ pub struct AsyncUdpSocket {
 impl AsyncUdpSocket {
     /// Create an asynchronous UDP socket from the given configuration.
     pub fn from_config(config: &UdpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::UDP))?;
+        let socket = Socket::new(
+            config.socket_family.to_domain(),
+            config.socket_type.to_sock_type(),
+            Some(Protocol::UDP),
+        )?;
 
         socket.set_nonblocking(true)?;
-        
+
         // Set socket options based on configuration
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;

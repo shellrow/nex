@@ -1,24 +1,31 @@
-//! Entry point for the nex crate collection.
+//! Cross-platform low-level networking library.
 //!
-//! This crate re-exports the core modules so applications can simply depend on
-//! `nex` and gain access to packet parsing, datalink channels and socket helpers.
-//! It is intended to be a convenient facade for the underlying crates.
-/// Provides core network types and functionality.
+//! `nex` is composed of four core modules (sub-crates), providing a unified interface
+//! for packet parsing, manipulation, data link access, and transport layer sockets.
+//! By depending on the top-level `nex` crate, applications can access all of these capabilities
+//! through a convenient facade.
+//!
+//! - `net` (`nex-core`): Provides core networking types and utilities.
+//! - `datalink` (`nex-datalink`): Interfaces with the data link layer; supports raw packet send/receive.
+//! - `packet` (`nex-packet`): Enables parsing and building of packets at multiple protocol layers.
+//! - `socket` (`nex-socket`): Provides sockets for working with transport protocols such as TCP, UDP, and ICMP (but L3).
+
+/// Provides core networking types and utilities.
 pub mod net {
     pub use nex_core::*;
 }
 
-/// Provides functionality for interacting with the data link layer, support for sending and receiving packets.
+/// Interfaces with the data link layer; supports raw packet send/receive.
 pub mod datalink {
     pub use nex_datalink::*;
 }
 
-/// Support for packet parsing and manipulation. Enables users to work with packets at a granular level.
+/// Enables parsing and building of packets at multiple protocol layers.
 pub mod packet {
     pub use nex_packet::*;
 }
 
-/// Support for sending and receiving transport layer packets.
+/// Provides sockets for working with transport protocols such as TCP, UDP, and ICMP (but L3).
 pub mod socket {
     pub use nex_socket::*;
 }

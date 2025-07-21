@@ -81,10 +81,19 @@ fn main() -> std::io::Result<()> {
             if let Some(ipv4_packet) = Ipv4Packet::from_buf(packet) {
                 if ipv4_packet.header.next_level_protocol == nex_packet::ip::IpNextProtocol::Icmp {
                     if let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload()) {
-                        println!("\t{:?} from: {:?} to {:?}, TTL: {}", icmp_packet.header.icmp_type, ipv4_packet.header.source, ipv4_packet.header.destination, ipv4_packet.header.ttl);
+                        println!(
+                            "\t{:?} from: {:?} to {:?}, TTL: {}",
+                            icmp_packet.header.icmp_type,
+                            ipv4_packet.header.source,
+                            ipv4_packet.header.destination,
+                            ipv4_packet.header.ttl
+                        );
                         match icmp::echo_reply::EchoReplyPacket::try_from(icmp_packet) {
                             Ok(reply) => {
-                                println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                                println!(
+                                    "\tID: {}, Seq: {}",
+                                    reply.identifier, reply.sequence_number
+                                );
                             }
                             Err(_) => {
                                 println!("\tReceived non-echo-reply ICMP packet");
@@ -93,12 +102,16 @@ fn main() -> std::io::Result<()> {
                     }
                 }
             }
-        },
+        }
         IcmpKind::V6 => {
-            // Parse ICMPv6 
+            // Parse ICMPv6
             // The IPv6 header is automatically cropped off when recvfrom() is used.
             if let Some(icmpv6_packet) = Icmpv6Packet::from_buf(packet) {
-                println!("\t{:?} from: {:?}", icmpv6_packet.header.icmpv6_type, from.ip());
+                println!(
+                    "\t{:?} from: {:?}",
+                    icmpv6_packet.header.icmpv6_type,
+                    from.ip()
+                );
                 match icmpv6::echo_reply::EchoReplyPacket::from_buf(packet) {
                     Some(reply) => {
                         println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
