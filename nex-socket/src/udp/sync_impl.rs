@@ -12,7 +12,11 @@ pub struct UdpSocket {
 impl UdpSocket {
     /// Create a socket from the provided configuration.
     pub fn from_config(config: &UdpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::UDP))?;
+        let socket = Socket::new(
+            config.socket_family.to_domain(),
+            config.socket_type.to_sock_type(),
+            Some(Protocol::UDP),
+        )?;
 
         socket.set_nonblocking(false)?;
 

@@ -14,10 +14,14 @@ pub struct AsyncTcpSocket {
 impl AsyncTcpSocket {
     /// Create a socket from the given configuration without connecting.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::TCP))?;
+        let socket = Socket::new(
+            config.socket_family.to_domain(),
+            config.socket_type.to_sock_type(),
+            Some(Protocol::TCP),
+        )?;
 
         socket.set_nonblocking(true)?;
-        
+
         // Set socket options based on configuration
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
