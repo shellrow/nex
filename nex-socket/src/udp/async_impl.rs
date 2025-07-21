@@ -13,37 +13,40 @@ pub struct AsyncUdpSocket {
 impl AsyncUdpSocket {
     /// Create an asynchronous UDP socket from the given configuration.
     pub fn from_config(config: &UdpConfig) -> io::Result<Self> {
-        // Determine address family from the bind address
-        let domain = match config.bind_addr {
-            Some(SocketAddr::V4(_)) => Domain::IPV4,
-            Some(SocketAddr::V6(_)) => Domain::IPV6,
-            None => Domain::IPV4, // default
-        };
+        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::UDP))?;
 
-        let socket = Socket::new(domain, SockType::DGRAM, Some(Protocol::UDP))?;
-
+        socket.set_nonblocking(true)?;
+        
+        // Set socket options based on configuration
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
-
         if let Some(flag) = config.broadcast {
             socket.set_broadcast(flag)?;
         }
-
         if let Some(ttl) = config.ttl {
             socket.set_ttl(ttl)?;
         }
+        if let Some(hoplimit) = config.hoplimit {
+            socket.set_unicast_hops_v6(hoplimit)?;
+        }
+        if let Some(timeout) = config.read_timeout {
+            socket.set_read_timeout(Some(timeout))?;
+        }
+        if let Some(timeout) = config.write_timeout {
+            socket.set_write_timeout(Some(timeout))?;
+        }
 
+        // Linux: optional interface name
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         if let Some(iface) = &config.bind_device {
             socket.bind_device(Some(iface.as_bytes()))?;
         }
 
+        // bind to the specified address if provided
         if let Some(addr) = config.bind_addr {
             socket.bind(&addr.into())?;
         }
-
-        socket.set_nonblocking(true)?;
 
         #[cfg(windows)]
         let std_socket = unsafe {

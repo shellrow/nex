@@ -20,9 +20,11 @@ pub struct TcpSocket {
 impl TcpSocket {
     /// Build a socket according to `TcpSocketConfig`.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
-        let socket = Socket::new(config.domain, config.sock_type, Some(Protocol::TCP))?;
+        let socket = Socket::new(config.socket_family.to_domain(), config.socket_type.to_sock_type(), Some(Protocol::TCP))?;
 
-        // Apply all configuration options
+        socket.set_nonblocking(config.nonblocking)?;
+
+        // Set socket options based on configuration
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
@@ -35,19 +37,29 @@ impl TcpSocket {
         if let Some(ttl) = config.ttl {
             socket.set_ttl(ttl)?;
         }
+        if let Some(hoplimit) = config.hoplimit {
+            socket.set_unicast_hops_v6(hoplimit)?;
+        }
+        if let Some(keepalive) = config.keepalive {
+            socket.set_keepalive(keepalive)?;
+        }
+        if let Some(timeout) = config.read_timeout {
+            socket.set_read_timeout(Some(timeout))?;
+        }
+        if let Some(timeout) = config.write_timeout {
+            socket.set_write_timeout(Some(timeout))?;
+        }
 
+        // Linux: optional interface name
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         if let Some(iface) = &config.bind_device {
             socket.bind_device(Some(iface.as_bytes()))?;
         }
 
-        // Bind to the specified address if provided
+        // bind to the specified address if provided
         if let Some(addr) = config.bind_addr {
             socket.bind(&addr.into())?;
         }
-
-        // Set non blocking mode
-        socket.set_nonblocking(config.nonblocking)?;
 
         Ok(Self { socket })
     }
@@ -79,16 +91,17 @@ impl TcpSocket {
         Self::new(Domain::IPV6, SockType::RAW)
     }
 
-    // --- socket operations ---
-
+    /// Bind the socket to a specific address.
     pub fn bind(&self, addr: SocketAddr) -> io::Result<()> {
         self.socket.bind(&addr.into())
     }
 
+    /// Connect to a remote address.
     pub fn connect(&self, addr: SocketAddr) -> io::Result<()> {
         self.socket.connect(&addr.into())
     }
 
+    /// Connect to the target address with a timeout.
     #[cfg(unix)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
         let raw_fd = self.socket.as_raw_fd();
@@ -198,19 +211,23 @@ impl TcpSocket {
         Ok(std_stream)
     }
 
+    /// Start listening for incoming connections.
     pub fn listen(&self, backlog: i32) -> io::Result<()> {
         self.socket.listen(backlog)
     }
 
+    /// Accept an incoming connection.
     pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
         let (stream, addr) = self.socket.accept()?;
         Ok((stream.into(), addr.as_socket().unwrap()))
     }
 
+    /// Convert the socket into a `TcpStream`.
     pub fn to_tcp_stream(self) -> io::Result<TcpStream> {
         Ok(self.socket.into())
     }
 
+    /// Convert the socket into a `TcpListener`.
     pub fn to_tcp_listener(self) -> io::Result<TcpListener> {
         Ok(self.socket.into())
     }
@@ -238,24 +255,42 @@ impl TcpSocket {
         Ok((n, addr))
     }
 
-    // --- option helpers ---
+    /// Shutdown the socket.
+    pub fn shutdown(&self, how: std::net::Shutdown) -> io::Result<()> {
+        self.socket.shutdown(how)
+    }
 
+    /// Set the socket to reuse the address.
     pub fn set_reuseaddr(&self, on: bool) -> io::Result<()> {
         self.socket.set_reuse_address(on)
     }
 
+    /// Set the socket to not delay packets.
     pub fn set_nodelay(&self, on: bool) -> io::Result<()> {
         self.socket.set_nodelay(on)
     }
 
+    /// Set the linger option for the socket.
     pub fn set_linger(&self, dur: Option<Duration>) -> io::Result<()> {
         self.socket.set_linger(dur)
     }
 
+    /// Set the time-to-live for IPv4 packets.
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
         self.socket.set_ttl(ttl)
     }
 
+    /// Set the hop limit for IPv6 packets.
+    pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
+        self.socket.set_unicast_hops_v6(hops)
+    }
+
+    /// Set the keepalive option for the socket.
+    pub fn set_keepalive(&self, on: bool) -> io::Result<()> {
+        self.socket.set_keepalive(on)
+    }
+
+    /// Set the bind device for the socket (Linux specific).
     pub fn set_bind_device(&self, iface: &str) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
         return self.socket.bind_device(Some(iface.as_bytes()));
@@ -270,8 +305,7 @@ impl TcpSocket {
         }
     }
 
-    // --- information helpers ---
-
+    /// Retrieve the local address of the socket.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.socket
             .local_addr()?
@@ -279,12 +313,14 @@ impl TcpSocket {
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to retrieve local address"))
     }
 
+    /// Extract the RAW file descriptor for Unix.
     #[cfg(unix)]
     pub fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         use std::os::fd::AsRawFd;
         self.socket.as_raw_fd()
     }
 
+    /// Extract the RAW socket handle for Windows.
     #[cfg(windows)]
     pub fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
         use std::os::windows::io::AsRawSocket;

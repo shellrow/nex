@@ -1,42 +1,92 @@
-use socket2::{Domain, Type as SockType};
+use socket2::Type as SockType;
 use std::net::SocketAddr;
 use std::time::Duration;
+
+use crate::SocketFamily;
+
+/// TCP socket type, either STREAM or RAW.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TcpSocketType {
+    Stream,
+    Raw,
+}
+
+impl TcpSocketType {
+    /// Returns true if the socket type is STREAM.
+    pub fn is_stream(&self) -> bool {
+        matches!(self, TcpSocketType::Stream)
+    }
+
+    /// Returns true if the socket type is RAW.
+    pub fn is_raw(&self) -> bool {
+        matches!(self, TcpSocketType::Raw)
+    }
+
+    /// Converts the TCP socket type to a `socket2::Type`.
+    pub(crate) fn to_sock_type(&self) -> SockType {
+        match self {
+            TcpSocketType::Stream => SockType::STREAM,
+            TcpSocketType::Raw => SockType::RAW,
+        }
+    }
+}
 
 /// Configuration options for a TCP socket.
 #[derive(Debug, Clone)]
 pub struct TcpConfig {
-    pub domain: Domain,
-    pub sock_type: SockType,
+    /// The socket family, either IPv4 or IPv6.
+    pub socket_family: SocketFamily,
+    /// The type of TCP socket, either STREAM or RAW.
+    pub socket_type: TcpSocketType,
+    /// Optional address to bind the socket to.
     pub bind_addr: Option<SocketAddr>,
+    /// Whether the socket should be non-blocking.
     pub nonblocking: bool,
+    /// Whether to allow address reuse.
     pub reuseaddr: Option<bool>,
+    /// Whether to disable Nagle's algorithm (TCP_NODELAY).
     pub nodelay: Option<bool>,
+    /// Optional linger duration for the socket.
     pub linger: Option<Duration>,
+    /// Optional Time-To-Live (TTL) for the socket.
     pub ttl: Option<u32>,
+    /// Optional Hop Limit for the socket (IPv6).
+    pub hoplimit: Option<u32>,
+    /// Optional read timeout for the socket.
+    pub read_timeout: Option<Duration>,
+    /// Optional write timeout for the socket.
+    pub write_timeout: Option<Duration>,
+    /// Optional device to bind the socket to.
     pub bind_device: Option<String>,
+    /// Whether to enable TCP keepalive.
+    pub keepalive: Option<bool>,
 }
 
 impl TcpConfig {
     /// Create a STREAM socket for IPv4.
     pub fn v4_stream() -> Self {
         Self {
-            domain: Domain::IPV4,
-            sock_type: SockType::STREAM,
+            socket_family: SocketFamily::IPV4,
+            socket_type: TcpSocketType::Stream,
             bind_addr: None,
             nonblocking: false,
             reuseaddr: None,
             nodelay: None,
             linger: None,
             ttl: None,
+            hoplimit: None,
+            read_timeout: None,
+            write_timeout: None,
             bind_device: None,
+            keepalive: None,
         }
     }
 
     /// Create a RAW socket. Requires administrator privileges.
     pub fn raw_v4() -> Self {
         Self {
-            domain: Domain::IPV4,
-            sock_type: SockType::RAW,
+            socket_family: SocketFamily::IPV4,
+            socket_type: TcpSocketType::Raw,
             ..Self::v4_stream()
         }
     }
@@ -44,8 +94,8 @@ impl TcpConfig {
     /// Create a STREAM socket for IPv6.
     pub fn v6_stream() -> Self {
         Self {
-            domain: Domain::IPV6,
-            sock_type: SockType::STREAM,
+            socket_family: SocketFamily::IPV6,
+            socket_type: TcpSocketType::Stream,
             ..Self::v4_stream()
         }
     }
@@ -53,8 +103,8 @@ impl TcpConfig {
     /// Create a RAW socket for IPv6. Requires administrator privileges.
     pub fn raw_v6() -> Self {
         Self {
-            domain: Domain::IPV6,
-            sock_type: SockType::RAW,
+            socket_family: SocketFamily::IPV6,
+            socket_type: TcpSocketType::Raw,
             ..Self::v4_stream()
         }
     }
@@ -91,6 +141,26 @@ impl TcpConfig {
         self
     }
 
+    pub fn with_hoplimit(mut self, hops: u32) -> Self {
+        self.hoplimit = Some(hops);
+        self
+    }
+
+    pub fn with_keepalive(mut self, on: bool) -> Self {
+        self.keepalive = Some(on);
+        self
+    }
+
+    pub fn with_read_timeout(mut self, timeout: Duration) -> Self {
+        self.read_timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
+        self.write_timeout = Some(timeout);
+        self
+    }
+
     pub fn with_bind_device(mut self, iface: impl Into<String>) -> Self {
         self.bind_device = Some(iface.into());
         self
@@ -111,8 +181,8 @@ mod tests {
             .with_nodelay(true)
             .with_ttl(10);
 
-        assert_eq!(cfg.domain, Domain::IPV4);
-        assert_eq!(cfg.sock_type, SockType::STREAM);
+        assert_eq!(cfg.socket_family, SocketFamily::IPV4);
+        assert_eq!(cfg.socket_type, TcpSocketType::Stream);
         assert_eq!(cfg.bind_addr, Some(addr));
         assert!(cfg.nonblocking);
         assert_eq!(cfg.reuseaddr, Some(true));
