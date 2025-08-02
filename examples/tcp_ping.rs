@@ -106,7 +106,7 @@ fn main() {
     }
 
     // Packet builder for TCP SYN
-    let tcp_packet = TcpPacketBuilder::new()
+    let tcp_packet = TcpPacketBuilder::new(src_ip, dst_ip)
         .source(53443)
         .destination(target_socket.port())
         .flags(TcpFlags::SYN)
@@ -118,7 +118,6 @@ fn main() {
             TcpOptionPacket::nop(),
             TcpOptionPacket::wscale(7),
         ])
-        .calculate_checksum(&src_ip, &dst_ip)
         .build();
 
     let ip_packet: Bytes;

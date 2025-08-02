@@ -56,14 +56,12 @@ fn main() -> std::io::Result<()> {
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
             .echo_fields(0x1234, 1)
             .payload(Bytes::from_static(b"hello"))
-            .calculate_checksum()
             .to_bytes(),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
             .icmpv6_type(nex_packet::icmpv6::Icmpv6Type::EchoRequest)
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
             .echo_fields(0x1234, 1)
             .payload(Bytes::from_static(b"hello"))
-            .calculate_checksum()
             .to_bytes(),
         _ => unreachable!(),
     };

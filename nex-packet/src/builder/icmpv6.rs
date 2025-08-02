@@ -1,7 +1,7 @@
 use std::net::Ipv6Addr;
 
 use crate::{
-    icmpv6::{self, checksum, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
+    icmpv6::{self, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
     packet::Packet,
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -58,15 +58,15 @@ impl Icmpv6PacketBuilder {
         self
     }
 
+    /// Calculate the checksum and set it in the header
     pub fn calculate_checksum(mut self) -> Self {
-        // Calculate the checksum and set it in the header
-        self.packet.header.checksum = checksum(&self.packet, &self.source, &self.destination);
+        self.packet.header.checksum = icmpv6::checksum(&self.packet, &self.source, &self.destination);
         self
     }
 
     /// Return an `Icmpv6Packet` with checksum computed
     pub fn build(mut self) -> Icmpv6Packet {
-        self.packet.header.checksum = checksum(&self.packet, &self.source, &self.destination);
+        self.packet.header.checksum = icmpv6::checksum(&self.packet, &self.source, &self.destination);
         self.packet
     }
 

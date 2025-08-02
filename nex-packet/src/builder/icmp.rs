@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use crate::{
-    icmp::{self, checksum, IcmpCode, IcmpHeader, IcmpPacket, IcmpType},
+    icmp::{self, IcmpCode, IcmpHeader, IcmpPacket, IcmpType},
     packet::Packet,
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -62,15 +62,15 @@ impl IcmpPacketBuilder {
         self
     }
 
+    /// Calculate the checksum and set it in the header
     pub fn calculate_checksum(mut self) -> Self {
-        // Calculate the checksum and set it in the header
-        self.packet.header.checksum = checksum(&self.packet);
+        self.packet.header.checksum = icmp::checksum(&self.packet);
         self
     }
 
     /// Return an `IcmpPacket` with checksum computed
     pub fn build(mut self) -> IcmpPacket {
-        self.packet.header.checksum = checksum(&self.packet);
+        self.packet.header.checksum = icmp::checksum(&self.packet);
         self.packet
     }
 

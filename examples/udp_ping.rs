@@ -65,10 +65,9 @@ fn main() {
             .expect("No global IPv6 address on interface"),
     };
 
-    let udp_packet = UdpPacketBuilder::new()
+    let udp_packet = UdpPacketBuilder::new(src_ip, target_ip)
         .source(SRC_PORT)
         .destination(DST_PORT)
-        .calculate_checksum(&src_ip, &target_ip)
         .build();
 
     let ip_packet: Bytes = match (src_ip, target_ip) {
