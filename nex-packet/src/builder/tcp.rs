@@ -7,13 +7,17 @@ use bytes::Bytes;
 /// Builder for constructing TCP packets
 #[derive(Debug, Clone)]
 pub struct TcpPacketBuilder {
+    src_ip: IpAddr,
+    dst_ip: IpAddr,
     packet: TcpPacket,
 }
 
 impl TcpPacketBuilder {
     /// Create a new builder
-    pub fn new() -> Self {
+    pub fn new(src_ip: IpAddr, dst_ip: IpAddr) -> Self {
         Self {
+            src_ip,
+            dst_ip,
             packet: TcpPacket {
                 header: TcpHeader {
                     source: 0,
@@ -89,29 +93,33 @@ impl TcpPacketBuilder {
         self
     }
 
-    pub fn calculate_checksum(mut self, src_ip: &IpAddr, dst_ip: &IpAddr) -> Self {
-        // Calculate the checksum and set it in the header
-        self.packet.header.checksum = crate::tcp::checksum(&self.packet, src_ip, dst_ip);
+    /// Calculate the checksum and set it in the header
+    pub fn calculate_checksum(mut self) -> Self {
+        self.packet.header.checksum = crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self
     }
-    pub fn build(self) -> TcpPacket {
+    /// Build the packet with checksum computed
+    pub fn build(mut self) -> TcpPacket {
+        self.packet.header.checksum = crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self.packet
     }
-
+    /// Serialize the packet into bytes with checksum computed
     pub fn to_bytes(self) -> Bytes {
-        self.packet.to_bytes()
+        self.build().to_bytes()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use super::*;
     use crate::tcp::TcpFlags;
     use bytes::Bytes;
 
     #[test]
     fn tcp_builder_basic() {
-        let pkt = TcpPacketBuilder::new()
+        let pkt = TcpPacketBuilder::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)))
             .source(1234)
             .destination(80)
             .sequence(1)

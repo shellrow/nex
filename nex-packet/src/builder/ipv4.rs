@@ -100,7 +100,6 @@ impl Ipv4PacketBuilder {
     pub fn build(mut self) -> Ipv4Packet {
         let total_length = self.packet.header_len() + self.packet.payload_len();
         self.packet.header.total_length = total_length as u16be;
-        self.packet.header.checksum = 0;
         self.packet.header.checksum = crate::ipv4::checksum(&self.packet);
         self.packet
     }

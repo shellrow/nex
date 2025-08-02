@@ -7,13 +7,17 @@ use bytes::Bytes;
 /// Builder for constructing UDP packets
 #[derive(Debug, Clone)]
 pub struct UdpPacketBuilder {
+    src_ip: IpAddr,
+    dst_ip: IpAddr,
     packet: UdpPacket,
 }
 
 impl UdpPacketBuilder {
     /// Create a new builder
-    pub fn new() -> Self {
+    pub fn new(src_ip: IpAddr, dst_ip: IpAddr) -> Self {
         Self {
+            src_ip,
+            dst_ip,
             packet: UdpPacket {
                 header: UdpHeader {
                     source: 0,
@@ -50,21 +54,24 @@ impl UdpPacketBuilder {
         self
     }
 
-    pub fn calculate_checksum(mut self, src_ip: &IpAddr, dst_ip: &IpAddr) -> Self {
+    /// Calculate the checksum and set it in the header
+    pub fn calculate_checksum(mut self) -> Self {
         // Calculate the checksum and set it in the header
-        self.packet.header.checksum = crate::udp::checksum(&self.packet, src_ip, dst_ip);
+        self.packet.header.checksum = crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self
     }
 
-    /// Build the packet
+    /// Build the packet with checksum computed
     pub fn build(mut self) -> UdpPacket {
         // Automatically compute the length
         let total_len = UDP_HEADER_LEN + self.packet.payload.len();
         self.packet.header.length = (total_len as u16).into();
+        // Calculate the checksum
+        self.packet.header.checksum = crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self.packet
     }
 
-    /// Serialize the packet into bytes
+    /// Serialize the packet into bytes with checksum computed
     pub fn to_bytes(self) -> Bytes {
         self.build().to_bytes()
     }
@@ -79,12 +86,14 @@ impl UdpPacketBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use super::*;
     use bytes::Bytes;
 
     #[test]
     fn udp_builder_sets_length() {
-        let pkt = UdpPacketBuilder::new()
+        let pkt = UdpPacketBuilder::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)))
             .source(1)
             .destination(2)
             .payload(Bytes::from_static(&[1, 2, 3]))
