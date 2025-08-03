@@ -1,7 +1,7 @@
 //! Asynchronous raw socket support for Linux using epoll.
 
-use crate::{ChannelType, Config};
 use crate::async_io::{AsyncChannel, AsyncRawSender};
+use crate::{ChannelType, Config};
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
 use nex_core::mac::MacAddr;

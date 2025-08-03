@@ -1,9 +1,7 @@
 //! Basic packet capture using asynchronous receive channel.
 
-use futures::stream::StreamExt;
-use nex_datalink::async_io::{async_channel, AsyncChannel};
-use nex_datalink::Config;
 use bytes::Bytes;
+use futures::stream::StreamExt;
 use nex::net::interface::Interface;
 use nex::net::mac::MacAddr;
 use nex::packet::arp::ArpPacket;
@@ -16,6 +14,8 @@ use nex::packet::ipv6::Ipv6Packet;
 use nex::packet::packet::Packet;
 use nex::packet::tcp::TcpPacket;
 use nex::packet::udp::UdpPacket;
+use nex_datalink::async_io::{async_channel, AsyncChannel};
+use nex_datalink::Config;
 use nex_packet::ethernet::EthernetHeader;
 use nex_packet::{icmp, icmpv6};
 use std::net::IpAddr;
@@ -23,8 +23,7 @@ use std::net::IpAddr;
 fn main() -> std::io::Result<()> {
     // Choose the default interface.
     let interface = Interface::default().expect("no default interface");
-    let AsyncChannel::Ethernet(_tx, mut rx) = async_channel(&interface, Config::default())?
-    else {
+    let AsyncChannel::Ethernet(_tx, mut rx) = async_channel(&interface, Config::default())? else {
         unreachable!();
     };
 
@@ -41,8 +40,7 @@ fn main() -> std::io::Result<()> {
             );
 
             if interface.is_tun()
-                || (cfg!(any(target_os = "macos", target_os = "ios"))
-                    && interface.is_loopback())
+                || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback())
             {
                 let payload_offset: usize;
                 if interface.is_loopback() {

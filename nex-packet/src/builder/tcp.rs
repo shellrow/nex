@@ -95,12 +95,14 @@ impl TcpPacketBuilder {
 
     /// Calculate the checksum and set it in the header
     pub fn calculate_checksum(mut self) -> Self {
-        self.packet.header.checksum = crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
+        self.packet.header.checksum =
+            crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self
     }
     /// Build the packet with checksum computed
     pub fn build(mut self) -> TcpPacket {
-        self.packet.header.checksum = crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
+        self.packet.header.checksum =
+            crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self.packet
     }
     /// Serialize the packet into bytes with checksum computed
@@ -119,16 +121,19 @@ mod tests {
 
     #[test]
     fn tcp_builder_basic() {
-        let pkt = TcpPacketBuilder::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)))
-            .source(1234)
-            .destination(80)
-            .sequence(1)
-            .acknowledgement(2)
-            .flags(TcpFlags::SYN)
-            .window(1024)
-            .urgent_ptr(0)
-            .payload(Bytes::from_static(b"abc"))
-            .build();
+        let pkt = TcpPacketBuilder::new(
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+        )
+        .source(1234)
+        .destination(80)
+        .sequence(1)
+        .acknowledgement(2)
+        .flags(TcpFlags::SYN)
+        .window(1024)
+        .urgent_ptr(0)
+        .payload(Bytes::from_static(b"abc"))
+        .build();
         assert_eq!(pkt.header.source, 1234);
         assert_eq!(pkt.header.destination, 80);
         assert_eq!(pkt.header.sequence, 1);

@@ -1,8 +1,8 @@
 //! Asynchronous raw datalink support for BSD BPF devices.
 
+use crate::async_io::{AsyncChannel, AsyncRawSender};
 use crate::bindings::bpf;
 use crate::Config;
-use crate::async_io::{AsyncChannel, AsyncRawSender};
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
 use nex_sys;

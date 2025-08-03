@@ -60,13 +60,15 @@ impl Icmpv6PacketBuilder {
 
     /// Calculate the checksum and set it in the header
     pub fn calculate_checksum(mut self) -> Self {
-        self.packet.header.checksum = icmpv6::checksum(&self.packet, &self.source, &self.destination);
+        self.packet.header.checksum =
+            icmpv6::checksum(&self.packet, &self.source, &self.destination);
         self
     }
 
     /// Return an `Icmpv6Packet` with checksum computed
     pub fn build(mut self) -> Icmpv6Packet {
-        self.packet.header.checksum = icmpv6::checksum(&self.packet, &self.source, &self.destination);
+        self.packet.header.checksum =
+            icmpv6::checksum(&self.packet, &self.source, &self.destination);
         self.packet
     }
 

@@ -1,10 +1,7 @@
 //! Basic demonstration of asynchronous datalink send/receive.
 
-use futures::{future::poll_fn, stream::StreamExt};
-use nex_core::interface::Interface;
-use nex_datalink::Config;
-use nex_datalink::async_io::{async_channel, AsyncChannel};
 use bytes::Bytes;
+use futures::{future::poll_fn, stream::StreamExt};
 use nex::net::mac::MacAddr;
 use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex::packet::builder::icmp::IcmpPacketBuilder;
@@ -15,6 +12,9 @@ use nex::packet::ethernet::EtherType;
 use nex::packet::frame::{Frame, ParseOption};
 use nex::packet::icmp::IcmpType;
 use nex::packet::icmpv6::Icmpv6Type;
+use nex_core::interface::Interface;
+use nex_datalink::async_io::{async_channel, AsyncChannel};
+use nex_datalink::Config;
 use nex_packet::ip::IpNextProtocol;
 use nex_packet::ipv4::Ipv4Flags;
 use nex_packet::packet::Packet;
