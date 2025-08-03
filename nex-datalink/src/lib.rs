@@ -8,6 +8,8 @@ use std::time::Duration;
 
 mod bindings;
 
+pub mod async_io;
+
 #[cfg(windows)]
 #[path = "wpcap.rs"]
 mod backend;
