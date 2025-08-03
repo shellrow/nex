@@ -57,7 +57,8 @@ impl UdpPacketBuilder {
     /// Calculate the checksum and set it in the header
     pub fn calculate_checksum(mut self) -> Self {
         // Calculate the checksum and set it in the header
-        self.packet.header.checksum = crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
+        self.packet.header.checksum =
+            crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self
     }
 
@@ -67,7 +68,8 @@ impl UdpPacketBuilder {
         let total_len = UDP_HEADER_LEN + self.packet.payload.len();
         self.packet.header.length = (total_len as u16).into();
         // Calculate the checksum
-        self.packet.header.checksum = crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
+        self.packet.header.checksum =
+            crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
         self.packet
     }
 
@@ -93,11 +95,14 @@ mod tests {
 
     #[test]
     fn udp_builder_sets_length() {
-        let pkt = UdpPacketBuilder::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)))
-            .source(1)
-            .destination(2)
-            .payload(Bytes::from_static(&[1, 2, 3]))
-            .build();
+        let pkt = UdpPacketBuilder::new(
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+        )
+        .source(1)
+        .destination(2)
+        .payload(Bytes::from_static(&[1, 2, 3]))
+        .build();
         assert_eq!(pkt.header.length, (UDP_HEADER_LEN + 3) as u16);
         assert_eq!(pkt.payload, Bytes::from_static(&[1, 2, 3]));
     }
