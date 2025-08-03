@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 
+#[derive(Debug)]
 struct WinPcapAdapter {
     adapter: windows::LPADAPTER,
 }
@@ -29,6 +30,7 @@ impl Drop for WinPcapAdapter {
 unsafe impl Send for WinPcapAdapter {}
 unsafe impl Sync for WinPcapAdapter {}
 
+#[derive(Clone, Debug)]
 struct WinPcapPacket {
     packet: windows::LPPACKET,
 }
@@ -38,6 +40,8 @@ impl Drop for WinPcapPacket {
         unsafe { windows::PacketFreePacket(self.packet) };
     }
 }
+
+unsafe impl Send for WinPcapPacket {}
 
 #[derive(Debug)]
 struct Inner {
@@ -144,7 +148,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 
     let adapter = Arc::new(WinPcapAdapter { adapter });
     let packets = Arc::new(Mutex::new(VecDeque::new()));
-    let waker = Arc::new(Mutex::new(None));
+    let waker: Arc<Mutex<Option<std::task::Waker>>> = Arc::new(Mutex::new(None));
 
     {
         let adapter = adapter.clone();
