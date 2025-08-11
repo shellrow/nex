@@ -1,3 +1,5 @@
+//! IP address utilities.
+
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Returns [`true`] if the address appears to be globally routable.

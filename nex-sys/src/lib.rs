@@ -23,6 +23,7 @@ impl Drop for FileDesc {
     }
 }
 
+/// Sends data to a socket, returning the number of bytes sent.
 pub fn send_to(
     socket: CSocket,
     buffer: &[u8],
@@ -47,6 +48,7 @@ pub fn send_to(
     }
 }
 
+/// Receives data from a socket, returning the number of bytes read.
 pub fn recv_from(
     socket: CSocket,
     buffer: &mut [u8],
