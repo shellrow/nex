@@ -553,15 +553,32 @@ impl Packet for TcpPacket {
     }
 
     fn to_bytes(&self) -> Bytes {
-        let mut bytes = BytesMut::with_capacity(self.header_len() + self.payload.len());
+        // Calculate the actual encoded length of TCP options
+        let mut enc_opt_len = 0usize;
+        for opt in &self.header.options {
+            match opt.kind {
+                TcpOptionKind::EOL | TcpOptionKind::NOP => enc_opt_len += 1,
+                _ => {
+                    // Total length including kind + length fields
+                    let len = opt.length.unwrap_or(2) as usize;
+                    enc_opt_len += len;
+                }
+            }
+        }
+        // Round up to the nearest 4-byte boundary
+        let padded_opt_len = (enc_opt_len + 3) & !3;
+        let header_len = TCP_HEADER_LEN + padded_opt_len;
+        // In 32-bit words
+        let data_offset_words = (header_len / 4) as u8;
 
+        // Write the TCP header
+        let mut bytes = BytesMut::with_capacity(header_len + self.payload.len());
         bytes.put_u16(self.header.source);
         bytes.put_u16(self.header.destination);
         bytes.put_u32(self.header.sequence);
         bytes.put_u32(self.header.acknowledgement);
 
-        let offset_reserved =
-            (self.header.data_offset.to_be() << 4) | (self.header.reserved.to_be() & 0x0F);
+        let offset_reserved = (data_offset_words << 4) | (self.header.reserved.to_be() & 0x0F);
         bytes.put_u8(offset_reserved);
 
         bytes.put_u8(self.header.flags);
@@ -569,19 +586,21 @@ impl Packet for TcpPacket {
         bytes.put_u16(self.header.checksum);
         bytes.put_u16(self.header.urgent_ptr);
 
-        for option in &self.header.options {
-            bytes.put_u8(option.kind.value());
-            if let Some(length) = option.length {
+        // Encode the options
+        let before_opts = bytes.len();
+        for opt in &self.header.options {
+            bytes.put_u8(opt.kind.value());
+            if let Some(length) = opt.length {
                 bytes.put_u8(length);
-                bytes.extend_from_slice(&option.data);
+                bytes.extend_from_slice(&opt.data);
             }
         }
+        // Add option padding (zero-filled) to reach the padded length
+        let written_opt = bytes.len() - before_opts;
+        let pad = padded_opt_len.saturating_sub(written_opt);
+        for _ in 0..pad { bytes.put_u8(0); }
 
-        // Padding to 4-byte alignment
-        while bytes.len() % 4 != 0 {
-            bytes.put_u8(0);
-        }
-
+        // Append payload
         bytes.extend_from_slice(&self.payload);
 
         bytes.freeze()
