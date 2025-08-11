@@ -1,3 +1,7 @@
+//! UDP socket.
+//!
+//! Provides synchronous and asynchronous UDP APIs along with
+//! configuration utilities for common socket options.
 mod async_impl;
 mod config;
 mod sync_impl;

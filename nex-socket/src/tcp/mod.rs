@@ -1,3 +1,7 @@
+//! TCP socket.
+//!
+//! Includes synchronous and asynchronous functionality and configuration
+//! helpers for TCP sockets.
 mod async_impl;
 mod config;
 mod sync_impl;

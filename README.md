@@ -42,14 +42,14 @@ If you want to focus on network interfaces, you can use the [netdev](https://git
 `nex-datalink` uses a raw socket which may require elevated privileges depending on your system's configuration.  
 Execute with administrator privileges if necessary.
 
-## for Windows Users
+## For Windows Users
 Please note that in order to send and receive raw packets using `nex-datalink` on Windows, [Npcap](https://npcap.com/#download) is required.
 
 1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
 
 2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
 
-## for macOS Users
-On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary for send and receive raw packets using `nex-datalink`.
+## For macOS Users
+On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary to send and receive raw packets using `nex-datalink`.
 You can use [chmod-bpf](https://github.com/shellrow/chmod-bpf) to automatically manage permissions for BPF devices.
 Alternatively, of course, you can also use `sudo` to temporarily grant the necessary permissions.
