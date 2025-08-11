@@ -598,7 +598,9 @@ impl Packet for TcpPacket {
         // Add option padding (zero-filled) to reach the padded length
         let written_opt = bytes.len() - before_opts;
         let pad = padded_opt_len.saturating_sub(written_opt);
-        for _ in 0..pad { bytes.put_u8(0); }
+        for _ in 0..pad {
+            bytes.put_u8(0);
+        }
 
         // Append payload
         bytes.extend_from_slice(&self.payload);
