@@ -1,1 +1,1 @@
-pub use netdev::mac::*;
+pub use netdev::net::mac::*;
