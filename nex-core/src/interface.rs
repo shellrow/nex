@@ -1,1 +1,1 @@
-pub use netdev::interface::*;
+pub use netdev::*;

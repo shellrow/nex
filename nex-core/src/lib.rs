@@ -4,8 +4,6 @@
 pub use netdev;
 
 pub mod bitfield;
-pub mod device;
-pub mod gateway;
 pub mod interface;
 pub mod ip;
 pub mod mac;
