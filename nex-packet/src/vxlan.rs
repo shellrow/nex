@@ -2,7 +2,7 @@
 use bytes::{Buf, Bytes};
 use nex_core::bitfield::{self, u24be};
 
-use crate::packet::Packet;
+use crate::packet::{GenericMutablePacket, Packet};
 
 /// Virtual eXtensible Local Area Network (VXLAN)
 ///
@@ -14,7 +14,7 @@ use crate::packet::Packet;
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /// |                VXLAN Network Identifier (VNI) |   Reserved    |
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-pub struct Vxlan {
+pub struct VxlanPacket {
     pub flags: u8,
     pub reserved1: u24be,
     pub vni: u24be,
@@ -22,7 +22,7 @@ pub struct Vxlan {
     pub payload: Bytes,
 }
 
-impl Packet for Vxlan {
+impl Packet for VxlanPacket {
     type Header = ();
 
     fn from_buf(mut bytes: &[u8]) -> Option<Self> {
@@ -108,14 +108,35 @@ impl Packet for Vxlan {
     }
 }
 
-#[test]
-fn vxlan_packet_test() {
-    let packet = Bytes::from_static(&[
-        0x08, // I flag
-        0x00, 0x00, 0x00, // Reserved
-        0x12, 0x34, 0x56, // VNI
-        0x00, // Reserved
-    ]);
-    let vxlan_packet = Vxlan::from_bytes(packet.clone()).unwrap();
-    assert_eq!(vxlan_packet.to_bytes(), packet);
+/// Represents a mutable VXLAN packet.
+pub type MutableVxlanPacket<'a> = GenericMutablePacket<'a, VxlanPacket>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vxlan_packet_test() {
+        let packet = Bytes::from_static(&[
+            0x08, // I flag
+            0x00, 0x00, 0x00, // Reserved
+            0x12, 0x34, 0x56, // VNI
+            0x00, // Reserved
+        ]);
+        let vxlan_packet = VxlanPacket::from_bytes(packet.clone()).unwrap();
+        assert_eq!(vxlan_packet.to_bytes(), packet);
+    }
+
+    #[test]
+    fn mutable_vxlan_packet_test() {
+        let mut raw = [0x08, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x00, 0xaa];
+
+        use crate::packet::MutablePacket;
+        let mut packet = <MutableVxlanPacket as MutablePacket>::new(&mut raw).expect("mutable vxlan");
+        packet.header_mut()[0] = 0x0c;
+        packet.payload_mut()[0] = 0xff;
+
+        let frozen = MutablePacket::freeze(&packet).expect("freeze");
+        assert_eq!(frozen.payload[0], 0xff);
+    }
 }

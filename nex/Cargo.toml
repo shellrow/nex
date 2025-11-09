@@ -90,3 +90,7 @@ path = "../examples/async_datalink.rs"
 [[example]]
 name = "async_dump"
 path = "../examples/async_dump.rs"
+
+[[example]]
+name = "mutable_chaining"
+path = "../examples/mutable_chaining.rs"

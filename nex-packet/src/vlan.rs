@@ -1,6 +1,9 @@
 //! A VLAN (802.1Q) packet abstraction.
 //!
-use crate::{ethernet::EtherType, packet::Packet};
+use crate::{
+    ethernet::EtherType,
+    packet::{MutablePacket, Packet},
+};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use nex_core::bitfield::{u1, u12be};
 #[cfg(feature = "serde")]
@@ -168,6 +171,102 @@ impl Packet for VlanPacket {
     }
 }
 
+/// Represents a mutable VLAN packet.
+pub struct MutableVlanPacket<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableVlanPacket<'a> {
+    type Packet = VlanPacket;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < VLAN_HEADER_LEN {
+            None
+        } else {
+            Some(Self { buffer })
+        }
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..VLAN_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        &self.packet()[VLAN_HEADER_LEN..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let (_, payload) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        payload
+    }
+}
+
+impl<'a> MutableVlanPacket<'a> {
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    pub fn get_priority_code_point(&self) -> ClassOfService {
+        let first = self.raw()[0];
+        ClassOfService::new(first >> 5)
+    }
+
+    pub fn set_priority_code_point(&mut self, class: ClassOfService) {
+        let buf = self.raw_mut();
+        buf[0] = (buf[0] & 0x1F) | ((class.value() & 0x07) << 5);
+    }
+
+    pub fn get_drop_eligible_id(&self) -> u1 {
+        ((self.raw()[0] >> 4) & 0x01) as u1
+    }
+
+    pub fn set_drop_eligible_id(&mut self, dei: u1) {
+        let buf = self.raw_mut();
+        buf[0] = (buf[0] & !(1 << 4)) | (((dei & 0x1) as u8) << 4);
+    }
+
+    pub fn get_vlan_id(&self) -> u16 {
+        let first = self.raw()[0] as u16 & 0x0F;
+        let second = self.raw()[1] as u16;
+        (first << 8) | second
+    }
+
+    pub fn set_vlan_id(&mut self, id: u16) {
+        let buf = self.raw_mut();
+        buf[0] = (buf[0] & 0xF0) | ((id >> 8) as u8 & 0x0F);
+        buf[1] = id as u8;
+    }
+
+    pub fn get_ethertype(&self) -> EtherType {
+        EtherType::new(u16::from_be_bytes([self.raw()[2], self.raw()[3]]))
+    }
+
+    pub fn set_ethertype(&mut self, ty: EtherType) {
+        self.raw_mut()[2..4].copy_from_slice(&ty.value().to_be_bytes());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +288,7 @@ mod tests {
         assert_eq!(packet.payload, Bytes::from_static(b"xyz"));
         assert_eq!(packet.to_bytes(), raw);
     }
+    
     #[test]
     fn test_vlan_parse_2() {
         let raw = Bytes::from_static(&[
@@ -205,5 +305,27 @@ mod tests {
         assert_eq!(packet.header.ethertype, EtherType::Ipv4);
         assert_eq!(packet.payload, Bytes::from_static(b"xyz"));
         assert_eq!(packet.to_bytes(), raw);
+    }
+
+    #[test]
+    fn test_mutable_vlan_packet_changes() {
+        let mut raw = [
+            0x00, 0x01, // TCI
+            0x08, 0x00, // EtherType: IPv4
+            b'a', b'b',
+        ];
+
+        let mut packet = MutableVlanPacket::new(&mut raw).expect("mutable vlan");
+        assert_eq!(packet.get_vlan_id(), 1);
+        packet.set_priority_code_point(ClassOfService::VO);
+        packet.set_vlan_id(0x0abc);
+        packet.set_ethertype(EtherType::Ipv6);
+        packet.payload_mut()[0] = b'z';
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.priority_code_point, ClassOfService::VO);
+        assert_eq!(frozen.header.vlan_id, 0x0abc);
+        assert_eq!(frozen.header.ethertype, EtherType::Ipv6);
+        assert_eq!(frozen.payload[0], b'z');
     }
 }

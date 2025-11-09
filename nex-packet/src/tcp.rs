@@ -1,7 +1,7 @@
 //! A TCP packet abstraction.
 
 use crate::ip::IpNextProtocol;
-use crate::packet::Packet;
+use crate::packet::{MutablePacket, Packet};
 
 use crate::util::{self, Octets};
 use std::net::Ipv6Addr;
@@ -665,6 +665,182 @@ impl TcpPacket {
     }
 }
 
+/// Represents a mutable TCP packet.
+pub struct MutableTcpPacket<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableTcpPacket<'a> {
+    type Packet = TcpPacket;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < TCP_HEADER_LEN {
+            return None;
+        }
+
+        let data_offset = buffer[12] >> 4;
+        if data_offset < TCP_MIN_DATA_OFFSET {
+            return None;
+        }
+
+        let header_len = (data_offset as usize) * 4;
+        if header_len > buffer.len() {
+            return None;
+        }
+
+        Some(Self { buffer })
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        let len = self.header_len();
+        &self.packet()[..len]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let len = self.header_len();
+        let (header, _) = (&mut *self.buffer).split_at_mut(len);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        let len = self.header_len();
+        &self.packet()[len..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let len = self.header_len();
+        let (_, payload) = (&mut *self.buffer).split_at_mut(len);
+        payload
+    }
+}
+
+impl<'a> MutableTcpPacket<'a> {
+    /// Create a packet without validating the header fields.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    /// Returns the header length in bytes.
+    pub fn header_len(&self) -> usize {
+        let offset = (self.raw()[12] >> 4).max(TCP_MIN_DATA_OFFSET);
+        let len = (offset as usize) * 4;
+        len.min(self.raw().len())
+    }
+
+    /// Returns the payload length of the packet.
+    pub fn payload_len(&self) -> usize {
+        self.raw().len().saturating_sub(self.header_len())
+    }
+
+    pub fn get_source(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[0], self.raw()[1]])
+    }
+
+    pub fn set_source(&mut self, value: u16) {
+        self.raw_mut()[0..2].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_destination(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+
+    pub fn set_destination(&mut self, value: u16) {
+        self.raw_mut()[2..4].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_sequence(&self) -> u32 {
+        u32::from_be_bytes([self.raw()[4], self.raw()[5], self.raw()[6], self.raw()[7]])
+    }
+
+    pub fn set_sequence(&mut self, value: u32) {
+        self.raw_mut()[4..8].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_acknowledgement(&self) -> u32 {
+        u32::from_be_bytes([self.raw()[8], self.raw()[9], self.raw()[10], self.raw()[11]])
+    }
+
+    pub fn set_acknowledgement(&mut self, value: u32) {
+        self.raw_mut()[8..12].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_data_offset(&self) -> u8 {
+        self.raw()[12] >> 4
+    }
+
+    pub fn set_data_offset(&mut self, offset: u8) {
+        let buf = self.raw_mut();
+        buf[12] = (buf[12] & 0x0F) | ((offset & 0x0F) << 4);
+    }
+
+    pub fn get_reserved(&self) -> u8 {
+        self.raw()[12] & 0x0F
+    }
+
+    pub fn set_reserved(&mut self, value: u8) {
+        let buf = self.raw_mut();
+        buf[12] = (buf[12] & 0xF0) | (value & 0x0F);
+    }
+
+    pub fn get_flags(&self) -> u8 {
+        self.raw()[13]
+    }
+
+    pub fn set_flags(&mut self, flags: u8) {
+        self.raw_mut()[13] = flags;
+    }
+
+    pub fn get_window(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[14], self.raw()[15]])
+    }
+
+    pub fn set_window(&mut self, value: u16) {
+        self.raw_mut()[14..16].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[16], self.raw()[17]])
+    }
+
+    pub fn set_checksum(&mut self, value: u16) {
+        self.raw_mut()[16..18].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn get_urgent_ptr(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[18], self.raw()[19]])
+    }
+
+    pub fn set_urgent_ptr(&mut self, value: u16) {
+        self.raw_mut()[18..20].copy_from_slice(&value.to_be_bytes());
+    }
+
+    pub fn options(&self) -> &[u8] {
+        let len = self.header_len();
+        &self.raw()[TCP_HEADER_LEN..len]
+    }
+
+    pub fn options_mut(&mut self) -> &mut [u8] {
+        let len = self.header_len();
+        &mut self.raw_mut()[TCP_HEADER_LEN..len]
+    }
+}
+
 pub fn checksum(packet: &TcpPacket, source: &IpAddr, destination: &IpAddr) -> u16 {
     match (source, destination) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => ipv4_checksum(packet, src, dst),
@@ -809,5 +985,36 @@ mod tests {
             parsed.header.options[2].get_timestamp(),
             (0x2c57cda5, 0x02a04192)
         );
+    }
+
+    #[test]
+    fn test_mutable_tcp_packet_round_trip() {
+        let mut raw = [
+            0x00, 0x50, // source
+            0x01, 0xbb, // destination
+            0x00, 0x00, 0x00, 0x01, // seq
+            0x00, 0x00, 0x00, 0x00, // ack
+            0x50, // data offset/reserved
+            0x18, // flags
+            0x40, 0x00, // window
+            0x12, 0x34, // checksum
+            0x00, 0x00, // urgent pointer
+            b'h', b'e', b'l', b'l', b'o',
+        ];
+
+        let mut packet = MutableTcpPacket::new(&mut raw).expect("mutable tcp");
+        assert_eq!(packet.get_source(), 80);
+        packet.set_source(1234);
+        packet.set_destination(4321);
+        packet.set_sequence(0xfeedbeef);
+        packet.set_flags(0x11);
+        packet.payload_mut()[0] = b'H';
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.source, 1234);
+        assert_eq!(frozen.header.destination, 4321);
+        assert_eq!(frozen.header.sequence, 0xfeedbeef);
+        assert_eq!(frozen.header.flags, 0x11);
+        assert_eq!(frozen.payload[0], b'H');
     }
 }

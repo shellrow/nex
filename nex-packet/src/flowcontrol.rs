@@ -4,7 +4,7 @@ use core::fmt;
 use bytes::{Buf, BufMut, Bytes};
 use nex_core::bitfield::u16be;
 
-use crate::packet::Packet;
+use crate::packet::{GenericMutablePacket, Packet};
 
 /// Represents the opcode field in an Ethernet Flow Control packet.
 ///
@@ -117,9 +117,13 @@ impl Packet for FlowControlPacket {
     }
 }
 
+/// Represents a mutable Ethernet Flow Control packet.
+pub type MutableFlowControlPacket<'a> = GenericMutablePacket<'a, FlowControlPacket>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::MutablePacket;
 
     #[test]
     fn flowcontrol_pause_test() {
@@ -133,5 +137,24 @@ mod tests {
         assert_eq!(fc_packet.command, FlowControlOpcode::Pause);
         assert_eq!(fc_packet.quanta, 0x1234);
         assert_eq!(fc_packet.to_bytes(), packet);
+    }
+
+    #[test]
+    fn flowcontrol_mutable_packet() {
+        let mut raw = [
+            0x00, 0x01, // Opcode: Pause
+            0x12, 0x34, // Quanta: 0x1234
+            0xaa, 0xbb,
+        ];
+
+        let mut packet = <MutableFlowControlPacket as MutablePacket>::new(&mut raw)
+            .expect("mutable flowcontrol");
+        packet.header_mut()[0] = 0x00;
+        packet.header_mut()[1] = 0x02;
+        packet.payload_mut()[0] = 0xff;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.command, FlowControlOpcode::Unknown(2));
+        assert_eq!(frozen.payload[0], 0xff);
     }
 }

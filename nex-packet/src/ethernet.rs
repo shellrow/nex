@@ -7,7 +7,7 @@ use nex_core::mac::MacAddr;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::packet::Packet;
+use crate::packet::{MutablePacket, Packet};
 
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
@@ -284,11 +284,97 @@ impl fmt::Display for EthernetPacket {
     }
 }
 
+/// Represents a mutable Ethernet packet.
+pub struct MutableEthernetPacket<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableEthernetPacket<'a> {
+    type Packet = EthernetPacket;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < ETHERNET_HEADER_LEN {
+            None
+        } else {
+            Some(Self { buffer })
+        }
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..ETHERNET_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(ETHERNET_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        &self.packet()[ETHERNET_HEADER_LEN..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let (_, payload) = (&mut *self.buffer).split_at_mut(ETHERNET_HEADER_LEN);
+        payload
+    }
+}
+
+impl<'a> MutableEthernetPacket<'a> {
+    /// Create a mutable packet without performing size checks.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    /// Retrieve the destination MAC address.
+    pub fn get_destination(&self) -> MacAddr {
+        MacAddr::from_octets(self.header()[0..MAC_ADDR_LEN].try_into().unwrap())
+    }
+
+    /// Update the destination MAC address.
+    pub fn set_destination(&mut self, addr: MacAddr) {
+        self.header_mut()[0..MAC_ADDR_LEN].copy_from_slice(&addr.octets());
+    }
+
+    /// Retrieve the source MAC address.
+    pub fn get_source(&self) -> MacAddr {
+        MacAddr::from_octets(
+            self.header()[MAC_ADDR_LEN..2 * MAC_ADDR_LEN]
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    /// Update the source MAC address.
+    pub fn set_source(&mut self, addr: MacAddr) {
+        self.header_mut()[MAC_ADDR_LEN..2 * MAC_ADDR_LEN].copy_from_slice(&addr.octets());
+    }
+
+    /// Retrieve the EtherType.
+    pub fn get_ethertype(&self) -> EtherType {
+        EtherType::new(u16::from_be_bytes([self.header()[12], self.header()[13]]))
+    }
+
+    /// Update the EtherType.
+    pub fn set_ethertype(&mut self, ty: EtherType) {
+        let bytes = ty.value().to_be_bytes();
+        self.header_mut()[12..14].copy_from_slice(&bytes);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bytes::Bytes;
     use nex_core::mac::MacAddr;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn test_ethernet_parse_basic() {
@@ -360,5 +446,43 @@ mod tests {
             EtherType::Unknown(val) => assert_eq!(val, 0xdead),
             _ => panic!("Expected unknown EtherType"),
         }
+    }
+
+    #[test]
+    fn test_mutable_chaining_updates_in_place() {
+        let mut raw = [
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, // dst
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, // src
+            0x08, 0x00, // IPv4 EtherType
+            0x45, 0x00, 0x00, 0x1c, // IPv4 header start (20 bytes header + 8 bytes payload)
+            0x1c, 0x46, 0x40, 0x00, 0x40, 0x11, 0x00, 0x00, // rest of IPv4 header
+            0xc0, 0xa8, 0x00, 0x01, // src IP
+            0xc0, 0xa8, 0x00, 0xc7, // dst IP
+            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe, // payload
+        ];
+
+        let mut ethernet = MutableEthernetPacket::new(&mut raw).expect("mutable ethernet");
+        assert_eq!(ethernet.get_ethertype(), EtherType::Ipv4);
+
+        use crate::ipv4::MutableIpv4Packet;
+
+        {
+            let mut ipv4 = MutableIpv4Packet::new(ethernet.payload_mut()).expect("mutable ipv4");
+            ipv4.set_ttl(99);
+            ipv4.set_source(Ipv4Addr::new(10, 0, 0, 1));
+            ipv4.payload_mut()[0] = 0xaa;
+        }
+
+        {
+            let packet_view = ethernet.packet();
+            assert_eq!(packet_view[22], 99);
+            assert_eq!(&packet_view[26..30], &[10, 0, 0, 1]);
+            assert_eq!(packet_view[34], 0xaa);
+        }
+
+        drop(ethernet);
+        assert_eq!(raw[22], 99);
+        assert_eq!(&raw[26..30], &[10, 0, 0, 1]);
+        assert_eq!(raw[34], 0xaa);
     }
 }

@@ -1,6 +1,9 @@
 //! An IPv4 packet abstraction.
 
-use crate::{ip::IpNextProtocol, packet::Packet};
+use crate::{
+    ip::IpNextProtocol,
+    packet::{MutablePacket, Packet},
+};
 use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::*;
 use std::net::Ipv4Addr;
@@ -414,6 +417,255 @@ impl Ipv4Packet {
     }
 }
 
+/// Represents a mutable IPv4 packet.
+pub struct MutableIpv4Packet<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
+    type Packet = Ipv4Packet;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < IPV4_HEADER_LEN {
+            return None;
+        }
+
+        let ihl = (buffer[0] & 0x0F) as usize;
+        if ihl < 5 {
+            return None;
+        }
+
+        let header_len = ihl * IPV4_HEADER_LENGTH_BYTE_UNITS;
+        if header_len > buffer.len() {
+            return None;
+        }
+
+        let total_len = u16::from_be_bytes([buffer[2], buffer[3]]) as usize;
+        if total_len != 0 && total_len < header_len {
+            return None;
+        }
+
+        Some(Self { buffer })
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        let header_len = self.header_len();
+        &self.packet()[..header_len]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let header_len = self.header_len();
+        let (header, _) = (&mut *self.buffer).split_at_mut(header_len);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        let start = self.header_len();
+        let end = start + self.payload_len();
+        &self.packet()[start..end]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let header_len = self.header_len();
+        let payload_len = self.payload_len();
+        let (_, payload) = (&mut *self.buffer).split_at_mut(header_len);
+        &mut payload[..payload_len]
+    }
+}
+
+impl<'a> MutableIpv4Packet<'a> {
+    /// Create a mutable packet without validating the header fields.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    /// Returns the header length in bytes.
+    pub fn header_len(&self) -> usize {
+        let ihl = (self.raw()[0] & 0x0F) as usize;
+        let header_len = ihl * IPV4_HEADER_LENGTH_BYTE_UNITS;
+        header_len.max(IPV4_HEADER_LEN).min(self.raw().len())
+    }
+
+    /// Returns the payload length based on the total length field.
+    pub fn payload_len(&self) -> usize {
+        let total = self.total_len();
+        total.saturating_sub(self.header_len())
+    }
+
+    /// Returns the effective total length of the packet.
+    pub fn total_len(&self) -> usize {
+        let total = u16::from_be_bytes([self.raw()[2], self.raw()[3]]) as usize;
+        if total == 0 {
+            self.raw().len()
+        } else {
+            total.min(self.raw().len())
+        }
+    }
+
+    /// Retrieve the version field.
+    pub fn get_version(&self) -> u8 {
+        self.raw()[0] >> 4
+    }
+
+    /// Update the version field.
+    pub fn set_version(&mut self, version: u8) {
+        let buffer = self.raw_mut();
+        buffer[0] = (buffer[0] & 0x0F) | ((version & 0x0F) << 4);
+    }
+
+    /// Retrieve the header length in 32-bit words.
+    pub fn get_header_length(&self) -> u8 {
+        self.raw()[0] & 0x0F
+    }
+
+    /// Update the header length in 32-bit words.
+    pub fn set_header_length(&mut self, ihl: u8) {
+        let buffer = self.raw_mut();
+        buffer[0] = (buffer[0] & 0xF0) | (ihl & 0x0F);
+    }
+
+    /// Retrieve the DSCP field.
+    pub fn get_dscp(&self) -> u8 {
+        self.raw()[1] >> 2
+    }
+
+    /// Update the DSCP field.
+    pub fn set_dscp(&mut self, dscp: u8) {
+        let buffer = self.raw_mut();
+        buffer[1] = (buffer[1] & 0x03) | ((dscp & 0x3F) << 2);
+    }
+
+    /// Retrieve the ECN field.
+    pub fn get_ecn(&self) -> u8 {
+        self.raw()[1] & 0x03
+    }
+
+    /// Update the ECN field.
+    pub fn set_ecn(&mut self, ecn: u8) {
+        let buffer = self.raw_mut();
+        buffer[1] = (buffer[1] & 0xFC) | (ecn & 0x03);
+    }
+
+    /// Retrieve the total length field.
+    pub fn get_total_length(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+
+    /// Update the total length field.
+    pub fn set_total_length(&mut self, len: u16) {
+        self.raw_mut()[2..4].copy_from_slice(&len.to_be_bytes());
+    }
+
+    /// Retrieve the identification field.
+    pub fn get_identification(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+
+    /// Update the identification field.
+    pub fn set_identification(&mut self, id: u16) {
+        self.raw_mut()[4..6].copy_from_slice(&id.to_be_bytes());
+    }
+
+    /// Retrieve the flags field.
+    pub fn get_flags(&self) -> u8 {
+        (self.raw()[6] & 0xE0) >> 5
+    }
+
+    /// Update the flags field.
+    pub fn set_flags(&mut self, flags: u8) {
+        let buffer = self.raw_mut();
+        buffer[6] = (buffer[6] & 0x1F) | ((flags & 0x07) << 5);
+    }
+
+    /// Retrieve the fragment offset field.
+    pub fn get_fragment_offset(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[6], self.raw()[7]]) & 0x1FFF
+    }
+
+    /// Update the fragment offset field.
+    pub fn set_fragment_offset(&mut self, offset: u16) {
+        let buffer = self.raw_mut();
+        let combined = (u16::from_be_bytes([buffer[6], buffer[7]]) & 0xE000) | (offset & 0x1FFF);
+        buffer[6..8].copy_from_slice(&combined.to_be_bytes());
+    }
+
+    /// Retrieve the TTL field.
+    pub fn get_ttl(&self) -> u8 {
+        self.raw()[8]
+    }
+
+    /// Update the TTL field.
+    pub fn set_ttl(&mut self, ttl: u8) {
+        self.raw_mut()[8] = ttl;
+    }
+
+    /// Retrieve the next-level protocol field.
+    pub fn get_next_level_protocol(&self) -> IpNextProtocol {
+        IpNextProtocol::new(self.raw()[9])
+    }
+
+    /// Update the next-level protocol field.
+    pub fn set_next_level_protocol(&mut self, proto: IpNextProtocol) {
+        self.raw_mut()[9] = proto.value();
+    }
+
+    /// Retrieve the checksum field.
+    pub fn get_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[10], self.raw()[11]])
+    }
+
+    /// Update the checksum field.
+    pub fn set_checksum(&mut self, checksum: u16) {
+        self.raw_mut()[10..12].copy_from_slice(&checksum.to_be_bytes());
+    }
+
+    /// Retrieve the source address.
+    pub fn get_source(&self) -> Ipv4Addr {
+        Ipv4Addr::new(
+            self.raw()[12],
+            self.raw()[13],
+            self.raw()[14],
+            self.raw()[15],
+        )
+    }
+
+    /// Update the source address.
+    pub fn set_source(&mut self, addr: Ipv4Addr) {
+        self.raw_mut()[12..16].copy_from_slice(&addr.octets());
+    }
+
+    /// Retrieve the destination address.
+    pub fn get_destination(&self) -> Ipv4Addr {
+        Ipv4Addr::new(
+            self.raw()[16],
+            self.raw()[17],
+            self.raw()[18],
+            self.raw()[19],
+        )
+    }
+
+    /// Update the destination address.
+    pub fn set_destination(&mut self, addr: Ipv4Addr) {
+        self.raw_mut()[16..20].copy_from_slice(&addr.octets());
+    }
+}
+
 /// Calculates a checksum of an IPv4 packet header.
 /// The checksum field of the packet is regarded as zeros during the calculation.
 pub fn checksum(packet: &Ipv4Packet) -> u16be {
@@ -579,5 +831,43 @@ mod tests {
         raw_copy[10] = (computed >> 8) as u8;
         raw_copy[11] = (computed & 0xff) as u8;
         assert_eq!(&packet.to_bytes()[..], &raw_copy[..]);
+    }
+
+    #[test]
+    fn test_mutable_ipv4_packet_updates() {
+        let mut raw = [
+            0x45, 0x00, 0x00, 0x1c, // Version + IHL, DSCP/ECN, Total Length
+            0x1c, 0x46, 0x40, 0x00, // Identification, Flags/Fragment offset
+            0x40, 0x06, 0x00, 0x00, // TTL, Protocol, Header checksum
+            0xc0, 0xa8, 0x00, 0x01, // Source
+            0xc0, 0xa8, 0x00, 0xc7, // Destination
+            0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe, // Payload
+        ];
+
+        let mut packet = MutableIpv4Packet::new(&mut raw).expect("mutable ipv4");
+        assert_eq!(packet.get_version(), 4);
+        assert_eq!(packet.get_ttl(), 0x40);
+
+        packet.set_ttl(128);
+        packet.set_destination(Ipv4Addr::new(192, 0, 2, 1));
+        packet.payload_mut()[0] = 0x11;
+
+        {
+            let packet_view = packet.packet();
+            assert_eq!(packet_view[8], 128);
+            assert_eq!(&packet_view[16..20], &[192, 0, 2, 1]);
+            assert_eq!(packet_view[20], 0x11);
+        }
+
+        let frozen = packet.freeze().expect("freeze mutable packet");
+        drop(packet);
+
+        assert_eq!(raw[8], 128);
+        assert_eq!(&raw[16..20], &[192, 0, 2, 1]);
+        assert_eq!(raw[20], 0x11);
+
+        assert_eq!(frozen.header.ttl, 128);
+        assert_eq!(frozen.header.destination, Ipv4Addr::new(192, 0, 2, 1));
+        assert_eq!(frozen.payload[0], 0x11);
     }
 }

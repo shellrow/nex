@@ -1,4 +1,4 @@
-use crate::packet::Packet;
+use crate::packet::{GenericMutablePacket, Packet};
 use bytes::{BufMut, Bytes, BytesMut};
 use core::str;
 use nex_core::bitfield::{u1, u16be, u32be};
@@ -1208,9 +1208,13 @@ impl std::fmt::Display for DnsName {
     }
 }
 
+/// Represents a mutable DNS packet.
+pub type MutableDnsPacket<'a> = GenericMutablePacket<'a, DnsPacket>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::MutablePacket;
 
     #[test]
     fn test_dns_query() {
@@ -1293,5 +1297,20 @@ mod tests {
         assert_eq!(packet.responses[0].ttl, 900);
         assert_eq!(packet.responses[0].data_len, 4);
         assert_eq!(packet.responses[0].data, vec![192, 168, 122, 189]);
+    }
+
+    #[test]
+    fn test_mutable_dns_packet_header_edit() {
+        let mut raw = [0u8; 16];
+        raw[1] = 0x01; // id
+
+        let mut packet = <MutableDnsPacket as MutablePacket>::new(&mut raw).expect("mutable dns");
+        packet.header_mut()[0] = 0x12;
+        packet.header_mut()[1] = 0x34;
+        packet.payload_mut()[0] = 0xaa;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.id, 0x1234);
+        assert_eq!(frozen.payload[0], 0xaa);
     }
 }
