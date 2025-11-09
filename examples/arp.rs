@@ -8,7 +8,7 @@
 
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
-use nex::net::interface::{get_interfaces, Interface};
+use nex::net::interface::{Interface, get_interfaces};
 use nex::net::mac::MacAddr;
 use nex::packet::builder::ethernet::EthernetPacketBuilder;
 use nex::packet::ethernet::EtherType;

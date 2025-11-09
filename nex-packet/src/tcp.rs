@@ -9,7 +9,7 @@ use std::net::Ipv6Addr;
 use std::net::{IpAddr, Ipv4Addr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use nex_core::bitfield::{u16be, u32be, u4};
+use nex_core::bitfield::{u4, u16be, u32be};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 

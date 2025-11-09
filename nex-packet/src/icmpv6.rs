@@ -611,7 +611,7 @@ pub mod ndp {
     use bytes::Bytes;
     use nex_core::bitfield::{self, u24be, u32be};
 
-    use crate::icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type, ICMPV6_HEADER_LEN};
+    use crate::icmpv6::{ICMPV6_HEADER_LEN, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type};
     use crate::packet::Packet;
     use std::net::Ipv6Addr;
 
@@ -817,11 +817,7 @@ pub mod ndp {
         pub fn option_payload_length(&self) -> usize {
             //let len = option.get_length();
             let len = self.payload.len();
-            if len > 0 {
-                ((len * 8) - 2) as usize
-            } else {
-                0
-            }
+            if len > 0 { ((len * 8) - 2) as usize } else { 0 }
         }
     }
 
@@ -2446,7 +2442,7 @@ pub mod echo_reply {
 mod echo_tests {
     use super::*;
     use crate::icmpv6::{
-        echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket, Icmpv6Code, Icmpv6Type,
+        Icmpv6Code, Icmpv6Type, echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket,
     };
 
     #[test]

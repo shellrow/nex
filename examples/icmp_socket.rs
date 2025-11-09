@@ -3,7 +3,7 @@
 //! Usage: icmp_socket <TARGET IP> <INTERFACE>
 
 use bytes::Bytes;
-use nex::net::interface::{get_interfaces, Interface};
+use nex::net::interface::{Interface, get_interfaces};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::builder::icmpv6::Icmpv6PacketBuilder;
 use nex_packet::icmp::IcmpPacket;

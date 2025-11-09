@@ -2,12 +2,12 @@
 
 use nex::net::mac::MacAddr;
 use nex::packet::ethernet::{
-    EtherType, EthernetPacket, MutableEthernetPacket, ETHERNET_HEADER_LEN,
+    ETHERNET_HEADER_LEN, EtherType, EthernetPacket, MutableEthernetPacket,
 };
 use nex::packet::ip::IpNextProtocol;
-use nex::packet::ipv4::{self, Ipv4Packet, MutableIpv4Packet, IPV4_HEADER_LEN};
+use nex::packet::ipv4::{self, IPV4_HEADER_LEN, Ipv4Packet, MutableIpv4Packet};
 use nex::packet::packet::{MutablePacket, Packet};
-use nex::packet::udp::{self, MutableUdpPacket, UdpPacket, UDP_HEADER_LEN};
+use nex::packet::udp::{self, MutableUdpPacket, UDP_HEADER_LEN, UdpPacket};
 use std::net::Ipv4Addr;
 
 fn main() {

@@ -2,9 +2,9 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
-use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::{BOOLEAN, HANDLE};
 use windows_sys::Win32::System::IO::OVERLAPPED;
+use windows_sys::core::PCWSTR;
 
 #[repr(C)]
 pub struct _ADAPTER;

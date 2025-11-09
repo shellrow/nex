@@ -9,7 +9,7 @@ use crate::tcp::TcpConfig;
 use std::os::fd::AsRawFd;
 
 #[cfg(unix)]
-use nix::poll::{poll, PollFd, PollFlags};
+use nix::poll::{PollFd, PollFlags, poll};
 
 /// Low level synchronous TCP socket.
 #[derive(Debug)]
@@ -164,7 +164,7 @@ impl TcpSocket {
         use std::mem::size_of;
         use std::os::windows::io::AsRawSocket;
         use windows_sys::Win32::Networking::WinSock::{
-            getsockopt, WSAPoll, POLLWRNORM, SOCKET, SOCKET_ERROR, SOL_SOCKET, SO_ERROR, WSAPOLLFD,
+            POLLWRNORM, SO_ERROR, SOCKET, SOCKET_ERROR, SOL_SOCKET, WSAPOLLFD, WSAPoll, getsockopt,
         };
 
         let sock = self.socket.as_raw_socket() as SOCKET;

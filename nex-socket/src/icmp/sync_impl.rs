@@ -1,5 +1,5 @@
-use crate::icmp::{IcmpConfig, IcmpKind, IcmpSocketType};
 use crate::SocketFamily;
+use crate::icmp::{IcmpConfig, IcmpKind, IcmpSocketType};
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
 use std::net::{SocketAddr, UdpSocket};

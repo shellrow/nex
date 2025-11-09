@@ -143,12 +143,13 @@ impl<'a, P: Packet> GenericMutablePacket<'a, P> {
     }
 
     fn lengths(&self) -> (usize, usize) {
-        match P::from_buf(self.packet()) { Some(packet) => {
-            let header_len = packet.header_len();
-            let payload_len = packet.payload_len();
-            (header_len, payload_len)
-        } _ => {
-            (self.buffer.len(), 0)
-        }}
+        match P::from_buf(self.packet()) {
+            Some(packet) => {
+                let header_len = packet.header_len();
+                let payload_len = packet.payload_len();
+                (header_len, payload_len)
+            }
+            _ => (self.buffer.len(), 0),
+        }
     }
 }

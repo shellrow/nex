@@ -4,14 +4,14 @@
 //! Example: async_icmp_socket 192.168.1
 
 use bytes::Bytes;
-use nex::net::interface::{get_interfaces, Interface};
+use nex::net::interface::{Interface, get_interfaces};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::icmp::echo_reply::EchoReplyPacket;
 use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_packet::ipv4::Ipv4Packet;
 use nex_packet::packet::Packet;
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};

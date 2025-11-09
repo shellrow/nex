@@ -22,9 +22,11 @@ pub type SockAddrFamily6 = ws::ADDRESS_FAMILY;
 pub type InAddr = ws::IN_ADDR;
 pub type In6Addr = ws::IN6_ADDR;
 
-pub unsafe fn close(sock: CSocket) { unsafe {
-    let _ = ws::closesocket(sock);
-}}
+pub unsafe fn close(sock: CSocket) {
+    unsafe {
+        let _ = ws::closesocket(sock);
+    }
+}
 
 pub unsafe fn sendto(
     socket: CSocket,
@@ -33,9 +35,9 @@ pub unsafe fn sendto(
     flags: libc::c_int,
     to: *const SockAddr,
     tolen: SockLen,
-) -> CouldFail { unsafe {
-    ws::sendto(socket, buf as *const u8, len, flags, to, tolen)
-}}
+) -> CouldFail {
+    unsafe { ws::sendto(socket, buf as *const u8, len, flags, to, tolen) }
+}
 
 pub unsafe fn recvfrom(
     socket: CSocket,
@@ -44,9 +46,9 @@ pub unsafe fn recvfrom(
     flags: libc::c_int,
     addr: *mut SockAddr,
     addrlen: *mut SockLen,
-) -> CouldFail { unsafe {
-    ws::recvfrom(socket, buf as *mut u8, len, flags, addr, addrlen)
-}}
+) -> CouldFail {
+    unsafe { ws::recvfrom(socket, buf as *mut u8, len, flags, addr, addrlen) }
+}
 
 #[inline]
 pub fn retry<F>(f: &mut F) -> libc::c_int
