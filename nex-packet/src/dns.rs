@@ -1056,11 +1056,11 @@ impl Packet for DnsPacket {
         fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
             let mut packets = Vec::with_capacity(count);
             for _ in 0..count {
-                if let Some(pkt) = DnsResponsePacket::from_buf_mut(buf) {
+                match DnsResponsePacket::from_buf_mut(buf) { Some(pkt) => {
                     packets.push(pkt);
-                } else {
+                } _ => {
                     break;
-                }
+                }}
             }
             Some(packets)
         }

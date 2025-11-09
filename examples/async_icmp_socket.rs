@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
     let mut handles = Vec::new();
     for i in 1u8..=254 {
         let addr = Ipv4Addr::new(parts[0], parts[1], parts[2], i);
-        let id: u16 = thread_rng().gen();
+        let id: u16 = thread_rng().r#gen();
         let seq: u16 = 1;
         let socket = socket.clone();
         let replies = replies.clone();

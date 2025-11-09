@@ -96,7 +96,7 @@ fn handle_ethernet_frame(ethernet: EthernetPacket) {
 }
 
 fn handle_arp_packet(packet: Bytes) {
-    if let Some(arp) = ArpPacket::from_bytes(packet) {
+    match ArpPacket::from_bytes(packet) { Some(arp) => {
         println!(
             "ARP packet: {}({}) > {}({}); operation: {:?}",
             arp.header.sender_hw_addr,
@@ -105,35 +105,35 @@ fn handle_arp_packet(packet: Bytes) {
             arp.header.target_proto_addr,
             arp.header.operation
         );
-    } else {
+    } _ => {
         println!("Malformed ARP Packet");
-    }
+    }}
 }
 
 fn handle_ipv4_packet(packet: Bytes) {
-    if let Some(ipv4) = Ipv4Packet::from_bytes(packet) {
+    match Ipv4Packet::from_bytes(packet) { Some(ipv4) => {
         handle_transport_protocol(
             IpAddr::V4(ipv4.header.source),
             IpAddr::V4(ipv4.header.destination),
             ipv4.header.next_level_protocol,
             ipv4.payload,
         );
-    } else {
+    } _ => {
         println!("Malformed IPv4 Packet");
-    }
+    }}
 }
 
 fn handle_ipv6_packet(packet: Bytes) {
-    if let Some(ipv6) = Ipv6Packet::from_bytes(packet) {
+    match Ipv6Packet::from_bytes(packet) { Some(ipv6) => {
         handle_transport_protocol(
             IpAddr::V6(ipv6.header.source),
             IpAddr::V6(ipv6.header.destination),
             ipv6.header.next_header,
             ipv6.payload,
         );
-    } else {
+    } _ => {
         println!("Malformed IPv6 Packet");
-    }
+    }}
 }
 
 fn handle_transport_protocol(
@@ -162,7 +162,7 @@ fn handle_transport_protocol(
 }
 
 fn handle_tcp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    if let Some(tcp) = TcpPacket::from_bytes(packet) {
+    match TcpPacket::from_bytes(packet) { Some(tcp) => {
         println!(
             "TCP Packet: {}:{} > {}:{}; length: {}",
             source,
@@ -171,9 +171,9 @@ fn handle_tcp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
             tcp.header.destination,
             tcp.total_len(),
         );
-    } else {
+    } _ => {
         println!("Malformed TCP Packet");
-    }
+    }}
 }
 
 fn handle_udp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
