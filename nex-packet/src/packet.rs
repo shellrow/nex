@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
 use bytes::{Bytes, BytesMut};
+use std::marker::PhantomData;
 
 /// Represents a generic network packet.
 pub trait Packet: Sized {

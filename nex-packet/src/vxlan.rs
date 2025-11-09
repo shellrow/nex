@@ -132,7 +132,8 @@ mod tests {
         let mut raw = [0x08, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x00, 0xaa];
 
         use crate::packet::MutablePacket;
-        let mut packet = <MutableVxlanPacket as MutablePacket>::new(&mut raw).expect("mutable vxlan");
+        let mut packet =
+            <MutableVxlanPacket as MutablePacket>::new(&mut raw).expect("mutable vxlan");
         packet.header_mut()[0] = 0x0c;
         packet.payload_mut()[0] = 0xff;
 

@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(packet.payload, Bytes::from_static(b"xyz"));
         assert_eq!(packet.to_bytes(), raw);
     }
-    
+
     #[test]
     fn test_vlan_parse_2() {
         let raw = Bytes::from_static(&[
