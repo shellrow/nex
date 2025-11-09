@@ -2,6 +2,7 @@
 
 pub mod arp;
 pub mod builder;
+pub mod checksum;
 pub mod dhcp;
 pub mod dns;
 pub mod ethernet;

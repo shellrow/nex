@@ -1,9 +1,11 @@
 //! An ICMPv6 packet abstraction.
 
+use crate::checksum::{ChecksumMode, ChecksumState, TransportChecksumContext};
+use crate::ip::IpNextProtocol;
 use crate::ipv6::IPV6_HEADER_LEN;
 use crate::{
     ethernet::ETHERNET_HEADER_LEN,
-    packet::{GenericMutablePacket, Packet},
+    packet::{MutablePacket, Packet},
 };
 use std::net::Ipv6Addr;
 
@@ -294,15 +296,207 @@ impl Packet for Icmpv6Packet {
 }
 
 /// Represents a mutable ICMPv6 packet.
-pub type MutableIcmpv6Packet<'a> = GenericMutablePacket<'a, Icmpv6Packet>;
+pub struct MutableIcmpv6Packet<'a> {
+    buffer: &'a mut [u8],
+    checksum: ChecksumState,
+    checksum_context: Option<TransportChecksumContext>,
+}
+
+impl<'a> MutablePacket<'a> for MutableIcmpv6Packet<'a> {
+    type Packet = Icmpv6Packet;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        Icmpv6Packet::from_buf(buffer)?;
+        Some(Self {
+            buffer,
+            checksum: ChecksumState::new(),
+            checksum_context: None,
+        })
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..ICMPV6_COMMON_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        &self.packet()[ICMPV6_COMMON_HEADER_LEN..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let (_, payload) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        payload
+    }
+}
+
+impl<'a> MutableIcmpv6Packet<'a> {
+    /// Create a mutable ICMPv6 packet without performing validation.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self {
+            buffer,
+            checksum: ChecksumState::new(),
+            checksum_context: None,
+        }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn after_field_mutation(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    fn write_checksum(&mut self, value: u16) {
+        self.raw_mut()[2..4].copy_from_slice(&value.to_be_bytes());
+    }
+
+    /// Returns the checksum recalculation mode.
+    pub fn checksum_mode(&self) -> ChecksumMode {
+        self.checksum.mode()
+    }
+
+    /// Sets how checksum updates should be handled.
+    pub fn set_checksum_mode(&mut self, mode: ChecksumMode) {
+        self.checksum.set_mode(mode);
+        if self.checksum.automatic() && self.checksum.is_dirty() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Enables automatic checksum recomputation.
+    pub fn enable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Automatic);
+    }
+
+    /// Disables automatic checksum recomputation.
+    pub fn disable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Manual);
+    }
+
+    /// Returns true if the checksum needs to be recomputed.
+    pub fn is_checksum_dirty(&self) -> bool {
+        self.checksum.is_dirty()
+    }
+
+    /// Marks the checksum as dirty and recomputes it when automatic mode is enabled.
+    pub fn mark_checksum_dirty(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Sets the pseudo-header context required for checksum calculation.
+    pub fn set_checksum_context(&mut self, context: TransportChecksumContext) {
+        self.checksum_context = match context {
+            TransportChecksumContext::Ipv6 { .. } => Some(context),
+            _ => None,
+        };
+
+        if self.checksum.automatic() && self.checksum.is_dirty() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Configures the pseudo-header context for IPv6 checksums.
+    pub fn set_ipv6_checksum_context(&mut self, source: Ipv6Addr, destination: Ipv6Addr) {
+        self.set_checksum_context(TransportChecksumContext::ipv6(source, destination));
+    }
+
+    /// Clears the configured pseudo-header context.
+    pub fn clear_checksum_context(&mut self) {
+        self.checksum_context = None;
+    }
+
+    /// Returns the configured pseudo-header context.
+    pub fn checksum_context(&self) -> Option<TransportChecksumContext> {
+        self.checksum_context
+    }
+
+    /// Recomputes the checksum using the configured pseudo-header context.
+    pub fn recompute_checksum(&mut self) -> Option<u16> {
+        let context = match self.checksum_context? {
+            TransportChecksumContext::Ipv6 {
+                source,
+                destination,
+            } => (source, destination),
+            _ => return None,
+        };
+
+        let checksum = crate::util::ipv6_checksum(
+            self.raw(),
+            1,
+            &[],
+            &context.0,
+            &context.1,
+            IpNextProtocol::Icmpv6,
+        ) as u16;
+
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
+        Some(checksum)
+    }
+
+    /// Returns the ICMPv6 type field.
+    pub fn get_type(&self) -> Icmpv6Type {
+        Icmpv6Type::new(self.raw()[0])
+    }
+
+    /// Sets the ICMPv6 type field and marks the checksum as dirty.
+    pub fn set_type(&mut self, icmpv6_type: Icmpv6Type) {
+        self.raw_mut()[0] = icmpv6_type.value();
+        self.after_field_mutation();
+    }
+
+    /// Returns the ICMPv6 code field.
+    pub fn get_code(&self) -> Icmpv6Code {
+        Icmpv6Code::new(self.raw()[1])
+    }
+
+    /// Sets the ICMPv6 code field and marks the checksum as dirty.
+    pub fn set_code(&mut self, icmpv6_code: Icmpv6Code) {
+        self.raw_mut()[1] = icmpv6_code.value();
+        self.after_field_mutation();
+    }
+
+    /// Returns the serialized checksum value.
+    pub fn get_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+
+    /// Sets the serialized checksum value and clears the dirty flag.
+    pub fn set_checksum(&mut self, checksum: u16) {
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::packet::MutablePacket;
 
     #[test]
-    fn test_mutable_icmpv6_packet_alias() {
+    fn test_mutable_icmpv6_packet_manual_checksum() {
         let mut raw = [
             Icmpv6Type::EchoRequest.value(),
             0,
@@ -316,14 +510,50 @@ mod tests {
             b'i',
         ];
 
-        let mut packet =
-            <MutableIcmpv6Packet as MutablePacket>::new(&mut raw).expect("mutable icmpv6");
-        packet.header_mut()[0] = Icmpv6Type::EchoReply.value();
-        packet.payload_mut()[0] = b'x';
+        let mut packet = MutableIcmpv6Packet::new(&mut raw).expect("mutable icmpv6");
+        let addr = Ipv6Addr::LOCALHOST;
+        packet.set_ipv6_checksum_context(addr, addr);
+        packet.set_type(Icmpv6Type::EchoReply);
+
+        assert!(packet.is_checksum_dirty());
+
+        let updated = packet.recompute_checksum().expect("checksum");
+        assert_eq!(packet.get_checksum(), updated);
 
         let frozen = packet.freeze().expect("freeze");
-        assert_eq!(frozen.header.icmpv6_type, Icmpv6Type::EchoReply);
-        assert_eq!(frozen.payload[0], b'x');
+        let expected = checksum(&frozen, &addr, &addr);
+        assert_eq!(packet.get_checksum(), expected);
+    }
+
+    #[test]
+    fn test_mutable_icmpv6_packet_auto_checksum() {
+        let mut raw = [
+            Icmpv6Type::EchoRequest.value(),
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            b'p',
+            b'i',
+        ];
+
+        let mut packet = MutableIcmpv6Packet::new(&mut raw).expect("mutable icmpv6");
+        let addr = Ipv6Addr::LOCALHOST;
+        packet.set_ipv6_checksum_context(addr, addr);
+        let baseline = packet.recompute_checksum().expect("checksum");
+
+        packet.enable_auto_checksum();
+        packet.set_code(Icmpv6Code::new(1));
+
+        assert!(!packet.is_checksum_dirty());
+
+        let frozen = packet.freeze().expect("freeze");
+        let expected = checksum(&frozen, &addr, &addr);
+        assert_ne!(baseline, expected);
+        assert_eq!(packet.get_checksum(), expected);
     }
 }
 
