@@ -952,7 +952,7 @@ mod tests {
         assert_eq!(frozen.header.destination, Ipv4Addr::new(192, 0, 2, 1));
         assert_eq!(frozen.payload[0], 0x11);
     }
-    
+
     #[test]
     fn test_ipv4_auto_checksum_updates() {
         let mut raw = [

@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(frozen.header.checksum, 0xffff);
         assert_eq!(&raw[UDP_HEADER_LEN], &b'x');
     }
-    
+
     #[test]
     fn test_udp_auto_checksum_with_context() {
         let mut raw = [

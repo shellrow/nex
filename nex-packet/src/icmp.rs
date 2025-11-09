@@ -820,7 +820,7 @@ mod tests {
         packet.set_code(IcmpCode::new(1));
 
         assert!(!packet.is_checksum_dirty());
-        
+
         let frozen = packet.freeze().expect("freeze");
         let expected: u16 = checksum(&frozen).into();
         assert_ne!(baseline, expected);
