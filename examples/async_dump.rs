@@ -14,8 +14,8 @@ use nex::packet::ipv6::Ipv6Packet;
 use nex::packet::packet::Packet;
 use nex::packet::tcp::TcpPacket;
 use nex::packet::udp::UdpPacket;
-use nex_datalink::async_io::{async_channel, AsyncChannel};
 use nex_datalink::Config;
+use nex_datalink::async_io::{AsyncChannel, async_channel};
 use nex_packet::ethernet::EthernetHeader;
 use nex_packet::{icmp, icmpv6};
 use std::net::IpAddr;
@@ -96,43 +96,52 @@ fn handle_ethernet_frame(ethernet: EthernetPacket) {
 }
 
 fn handle_arp_packet(packet: Bytes) {
-    if let Some(arp) = ArpPacket::from_bytes(packet) {
-        println!(
-            "ARP packet: {}({}) > {}({}); operation: {:?}",
-            arp.header.sender_hw_addr,
-            arp.header.sender_proto_addr,
-            arp.header.target_hw_addr,
-            arp.header.target_proto_addr,
-            arp.header.operation
-        );
-    } else {
-        println!("Malformed ARP Packet");
+    match ArpPacket::from_bytes(packet) {
+        Some(arp) => {
+            println!(
+                "ARP packet: {}({}) > {}({}); operation: {:?}",
+                arp.header.sender_hw_addr,
+                arp.header.sender_proto_addr,
+                arp.header.target_hw_addr,
+                arp.header.target_proto_addr,
+                arp.header.operation
+            );
+        }
+        _ => {
+            println!("Malformed ARP Packet");
+        }
     }
 }
 
 fn handle_ipv4_packet(packet: Bytes) {
-    if let Some(ipv4) = Ipv4Packet::from_bytes(packet) {
-        handle_transport_protocol(
-            IpAddr::V4(ipv4.header.source),
-            IpAddr::V4(ipv4.header.destination),
-            ipv4.header.next_level_protocol,
-            ipv4.payload,
-        );
-    } else {
-        println!("Malformed IPv4 Packet");
+    match Ipv4Packet::from_bytes(packet) {
+        Some(ipv4) => {
+            handle_transport_protocol(
+                IpAddr::V4(ipv4.header.source),
+                IpAddr::V4(ipv4.header.destination),
+                ipv4.header.next_level_protocol,
+                ipv4.payload,
+            );
+        }
+        _ => {
+            println!("Malformed IPv4 Packet");
+        }
     }
 }
 
 fn handle_ipv6_packet(packet: Bytes) {
-    if let Some(ipv6) = Ipv6Packet::from_bytes(packet) {
-        handle_transport_protocol(
-            IpAddr::V6(ipv6.header.source),
-            IpAddr::V6(ipv6.header.destination),
-            ipv6.header.next_header,
-            ipv6.payload,
-        );
-    } else {
-        println!("Malformed IPv6 Packet");
+    match Ipv6Packet::from_bytes(packet) {
+        Some(ipv6) => {
+            handle_transport_protocol(
+                IpAddr::V6(ipv6.header.source),
+                IpAddr::V6(ipv6.header.destination),
+                ipv6.header.next_header,
+                ipv6.payload,
+            );
+        }
+        _ => {
+            println!("Malformed IPv6 Packet");
+        }
     }
 }
 
@@ -162,17 +171,20 @@ fn handle_transport_protocol(
 }
 
 fn handle_tcp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    if let Some(tcp) = TcpPacket::from_bytes(packet) {
-        println!(
-            "TCP Packet: {}:{} > {}:{}; length: {}",
-            source,
-            tcp.header.source,
-            destination,
-            tcp.header.destination,
-            tcp.total_len(),
-        );
-    } else {
-        println!("Malformed TCP Packet");
+    match TcpPacket::from_bytes(packet) {
+        Some(tcp) => {
+            println!(
+                "TCP Packet: {}:{} > {}:{}; length: {}",
+                source,
+                tcp.header.source,
+                destination,
+                tcp.header.destination,
+                tcp.total_len(),
+            );
+        }
+        _ => {
+            println!("Malformed TCP Packet");
+        }
     }
 }
 

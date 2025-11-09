@@ -1,8 +1,8 @@
 //! Asynchronous raw datalink support for Windows using the Npcap / WinPcap library.
 
+use crate::Config;
 use crate::async_io::{AsyncChannel, AsyncRawSender};
 use crate::bindings::{bpf, windows};
-use crate::Config;
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
 use std::cmp;

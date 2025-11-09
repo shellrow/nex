@@ -2,7 +2,7 @@
 
 use crate::packet::{GenericMutablePacket, Packet};
 use bytes::{Buf, Bytes};
-use nex_core::bitfield::{u1, u16be, u3, u32be, u5};
+use nex_core::bitfield::{u1, u3, u5, u16be, u32be};
 
 /// GRE (Generic Routing Encapsulation) Packet.
 ///

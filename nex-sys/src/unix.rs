@@ -30,7 +30,9 @@ pub const AF_INET6: libc::c_int = libc::AF_INET6;
 pub use libc::{IFF_BROADCAST, IFF_LOOPBACK, IFF_MULTICAST, IFF_POINTOPOINT, IFF_UP};
 
 pub unsafe fn close(sock: CSocket) {
-    let _ = libc::close(sock);
+    unsafe {
+        let _ = libc::close(sock);
+    }
 }
 
 fn ntohs(u: u16) -> u16 {
@@ -116,7 +118,7 @@ pub unsafe fn sendto(
     addr: *const SockAddr,
     addrlen: SockLen,
 ) -> CouldFail {
-    libc::sendto(socket, buf, len, flags, addr, addrlen)
+    unsafe { libc::sendto(socket, buf, len, flags, addr, addrlen) }
 }
 
 pub unsafe fn recvfrom(
@@ -127,7 +129,7 @@ pub unsafe fn recvfrom(
     addr: *mut SockAddr,
     addrlen: *mut SockLen,
 ) -> CouldFail {
-    libc::recvfrom(socket, buf, len, flags, addr, addrlen)
+    unsafe { libc::recvfrom(socket, buf, len, flags, addr, addrlen) }
 }
 
 #[inline]

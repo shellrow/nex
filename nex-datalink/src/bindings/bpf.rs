@@ -142,6 +142,6 @@ pub struct bpf_hdr {
 }
 
 #[cfg(not(windows))]
-extern "C" {
+unsafe extern "C" {
     pub fn ioctl(d: libc::c_int, request: libc::c_ulong, ...) -> libc::c_int;
 }

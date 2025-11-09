@@ -2,9 +2,9 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
-use windows_sys::core::PCWSTR;
 use windows_sys::Win32::Foundation::{BOOLEAN, HANDLE};
 use windows_sys::Win32::System::IO::OVERLAPPED;
+use windows_sys::core::PCWSTR;
 
 #[repr(C)]
 pub struct _ADAPTER;
@@ -51,7 +51,7 @@ pub fn to_npf_name(name: &str) -> String {
 
 #[link(name = "Packet")]
 #[allow(improper_ctypes)]
-extern "C" {
+unsafe extern "C" {
     // from Packet32.h
     pub fn PacketSendPacket(AdapterObject: LPADAPTER, pPacket: LPPACKET, Sync: BOOLEAN) -> BOOLEAN;
     pub fn PacketReceivePacket(

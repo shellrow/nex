@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use crate::packet::Packet;
-use crate::udp::{UdpHeader, UdpPacket, UDP_HEADER_LEN};
+use crate::udp::{UDP_HEADER_LEN, UdpHeader, UdpPacket};
 use bytes::Bytes;
 
 /// Builder for constructing UDP packets

@@ -9,7 +9,7 @@ use std::net::Ipv6Addr;
 use std::net::{IpAddr, Ipv4Addr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use nex_core::bitfield::{u16be, u32be, u4};
+use nex_core::bitfield::{u4, u16be, u32be};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -242,29 +242,29 @@ impl TcpOptionKind {
 #[allow(non_snake_case)]
 #[allow(non_upper_case_globals)]
 pub mod TcpFlags {
-    /// CWR – Congestion Window Reduced (CWR) flag is set by the sending
+    /// CWR - Congestion Window Reduced (CWR) flag is set by the sending
     /// host to indicate that it received a TCP segment with the ECE flag set
     /// and had responded in congestion control mechanism.
     pub const CWR: u8 = 0b10000000;
-    /// ECE – ECN-Echo has a dual role, depending on the value of the
+    /// ECE - ECN-Echo has a dual role, depending on the value of the
     /// SYN flag. It indicates:
     /// If the SYN flag is set (1), that the TCP peer is ECN capable.
     /// If the SYN flag is clear (0), that a packet with Congestion Experienced
     /// flag set (ECN=11) in IP header received during normal transmission.
     pub const ECE: u8 = 0b01000000;
-    /// URG – indicates that the Urgent pointer field is significant.
+    /// URG - indicates that the Urgent pointer field is significant.
     pub const URG: u8 = 0b00100000;
-    /// ACK – indicates that the Acknowledgment field is significant.
+    /// ACK - indicates that the Acknowledgment field is significant.
     /// All packets after the initial SYN packet sent by the client should have this flag set.
     pub const ACK: u8 = 0b00010000;
-    /// PSH – Push function. Asks to push the buffered data to the receiving application.
+    /// PSH - Push function. Asks to push the buffered data to the receiving application.
     pub const PSH: u8 = 0b00001000;
-    /// RST – Reset the connection.
+    /// RST - Reset the connection.
     pub const RST: u8 = 0b00000100;
-    /// SYN – Synchronize sequence numbers. Only the first packet sent from each end
+    /// SYN - Synchronize sequence numbers. Only the first packet sent from each end
     /// should have this flag set.
     pub const SYN: u8 = 0b00000010;
-    /// FIN – No more data from sender.
+    /// FIN - No more data from sender.
     pub const FIN: u8 = 0b00000001;
 }
 

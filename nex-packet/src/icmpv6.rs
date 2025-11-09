@@ -611,7 +611,7 @@ pub mod ndp {
     use bytes::Bytes;
     use nex_core::bitfield::{self, u24be, u32be};
 
-    use crate::icmpv6::{Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type, ICMPV6_HEADER_LEN};
+    use crate::icmpv6::{ICMPV6_HEADER_LEN, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type};
     use crate::packet::Packet;
     use std::net::Ipv6Addr;
 
@@ -647,15 +647,15 @@ pub mod ndp {
         }
     }
 
-    /// Neighbor Discovery Option Types [RFC 4861 § 4.6]
+    /// Neighbor Discovery Option Types [RFC 4861 Section 4.6]
     ///
-    /// [RFC 4861 § 4.6]: https://tools.ietf.org/html/rfc4861#section-4.6
+    /// [RFC 4861 Section 4.6]: https://tools.ietf.org/html/rfc4861#section-4.6
     #[allow(non_snake_case)]
     #[allow(non_upper_case_globals)]
     pub mod NdpOptionTypes {
         use super::NdpOptionType;
 
-        /// Source Link-Layer Address Option [RFC 4861 § 4.6.1]
+        /// Source Link-Layer Address Option [RFC 4861 Section 4.6.1]
         ///
         /// ```text
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -663,10 +663,10 @@ pub mod ndp {
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         /// ```
         ///
-        /// [RFC 4861 § 4.6.1]: https://tools.ietf.org/html/rfc4861#section-4.6.1
+        /// [RFC 4861 Section 4.6.1]: https://tools.ietf.org/html/rfc4861#section-4.6.1
         pub const SourceLLAddr: NdpOptionType = NdpOptionType(1);
 
-        /// Target Link-Layer Address Option [RFC 4861 § 4.6.1]
+        /// Target Link-Layer Address Option [RFC 4861 Section 4.6.1]
         ///
         /// ```text
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -674,10 +674,10 @@ pub mod ndp {
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         /// ```
         ///
-        /// [RFC 4861 § 4.6.1]: https://tools.ietf.org/html/rfc4861#section-4.6.1
+        /// [RFC 4861 Section 4.6.1]: https://tools.ietf.org/html/rfc4861#section-4.6.1
         pub const TargetLLAddr: NdpOptionType = NdpOptionType(2);
 
-        /// Prefix Information Option [RFC 4861 § 4.6.2]
+        /// Prefix Information Option [RFC 4861 Section 4.6.2]
         ///
         /// ```text
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -699,10 +699,10 @@ pub mod ndp {
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         /// ```
         ///
-        /// [RFC 4861 § 4.6.2]: https://tools.ietf.org/html/rfc4861#section-4.6.2
+        /// [RFC 4861 Section 4.6.2]: https://tools.ietf.org/html/rfc4861#section-4.6.2
         pub const PrefixInformation: NdpOptionType = NdpOptionType(3);
 
-        /// Redirected Header Option [RFC 4861 § 4.6.3]
+        /// Redirected Header Option [RFC 4861 Section 4.6.3]
         ///
         /// ```text
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -716,10 +716,10 @@ pub mod ndp {
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         /// ```
         ///
-        /// [RFC 4861 § 4.6.3]: https://tools.ietf.org/html/rfc4861#section-4.6.3
+        /// [RFC 4861 Section 4.6.3]: https://tools.ietf.org/html/rfc4861#section-4.6.3
         pub const RedirectedHeader: NdpOptionType = NdpOptionType(4);
 
-        /// MTU Option [RFC 4861 § 4.6.4]
+        /// MTU Option [RFC 4861 Section 4.6.4]
         ///
         /// ```text
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -729,11 +729,11 @@ pub mod ndp {
         /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
         /// ```
         ///
-        /// [RFC 4861 § 4.6.4]: https://tools.ietf.org/html/rfc4861#section-4.6.4
+        /// [RFC 4861 Section 4.6.4]: https://tools.ietf.org/html/rfc4861#section-4.6.4
         pub const MTU: NdpOptionType = NdpOptionType(5);
     }
 
-    /// Neighbor Discovery Option [RFC 4861 § 4.6]
+    /// Neighbor Discovery Option [RFC 4861 Section 4.6]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -743,7 +743,7 @@ pub mod ndp {
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     /// ```
     ///
-    /// [RFC 4861 § 4.6]: https://tools.ietf.org/html/rfc4861#section-4.6
+    /// [RFC 4861 Section 4.6]: https://tools.ietf.org/html/rfc4861#section-4.6
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct NdpOptionPacket {
         pub option_type: NdpOptionType,
@@ -817,17 +817,13 @@ pub mod ndp {
         pub fn option_payload_length(&self) -> usize {
             //let len = option.get_length();
             let len = self.payload.len();
-            if len > 0 {
-                ((len * 8) - 2) as usize
-            } else {
-                0
-            }
+            if len > 0 { ((len * 8) - 2) as usize } else { 0 }
         }
     }
 
     /// Calculate a length of a `NdpOption`'s payload.
 
-    /// Router Solicitation Message [RFC 4861 § 4.1]
+    /// Router Solicitation Message [RFC 4861 Section 4.1]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -838,7 +834,7 @@ pub mod ndp {
     /// |   Options ...
     /// ```
     ///
-    /// [RFC 4861 § 4.1]: https://tools.ietf.org/html/rfc4861#section-4.1
+    /// [RFC 4861 Section 4.1]: https://tools.ietf.org/html/rfc4861#section-4.1
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RouterSolicitPacket {
         pub header: Icmpv6Header,
@@ -998,7 +994,7 @@ pub mod ndp {
         pub const OtherConf: u8 = 0b01000000;
     }
 
-    /// Router Advertisement Message Format [RFC 4861 § 4.2]
+    /// Router Advertisement Message Format [RFC 4861 Section 4.2]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1014,7 +1010,7 @@ pub mod ndp {
     /// +-+-+-+-+-+-+-+-+-+-+-+-
     /// ```
     ///
-    /// [RFC 4861 § 4.2]: https://tools.ietf.org/html/rfc4861#section-4.2
+    /// [RFC 4861 Section 4.2]: https://tools.ietf.org/html/rfc4861#section-4.2
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RouterAdvertPacket {
         pub header: Icmpv6Header,
@@ -1190,7 +1186,7 @@ pub mod ndp {
         }
     }
 
-    /// Neighbor Solicitation Message Format [RFC 4861 § 4.3]
+    /// Neighbor Solicitation Message Format [RFC 4861 Section 4.3]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1210,7 +1206,7 @@ pub mod ndp {
     /// +-+-+-+-+-+-+-+-+-+-+-+-
     /// ```
     ///
-    /// [RFC 4861 § 4.3]: https://tools.ietf.org/html/rfc4861#section-4.3
+    /// [RFC 4861 Section 4.3]: https://tools.ietf.org/html/rfc4861#section-4.3
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct NeighborSolicitPacket {
         pub header: Icmpv6Header,
@@ -1397,7 +1393,7 @@ pub mod ndp {
         pub const Override: u8 = 0b00100000;
     }
 
-    /// Neighbor Advertisement Message Format [RFC 4861 § 4.4]
+    /// Neighbor Advertisement Message Format [RFC 4861 Section 4.4]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1417,7 +1413,7 @@ pub mod ndp {
     /// +-+-+-+-+-+-+-+-+-+-+-+-
     /// ```
     ///
-    /// [RFC 4861 § 4.4]: https://tools.ietf.org/html/rfc4861#section-4.4
+    /// [RFC 4861 Section 4.4]: https://tools.ietf.org/html/rfc4861#section-4.4
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct NeighborAdvertPacket {
         pub header: Icmpv6Header,
@@ -1606,7 +1602,7 @@ pub mod ndp {
         }
     }
 
-    /// Redirect Message Format [RFC 4861 § 4.5]
+    /// Redirect Message Format [RFC 4861 Section 4.5]
     ///
     /// ```text
     /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -1634,7 +1630,7 @@ pub mod ndp {
     /// +-+-+-+-+-+-+-+-+-+-+-+-
     /// ```
     ///
-    /// [RFC 4861 § 4.5]: https://tools.ietf.org/html/rfc4861#section-4.5
+    /// [RFC 4861 Section 4.5]: https://tools.ietf.org/html/rfc4861#section-4.5
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RedirectPacket {
         pub header: Icmpv6Header,
@@ -2446,7 +2442,7 @@ pub mod echo_reply {
 mod echo_tests {
     use super::*;
     use crate::icmpv6::{
-        echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket, Icmpv6Code, Icmpv6Type,
+        Icmpv6Code, Icmpv6Type, echo_reply::EchoReplyPacket, echo_request::EchoRequestPacket,
     };
 
     #[test]

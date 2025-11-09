@@ -23,7 +23,9 @@ pub type InAddr = ws::IN_ADDR;
 pub type In6Addr = ws::IN6_ADDR;
 
 pub unsafe fn close(sock: CSocket) {
-    let _ = ws::closesocket(sock);
+    unsafe {
+        let _ = ws::closesocket(sock);
+    }
 }
 
 pub unsafe fn sendto(
@@ -34,7 +36,7 @@ pub unsafe fn sendto(
     to: *const SockAddr,
     tolen: SockLen,
 ) -> CouldFail {
-    ws::sendto(socket, buf as *const u8, len, flags, to, tolen)
+    unsafe { ws::sendto(socket, buf as *const u8, len, flags, to, tolen) }
 }
 
 pub unsafe fn recvfrom(
@@ -45,7 +47,7 @@ pub unsafe fn recvfrom(
     addr: *mut SockAddr,
     addrlen: *mut SockLen,
 ) -> CouldFail {
-    ws::recvfrom(socket, buf as *mut u8, len, flags, addr, addrlen)
+    unsafe { ws::recvfrom(socket, buf as *mut u8, len, flags, addr, addrlen) }
 }
 
 #[inline]

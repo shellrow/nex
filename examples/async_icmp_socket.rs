@@ -4,14 +4,14 @@
 //! Example: async_icmp_socket 192.168.1
 
 use bytes::Bytes;
-use nex::net::interface::{get_interfaces, Interface};
+use nex::net::interface::{Interface, get_interfaces};
 use nex_packet::builder::icmp::IcmpPacketBuilder;
 use nex_packet::icmp::echo_reply::EchoReplyPacket;
 use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_packet::ipv4::Ipv4Packet;
 use nex_packet::packet::Packet;
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
     let mut handles = Vec::new();
     for i in 1u8..=254 {
         let addr = Ipv4Addr::new(parts[0], parts[1], parts[2], i);
-        let id: u16 = thread_rng().gen();
+        let id: u16 = thread_rng().r#gen();
         let seq: u16 = 1;
         let socket = socket.clone();
         let replies = replies.clone();

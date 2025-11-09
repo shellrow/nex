@@ -1,7 +1,7 @@
 //! ARP packet abstraction.
 
 use crate::{
-    ethernet::{EtherType, ETHERNET_HEADER_LEN},
+    ethernet::{ETHERNET_HEADER_LEN, EtherType},
     packet::{MutablePacket, Packet},
 };
 

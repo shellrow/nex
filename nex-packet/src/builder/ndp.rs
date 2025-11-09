@@ -1,5 +1,5 @@
 use crate::icmpv6::ndp::{NdpOptionPacket, NdpOptionTypes, NeighborSolicitPacket};
-use crate::icmpv6::{self, checksum, Icmpv6Header, Icmpv6Packet, Icmpv6Type};
+use crate::icmpv6::{self, Icmpv6Header, Icmpv6Packet, Icmpv6Type, checksum};
 use crate::packet::Packet;
 use bytes::Bytes;
 use nex_core::mac::MacAddr;

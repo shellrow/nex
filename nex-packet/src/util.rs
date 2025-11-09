@@ -4,8 +4,8 @@ use crate::ip::IpNextProtocol;
 use nex_core::bitfield::u16be;
 
 use core::convert::TryInto;
-use core::u16;
 use core::u8;
+use core::u16;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Convert a value to a byte array.
