@@ -1,7 +1,9 @@
 //! An ICMP packet abstraction.
 use crate::ipv4::IPV4_HEADER_LEN;
-use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
-
+use crate::{
+    ethernet::ETHERNET_HEADER_LEN,
+    packet::{GenericMutablePacket, Packet},
+};
 use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::u16be;
 #[cfg(feature = "serde")]
@@ -243,6 +245,9 @@ impl IcmpPacket {
         pkt
     }
 }
+
+/// Represents a mutable ICMP packet.
+pub type MutableIcmpPacket<'a> = GenericMutablePacket<'a, IcmpPacket>;
 
 /// Calculates a checksum of an ICMP packet.
 pub fn checksum(packet: &IcmpPacket) -> u16be {
@@ -522,6 +527,7 @@ pub mod time_exceeded {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::MutablePacket;
 
     #[test]
     fn test_echo_request_from_bytes() {
@@ -630,5 +636,22 @@ mod tests {
 
         assert_eq!(exceeded.unused, unused);
         assert_eq!(exceeded.payload, payload);
+    }
+
+    #[test]
+    fn test_mutable_icmp_packet_alias() {
+        let mut raw = [
+            8, 0, 0, 0, // type, code, checksum
+            0, 1, 0, 1, // identifier, sequence
+            b'p', b'i',
+        ];
+
+        let mut packet = <MutableIcmpPacket as MutablePacket>::new(&mut raw).expect("mutable icmp");
+        packet.header_mut()[0] = IcmpType::EchoReply.value();
+        packet.payload_mut()[0] = b'x';
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.icmp_type, IcmpType::EchoReply);
+        assert_eq!(frozen.payload[0], b'x');
     }
 }

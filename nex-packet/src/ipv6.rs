@@ -1,5 +1,5 @@
 use crate::ip::IpNextProtocol;
-use crate::packet::Packet;
+use crate::packet::{MutablePacket, Packet};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::net::Ipv6Addr;
 
@@ -299,6 +299,142 @@ impl Ipv6Packet {
     }
 }
 
+/// Represents a mutable IPv6 packet.
+pub struct MutableIpv6Packet<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableIpv6Packet<'a> {
+    type Packet = Ipv6Packet;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < IPV6_HEADER_LEN {
+            None
+        } else {
+            Some(Self { buffer })
+        }
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..IPV6_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(IPV6_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        &self.packet()[IPV6_HEADER_LEN..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let (_, payload) = (&mut *self.buffer).split_at_mut(IPV6_HEADER_LEN);
+        payload
+    }
+}
+
+impl<'a> MutableIpv6Packet<'a> {
+    /// Create a new packet without checking length.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    pub fn payload_len(&self) -> usize {
+        self.raw().len().saturating_sub(IPV6_HEADER_LEN)
+    }
+
+    pub fn get_version(&self) -> u8 {
+        self.raw()[0] >> 4
+    }
+
+    pub fn set_version(&mut self, version: u8) {
+        let buf = self.raw_mut();
+        buf[0] = (buf[0] & 0x0F) | ((version & 0x0F) << 4);
+    }
+
+    pub fn get_traffic_class(&self) -> u8 {
+        ((self.raw()[0] & 0x0F) << 4) | (self.raw()[1] >> 4)
+    }
+
+    pub fn set_traffic_class(&mut self, class: u8) {
+        let buf = self.raw_mut();
+        buf[0] = (buf[0] & 0xF0) | ((class >> 4) & 0x0F);
+        buf[1] = (buf[1] & 0x0F) | ((class & 0x0F) << 4);
+    }
+
+    pub fn get_flow_label(&self) -> u32 {
+        let buf = self.raw();
+        let high = (buf[1] as u32 & 0x0F) << 16;
+        let mid = (buf[2] as u32) << 8;
+        let low = buf[3] as u32;
+        high | mid | low
+    }
+
+    pub fn set_flow_label(&mut self, label: u32) {
+        let buf = self.raw_mut();
+        buf[1] = (buf[1] & 0xF0) | (((label >> 16) as u8) & 0x0F);
+        buf[2] = (label >> 8) as u8;
+        buf[3] = label as u8;
+    }
+
+    pub fn get_payload_length(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+
+    pub fn set_payload_length(&mut self, length: u16) {
+        self.raw_mut()[4..6].copy_from_slice(&length.to_be_bytes());
+    }
+
+    pub fn get_next_header(&self) -> IpNextProtocol {
+        IpNextProtocol::new(self.raw()[6])
+    }
+
+    pub fn set_next_header(&mut self, proto: IpNextProtocol) {
+        self.raw_mut()[6] = proto.value();
+    }
+
+    pub fn get_hop_limit(&self) -> u8 {
+        self.raw()[7]
+    }
+
+    pub fn set_hop_limit(&mut self, value: u8) {
+        self.raw_mut()[7] = value;
+    }
+
+    pub fn get_source(&self) -> Ipv6Addr {
+        Ipv6Addr::from(<[u8; 16]>::try_from(&self.raw()[8..24]).unwrap())
+    }
+
+    pub fn set_source(&mut self, addr: Ipv6Addr) {
+        self.raw_mut()[8..24].copy_from_slice(&addr.octets());
+    }
+
+    pub fn get_destination(&self) -> Ipv6Addr {
+        Ipv6Addr::from(<[u8; 16]>::try_from(&self.raw()[24..40]).unwrap())
+    }
+
+    pub fn set_destination(&mut self, addr: Ipv6Addr) {
+        self.raw_mut()[24..40].copy_from_slice(&addr.octets());
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtensionHeaderType {
     HopByHop,
@@ -580,5 +716,34 @@ mod tests {
             raw: Bytes::from_static(&[250, 0, 1, 2]),
         };
         assert_eq!(raw_unknown.kind(), ExtensionHeaderType::Unknown(250));
+    }
+
+    #[test]
+    fn test_mutable_ipv6_packet_mutations() {
+        let mut raw = [
+            0x60, 0x00, 0x00, 0x00, // version, traffic class, flow label
+            0x00, 0x04, // payload length
+            0x11, // next header (UDP)
+            0x40, // hop limit
+            // source
+            0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // destination
+            0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, // payload
+            0xde, 0xad, 0xbe, 0xef,
+        ];
+
+        let mut packet = MutableIpv6Packet::new(&mut raw).expect("mutable ipv6");
+        assert_eq!(packet.get_version(), 6);
+        packet.set_hop_limit(0x7f);
+        packet.set_next_header(IpNextProtocol::Tcp);
+        packet.set_flow_label(0x12345);
+        packet.set_source(Ipv6Addr::LOCALHOST);
+        packet.payload_mut()[0] = 0xaa;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.hop_limit, 0x7f);
+        assert_eq!(frozen.header.next_header, IpNextProtocol::Tcp);
+        assert_eq!(frozen.header.flow_label, 0x12345);
+        assert_eq!(frozen.header.source, Ipv6Addr::LOCALHOST);
+        assert_eq!(frozen.payload[0], 0xaa);
     }
 }

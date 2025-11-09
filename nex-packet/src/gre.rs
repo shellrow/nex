@@ -1,6 +1,6 @@
 //! GRE Packet abstraction.
 
-use crate::packet::Packet;
+use crate::packet::{GenericMutablePacket, Packet};
 use bytes::{Buf, Bytes};
 use nex_core::bitfield::{u1, u16be, u3, u32be, u5};
 
@@ -253,9 +253,14 @@ impl GrePacket {
     }
 }
 
+/// Represents a mutable GRE packet.
+pub type MutableGrePacket<'a> = GenericMutablePacket<'a, GrePacket>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::MutablePacket;
+
     #[test]
     fn gre_packet_test() {
         let packet = Bytes::from_static(&[
@@ -284,5 +289,23 @@ mod tests {
         let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
 
         assert_eq!(&gre_packet.to_bytes(), &packet);
+    }
+
+    #[test]
+    fn test_mutable_gre_packet_alias() {
+        let mut raw = [
+            0x00, 0x00, // flags
+            0x08, 0x00, // protocol type
+            0xaa, 0xbb,
+        ];
+
+        let mut packet = <MutableGrePacket as MutablePacket>::new(&mut raw).expect("mutable gre");
+        packet.header_mut()[2] = 0x86;
+        packet.header_mut()[3] = 0xdd; // IPv6 protocol
+        packet.payload_mut()[0] = 0xff;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.protocol_type, 0x86dd);
+        assert_eq!(frozen.payload[0], 0xff);
     }
 }

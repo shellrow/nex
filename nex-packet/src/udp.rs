@@ -1,7 +1,7 @@
 //! A UDP packet abstraction.
 
 use crate::ip::IpNextProtocol;
-use crate::packet::Packet;
+use crate::packet::{MutablePacket, Packet};
 
 use crate::util;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -103,6 +103,124 @@ impl Packet for UdpPacket {
 
     fn into_parts(self) -> (Self::Header, Bytes) {
         (self.header, self.payload)
+    }
+}
+
+/// Represents a mutable UDP packet.
+pub struct MutableUdpPacket<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
+    type Packet = UdpPacket;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < UDP_HEADER_LEN {
+            return None;
+        }
+
+        let length = u16::from_be_bytes([buffer[4], buffer[5]]);
+        if length != 0 {
+            if length < UDP_HEADER_LEN as u16 {
+                return None;
+            }
+
+            if length as usize > buffer.len() {
+                return None;
+            }
+        }
+
+        Some(Self { buffer })
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..UDP_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(UDP_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        let length = self.total_len();
+        &self.packet()[UDP_HEADER_LEN..length]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let total_len = self.total_len();
+        let (_, payload) = (&mut *self.buffer).split_at_mut(UDP_HEADER_LEN);
+        &mut payload[..total_len.saturating_sub(UDP_HEADER_LEN)]
+    }
+}
+
+impl<'a> MutableUdpPacket<'a> {
+    /// Create a new packet without validating length fields.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    /// Returns the total length derived from the UDP length field.
+    pub fn total_len(&self) -> usize {
+        let field = u16::from_be_bytes([self.raw()[4], self.raw()[5]]);
+        if field == 0 {
+            self.raw().len()
+        } else {
+            field as usize
+        }
+    }
+
+    /// Returns the payload length.
+    pub fn payload_len(&self) -> usize {
+        self.total_len().saturating_sub(UDP_HEADER_LEN)
+    }
+
+    pub fn get_source(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[0], self.raw()[1]])
+    }
+
+    pub fn set_source(&mut self, port: u16) {
+        self.raw_mut()[0..2].copy_from_slice(&port.to_be_bytes());
+    }
+
+    pub fn get_destination(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+
+    pub fn set_destination(&mut self, port: u16) {
+        self.raw_mut()[2..4].copy_from_slice(&port.to_be_bytes());
+    }
+
+    pub fn get_length(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+
+    pub fn set_length(&mut self, length: u16) {
+        self.raw_mut()[4..6].copy_from_slice(&length.to_be_bytes());
+    }
+
+    pub fn get_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.raw()[6], self.raw()[7]])
+    }
+
+    pub fn set_checksum(&mut self, checksum: u16) {
+        self.raw_mut()[6..8].copy_from_slice(&checksum.to_be_bytes());
     }
 }
 
@@ -215,5 +333,29 @@ mod tests {
         assert_eq!(packet.to_bytes(), expected);
         assert_eq!(packet.payload(), payload);
         assert_eq!(packet.header_len(), UDP_HEADER_LEN);
+    }
+    #[test]
+    fn test_mutable_udp_packet_updates_in_place() {
+        let mut raw = [
+            0x12, 0x34, // source
+            0xab, 0xcd, // destination
+            0x00, 0x0c, // length
+            0x55, 0xaa, // checksum
+            b'd', b'a', b't', b'a', // payload
+            0, 0, // trailing capacity
+        ];
+
+        let mut packet = MutableUdpPacket::new(&mut raw).expect("mutable udp");
+        assert_eq!(packet.get_source(), 0x1234);
+        packet.set_source(0x4321);
+        packet.set_destination(0x0102);
+        packet.payload_mut()[0] = b'x';
+        packet.set_checksum(0xffff);
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.source, 0x4321);
+        assert_eq!(frozen.header.destination, 0x0102);
+        assert_eq!(frozen.header.checksum, 0xffff);
+        assert_eq!(&raw[UDP_HEADER_LEN], &b'x');
     }
 }

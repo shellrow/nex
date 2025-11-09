@@ -2,7 +2,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use nex_core::mac::MacAddr;
 use std::net::Ipv4Addr;
 
-use crate::packet::Packet;
+use crate::packet::{GenericMutablePacket, Packet};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -406,9 +406,13 @@ impl Packet for DhcpPacket {
     }
 }
 
+/// Represents a mutable DHCP packet.
+pub type MutableDhcpPacket<'a> = GenericMutablePacket<'a, DhcpPacket>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::MutablePacket;
     use nex_core::mac::MacAddr;
 
     #[test]
@@ -446,5 +450,21 @@ mod tests {
 
         let rebuilt = packet.to_bytes();
         assert_eq!(rebuilt, raw);
+    }
+
+    #[test]
+    fn test_mutable_dhcp_packet_alias() {
+        let mut raw = [0u8; DHCP_MIN_PACKET_SIZE + 4];
+        raw[0] = DhcpOperation::Request.value();
+        raw[1] = DhcpHardwareType::Ethernet.value();
+        raw[2] = 6; // hardware length
+
+        let mut packet = <MutableDhcpPacket as MutablePacket>::new(&mut raw).expect("mutable dhcp");
+        packet.header_mut()[0] = DhcpOperation::Reply.value();
+        packet.payload_mut()[0] = 0xaa;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.op, DhcpOperation::Reply);
+        assert_eq!(frozen.payload[0], 0xaa);
     }
 }

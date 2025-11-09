@@ -1,7 +1,10 @@
 //! An ICMPv6 packet abstraction.
 
 use crate::ipv6::IPV6_HEADER_LEN;
-use crate::{ethernet::ETHERNET_HEADER_LEN, packet::Packet};
+use crate::{
+    ethernet::ETHERNET_HEADER_LEN,
+    packet::{GenericMutablePacket, Packet},
+};
 use std::net::Ipv6Addr;
 
 use bytes::Bytes;
@@ -287,6 +290,40 @@ impl Packet for Icmpv6Packet {
 
     fn into_parts(self) -> (Self::Header, Bytes) {
         (self.header, self.payload)
+    }
+}
+
+/// Represents a mutable ICMPv6 packet.
+pub type MutableIcmpv6Packet<'a> = GenericMutablePacket<'a, Icmpv6Packet>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::packet::MutablePacket;
+
+    #[test]
+    fn test_mutable_icmpv6_packet_alias() {
+        let mut raw = [
+            Icmpv6Type::EchoRequest.value(),
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            b'p',
+            b'i',
+        ];
+
+        let mut packet =
+            <MutableIcmpv6Packet as MutablePacket>::new(&mut raw).expect("mutable icmpv6");
+        packet.header_mut()[0] = Icmpv6Type::EchoReply.value();
+        packet.payload_mut()[0] = b'x';
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.icmpv6_type, Icmpv6Type::EchoReply);
+        assert_eq!(frozen.payload[0], b'x');
     }
 }
 

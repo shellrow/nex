@@ -2,7 +2,7 @@
 
 use crate::{
     ethernet::{EtherType, ETHERNET_HEADER_LEN},
-    packet::Packet,
+    packet::{MutablePacket, Packet},
 };
 
 use bytes::{Bytes, BytesMut};
@@ -448,6 +448,146 @@ impl fmt::Display for ArpPacket {
     }
 }
 
+/// Represents a mutable ARP Packet.
+pub struct MutableArpPacket<'a> {
+    buffer: &'a mut [u8],
+}
+
+impl<'a> MutablePacket<'a> for MutableArpPacket<'a> {
+    type Packet = ArpPacket;
+
+    fn new(buffer: &'a mut [u8]) -> Option<Self> {
+        if buffer.len() < ARP_HEADER_LEN {
+            None
+        } else {
+            Some(Self { buffer })
+        }
+    }
+
+    fn packet(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn packet_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    fn header(&self) -> &[u8] {
+        &self.packet()[..ARP_HEADER_LEN]
+    }
+
+    fn header_mut(&mut self) -> &mut [u8] {
+        let (header, _) = (&mut *self.buffer).split_at_mut(ARP_HEADER_LEN);
+        header
+    }
+
+    fn payload(&self) -> &[u8] {
+        &self.packet()[ARP_HEADER_LEN..]
+    }
+
+    fn payload_mut(&mut self) -> &mut [u8] {
+        let (_, payload) = (&mut *self.buffer).split_at_mut(ARP_HEADER_LEN);
+        payload
+    }
+}
+
+impl<'a> MutableArpPacket<'a> {
+    /// Create a packet without performing length checks.
+    pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
+        Self { buffer }
+    }
+
+    fn raw(&self) -> &[u8] {
+        &*self.buffer
+    }
+
+    fn raw_mut(&mut self) -> &mut [u8] {
+        &mut *self.buffer
+    }
+
+    pub fn get_hardware_type(&self) -> ArpHardwareType {
+        ArpHardwareType::new(u16::from_be_bytes([self.raw()[0], self.raw()[1]]))
+    }
+
+    pub fn set_hardware_type(&mut self, ty: ArpHardwareType) {
+        self.raw_mut()[0..2].copy_from_slice(&ty.value().to_be_bytes());
+    }
+
+    pub fn get_protocol_type(&self) -> EtherType {
+        EtherType::new(u16::from_be_bytes([self.raw()[2], self.raw()[3]]))
+    }
+
+    pub fn set_protocol_type(&mut self, ty: EtherType) {
+        self.raw_mut()[2..4].copy_from_slice(&ty.value().to_be_bytes());
+    }
+
+    pub fn get_hw_addr_len(&self) -> u8 {
+        self.raw()[4]
+    }
+
+    pub fn set_hw_addr_len(&mut self, len: u8) {
+        self.raw_mut()[4] = len;
+    }
+
+    pub fn get_proto_addr_len(&self) -> u8 {
+        self.raw()[5]
+    }
+
+    pub fn set_proto_addr_len(&mut self, len: u8) {
+        self.raw_mut()[5] = len;
+    }
+
+    pub fn get_operation(&self) -> ArpOperation {
+        ArpOperation::new(u16::from_be_bytes([self.raw()[6], self.raw()[7]]))
+    }
+
+    pub fn set_operation(&mut self, op: ArpOperation) {
+        self.raw_mut()[6..8].copy_from_slice(&op.value().to_be_bytes());
+    }
+
+    pub fn get_sender_hw_addr(&self) -> MacAddr {
+        MacAddr::from_octets(self.raw()[8..14].try_into().unwrap())
+    }
+
+    pub fn set_sender_hw_addr(&mut self, addr: MacAddr) {
+        self.raw_mut()[8..14].copy_from_slice(&addr.octets());
+    }
+
+    pub fn get_sender_proto_addr(&self) -> Ipv4Addr {
+        Ipv4Addr::new(
+            self.raw()[14],
+            self.raw()[15],
+            self.raw()[16],
+            self.raw()[17],
+        )
+    }
+
+    pub fn set_sender_proto_addr(&mut self, addr: Ipv4Addr) {
+        self.raw_mut()[14..18].copy_from_slice(&addr.octets());
+    }
+
+    pub fn get_target_hw_addr(&self) -> MacAddr {
+        MacAddr::from_octets(self.raw()[18..24].try_into().unwrap())
+    }
+
+    pub fn set_target_hw_addr(&mut self, addr: MacAddr) {
+        self.raw_mut()[18..24].copy_from_slice(&addr.octets());
+    }
+
+    pub fn get_target_proto_addr(&self) -> Ipv4Addr {
+        Ipv4Addr::new(
+            self.raw()[24],
+            self.raw()[25],
+            self.raw()[26],
+            self.raw()[27],
+        )
+    }
+
+    pub fn set_target_proto_addr(&mut self, addr: Ipv4Addr) {
+        self.raw_mut()[24..28].copy_from_slice(&addr.octets());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,5 +682,32 @@ mod tests {
             ArpOperation::Unknown(v) => assert_eq!(v, 0x9999),
             _ => panic!("Expected unknown operation"),
         }
+    }
+
+    #[test]
+    fn test_mutable_arp_packet_updates() {
+        let mut raw = [
+            0x00, 0x01, // Hardware Type: Ethernet
+            0x08, 0x00, // Protocol Type: IPv4
+            0x06, // HW Addr Len
+            0x04, // Proto Addr Len
+            0x00, 0x01, // Operation: Request
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, // Sender MAC
+            192, 168, 1, 1, // Sender IP
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Target MAC
+            192, 168, 1, 2, // Target IP
+            0xde, 0xad, 0xbe, 0xef, // payload
+        ];
+
+        let mut packet = MutableArpPacket::new(&mut raw).expect("mutable arp");
+        assert_eq!(packet.get_operation(), ArpOperation::Request);
+        packet.set_operation(ArpOperation::Reply);
+        packet.set_sender_proto_addr(Ipv4Addr::new(10, 0, 0, 1));
+        packet.payload_mut()[0] = 0xaa;
+
+        let frozen = packet.freeze().expect("freeze");
+        assert_eq!(frozen.header.operation, ArpOperation::Reply);
+        assert_eq!(frozen.header.sender_proto_addr, Ipv4Addr::new(10, 0, 0, 1));
+        assert_eq!(frozen.payload[0], 0xaa);
     }
 }
