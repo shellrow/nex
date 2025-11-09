@@ -1,5 +1,6 @@
 //! A UDP packet abstraction.
 
+use crate::checksum::{ChecksumMode, ChecksumState, TransportChecksumContext};
 use crate::ip::IpNextProtocol;
 use crate::packet::{MutablePacket, Packet};
 
@@ -109,6 +110,8 @@ impl Packet for UdpPacket {
 /// Represents a mutable UDP packet.
 pub struct MutableUdpPacket<'a> {
     buffer: &'a mut [u8],
+    checksum: ChecksumState,
+    checksum_context: Option<TransportChecksumContext>,
 }
 
 impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
@@ -130,7 +133,11 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
             }
         }
 
-        Some(Self { buffer })
+        Some(Self {
+            buffer,
+            checksum: ChecksumState::new(),
+            checksum_context: None,
+        })
     }
 
     fn packet(&self) -> &[u8] {
@@ -165,7 +172,11 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
 impl<'a> MutableUdpPacket<'a> {
     /// Create a new packet without validating length fields.
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
-        Self { buffer }
+        Self {
+            buffer,
+            checksum: ChecksumState::new(),
+            checksum_context: None,
+        }
     }
 
     fn raw(&self) -> &[u8] {
@@ -174,6 +185,115 @@ impl<'a> MutableUdpPacket<'a> {
 
     fn raw_mut(&mut self) -> &mut [u8] {
         &mut *self.buffer
+    }
+
+    fn after_field_mutation(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    fn write_checksum(&mut self, checksum: u16) {
+        self.raw_mut()[6..8].copy_from_slice(&checksum.to_be_bytes());
+    }
+
+    /// Returns the checksum recalculation mode.
+    pub fn checksum_mode(&self) -> ChecksumMode {
+        self.checksum.mode()
+    }
+
+    /// Sets the checksum recalculation mode.
+    pub fn set_checksum_mode(&mut self, mode: ChecksumMode) {
+        self.checksum.set_mode(mode);
+        if self.checksum.automatic() && self.checksum.is_dirty() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Enables automatic checksum recalculation when tracked fields change.
+    pub fn enable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Automatic);
+    }
+
+    /// Disables automatic checksum recalculation.
+    pub fn disable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Manual);
+    }
+
+    /// Returns true if the checksum needs to be recomputed.
+    pub fn is_checksum_dirty(&self) -> bool {
+        self.checksum.is_dirty()
+    }
+
+    /// Marks the checksum as stale and recomputes it when automatic mode is enabled.
+    pub fn mark_checksum_dirty(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Defines the pseudo-header context used when recomputing the checksum.
+    pub fn set_checksum_context(&mut self, context: TransportChecksumContext) {
+        self.checksum_context = Some(context);
+        if self.checksum.automatic() && self.checksum.is_dirty() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Sets an IPv4 pseudo-header context used for checksum recomputation.
+    pub fn set_ipv4_checksum_context(&mut self, source: Ipv4Addr, destination: Ipv4Addr) {
+        self.set_checksum_context(TransportChecksumContext::ipv4(source, destination));
+    }
+
+    /// Sets an IPv6 pseudo-header context used for checksum recomputation.
+    pub fn set_ipv6_checksum_context(&mut self, source: Ipv6Addr, destination: Ipv6Addr) {
+        self.set_checksum_context(TransportChecksumContext::ipv6(source, destination));
+    }
+
+    /// Clears the configured checksum pseudo-header context.
+    pub fn clear_checksum_context(&mut self) {
+        self.checksum_context = None;
+    }
+
+    /// Provides access to the configured checksum pseudo-header context.
+    pub fn checksum_context(&self) -> Option<TransportChecksumContext> {
+        self.checksum_context
+    }
+
+    /// Recomputes the UDP checksum if a pseudo-header context is available.
+    pub fn recompute_checksum(&mut self) -> Option<u16> {
+        let context = self.checksum_context?;
+
+        let checksum = match context {
+            TransportChecksumContext::Ipv4 {
+                source,
+                destination,
+            } => util::ipv4_checksum(
+                self.raw(),
+                3,
+                &[],
+                &source,
+                &destination,
+                IpNextProtocol::Udp,
+            ) as u16,
+            TransportChecksumContext::Ipv6 {
+                source,
+                destination,
+            } => util::ipv6_checksum(
+                self.raw(),
+                3,
+                &[],
+                &source,
+                &destination,
+                IpNextProtocol::Udp,
+            ) as u16,
+        };
+
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
+        Some(checksum)
     }
 
     /// Returns the total length derived from the UDP length field.
@@ -197,6 +317,7 @@ impl<'a> MutableUdpPacket<'a> {
 
     pub fn set_source(&mut self, port: u16) {
         self.raw_mut()[0..2].copy_from_slice(&port.to_be_bytes());
+        self.after_field_mutation();
     }
 
     pub fn get_destination(&self) -> u16 {
@@ -205,6 +326,7 @@ impl<'a> MutableUdpPacket<'a> {
 
     pub fn set_destination(&mut self, port: u16) {
         self.raw_mut()[2..4].copy_from_slice(&port.to_be_bytes());
+        self.after_field_mutation();
     }
 
     pub fn get_length(&self) -> u16 {
@@ -213,6 +335,7 @@ impl<'a> MutableUdpPacket<'a> {
 
     pub fn set_length(&mut self, length: u16) {
         self.raw_mut()[4..6].copy_from_slice(&length.to_be_bytes());
+        self.after_field_mutation();
     }
 
     pub fn get_checksum(&self) -> u16 {
@@ -220,7 +343,8 @@ impl<'a> MutableUdpPacket<'a> {
     }
 
     pub fn set_checksum(&mut self, checksum: u16) {
-        self.raw_mut()[6..8].copy_from_slice(&checksum.to_be_bytes());
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
     }
 }
 
@@ -357,5 +481,57 @@ mod tests {
         assert_eq!(frozen.header.destination, 0x0102);
         assert_eq!(frozen.header.checksum, 0xffff);
         assert_eq!(&raw[UDP_HEADER_LEN], &b'x');
+    }
+    
+    #[test]
+    fn test_udp_auto_checksum_with_context() {
+        let mut raw = [
+            0x12, 0x34, // source
+            0xab, 0xcd, // destination
+            0x00, 0x0c, // length
+            0x00, 0x00, // checksum placeholder
+            b'd', b'a', b't', b'a', // payload
+        ];
+
+        let mut packet = MutableUdpPacket::new(&mut raw).expect("mutable udp");
+        let src = Ipv4Addr::new(192, 168, 0, 1);
+        let dst = Ipv4Addr::new(192, 168, 0, 2);
+        packet.set_ipv4_checksum_context(src, dst);
+        packet.enable_auto_checksum();
+
+        let baseline = packet.recompute_checksum().expect("checksum");
+        assert_eq!(baseline, packet.get_checksum());
+
+        packet.set_destination(0xabce);
+        let updated = packet.get_checksum();
+        assert_ne!(baseline, updated);
+        assert!(!packet.is_checksum_dirty());
+
+        let frozen = packet.freeze().expect("freeze");
+        let expected = ipv4_checksum(&frozen, &src, &dst);
+        assert_eq!(updated, expected as u16);
+    }
+
+    #[test]
+    fn test_udp_manual_checksum_tracking() {
+        let mut raw = [
+            0x12, 0x34, // source
+            0xab, 0xcd, // destination
+            0x00, 0x0c, // length
+            0x00, 0x00, // checksum placeholder
+            b'd', b'a', b't', b'a', // payload
+        ];
+
+        let mut packet = MutableUdpPacket::new(&mut raw).expect("mutable udp");
+        let src = Ipv4Addr::new(10, 0, 0, 1);
+        let dst = Ipv4Addr::new(10, 0, 0, 2);
+        packet.set_ipv4_checksum_context(src, dst);
+
+        packet.set_source(0x2222);
+        assert!(packet.is_checksum_dirty());
+
+        let recomputed = packet.recompute_checksum().expect("checksum");
+        assert_eq!(recomputed, packet.get_checksum());
+        assert!(!packet.is_checksum_dirty());
     }
 }

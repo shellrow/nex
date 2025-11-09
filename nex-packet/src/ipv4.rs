@@ -1,8 +1,10 @@
 //! An IPv4 packet abstraction.
 
 use crate::{
+    checksum::{ChecksumMode, ChecksumState},
     ip::IpNextProtocol,
     packet::{MutablePacket, Packet},
+    util,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use nex_core::bitfield::*;
@@ -420,6 +422,7 @@ impl Ipv4Packet {
 /// Represents a mutable IPv4 packet.
 pub struct MutableIpv4Packet<'a> {
     buffer: &'a mut [u8],
+    checksum: ChecksumState,
 }
 
 impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
@@ -445,7 +448,10 @@ impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
             return None;
         }
 
-        Some(Self { buffer })
+        Some(Self {
+            buffer,
+            checksum: ChecksumState::new(),
+        })
     }
 
     fn packet(&self) -> &[u8] {
@@ -484,7 +490,10 @@ impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
 impl<'a> MutableIpv4Packet<'a> {
     /// Create a mutable packet without validating the header fields.
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
-        Self { buffer }
+        Self {
+            buffer,
+            checksum: ChecksumState::new(),
+        }
     }
 
     fn raw(&self) -> &[u8] {
@@ -493,6 +502,66 @@ impl<'a> MutableIpv4Packet<'a> {
 
     fn raw_mut(&mut self) -> &mut [u8] {
         &mut *self.buffer
+    }
+
+    fn after_field_mutation(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    fn write_checksum(&mut self, checksum: u16) {
+        self.raw_mut()[10..12].copy_from_slice(&checksum.to_be_bytes());
+    }
+
+    /// Returns the current checksum recalculation mode.
+    pub fn checksum_mode(&self) -> ChecksumMode {
+        self.checksum.mode()
+    }
+
+    /// Updates the checksum recalculation mode.
+    pub fn set_checksum_mode(&mut self, mode: ChecksumMode) {
+        self.checksum.set_mode(mode);
+        if self.checksum.automatic() && self.checksum.is_dirty() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Enables automatic checksum recalculation.
+    pub fn enable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Automatic);
+    }
+
+    /// Disables automatic checksum recalculation.
+    pub fn disable_auto_checksum(&mut self) {
+        self.set_checksum_mode(ChecksumMode::Manual);
+    }
+
+    /// Returns true when the checksum must be recomputed before serialization.
+    pub fn is_checksum_dirty(&self) -> bool {
+        self.checksum.is_dirty()
+    }
+
+    /// Marks the checksum as stale and triggers recomputation when automatic mode is enabled.
+    pub fn mark_checksum_dirty(&mut self) {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
+            let _ = self.recompute_checksum();
+        }
+    }
+
+    /// Recomputes the IPv4 header checksum using the current buffer contents.
+    pub fn recompute_checksum(&mut self) -> Option<u16> {
+        let header_len = self.header_len();
+        if header_len > self.raw().len() {
+            return None;
+        }
+
+        let checksum = util::checksum(&self.raw()[..header_len], 5) as u16;
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
+        Some(checksum)
     }
 
     /// Returns the header length in bytes.
@@ -527,6 +596,7 @@ impl<'a> MutableIpv4Packet<'a> {
     pub fn set_version(&mut self, version: u8) {
         let buffer = self.raw_mut();
         buffer[0] = (buffer[0] & 0x0F) | ((version & 0x0F) << 4);
+        self.after_field_mutation();
     }
 
     /// Retrieve the header length in 32-bit words.
@@ -538,6 +608,7 @@ impl<'a> MutableIpv4Packet<'a> {
     pub fn set_header_length(&mut self, ihl: u8) {
         let buffer = self.raw_mut();
         buffer[0] = (buffer[0] & 0xF0) | (ihl & 0x0F);
+        self.after_field_mutation();
     }
 
     /// Retrieve the DSCP field.
@@ -549,6 +620,7 @@ impl<'a> MutableIpv4Packet<'a> {
     pub fn set_dscp(&mut self, dscp: u8) {
         let buffer = self.raw_mut();
         buffer[1] = (buffer[1] & 0x03) | ((dscp & 0x3F) << 2);
+        self.after_field_mutation();
     }
 
     /// Retrieve the ECN field.
@@ -560,6 +632,7 @@ impl<'a> MutableIpv4Packet<'a> {
     pub fn set_ecn(&mut self, ecn: u8) {
         let buffer = self.raw_mut();
         buffer[1] = (buffer[1] & 0xFC) | (ecn & 0x03);
+        self.after_field_mutation();
     }
 
     /// Retrieve the total length field.
@@ -570,6 +643,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the total length field.
     pub fn set_total_length(&mut self, len: u16) {
         self.raw_mut()[2..4].copy_from_slice(&len.to_be_bytes());
+        self.after_field_mutation();
     }
 
     /// Retrieve the identification field.
@@ -580,6 +654,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the identification field.
     pub fn set_identification(&mut self, id: u16) {
         self.raw_mut()[4..6].copy_from_slice(&id.to_be_bytes());
+        self.after_field_mutation();
     }
 
     /// Retrieve the flags field.
@@ -591,6 +666,7 @@ impl<'a> MutableIpv4Packet<'a> {
     pub fn set_flags(&mut self, flags: u8) {
         let buffer = self.raw_mut();
         buffer[6] = (buffer[6] & 0x1F) | ((flags & 0x07) << 5);
+        self.after_field_mutation();
     }
 
     /// Retrieve the fragment offset field.
@@ -603,6 +679,7 @@ impl<'a> MutableIpv4Packet<'a> {
         let buffer = self.raw_mut();
         let combined = (u16::from_be_bytes([buffer[6], buffer[7]]) & 0xE000) | (offset & 0x1FFF);
         buffer[6..8].copy_from_slice(&combined.to_be_bytes());
+        self.after_field_mutation();
     }
 
     /// Retrieve the TTL field.
@@ -613,6 +690,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the TTL field.
     pub fn set_ttl(&mut self, ttl: u8) {
         self.raw_mut()[8] = ttl;
+        self.after_field_mutation();
     }
 
     /// Retrieve the next-level protocol field.
@@ -623,6 +701,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the next-level protocol field.
     pub fn set_next_level_protocol(&mut self, proto: IpNextProtocol) {
         self.raw_mut()[9] = proto.value();
+        self.after_field_mutation();
     }
 
     /// Retrieve the checksum field.
@@ -632,7 +711,8 @@ impl<'a> MutableIpv4Packet<'a> {
 
     /// Update the checksum field.
     pub fn set_checksum(&mut self, checksum: u16) {
-        self.raw_mut()[10..12].copy_from_slice(&checksum.to_be_bytes());
+        self.write_checksum(checksum);
+        self.checksum.clear_dirty();
     }
 
     /// Retrieve the source address.
@@ -648,6 +728,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the source address.
     pub fn set_source(&mut self, addr: Ipv4Addr) {
         self.raw_mut()[12..16].copy_from_slice(&addr.octets());
+        self.after_field_mutation();
     }
 
     /// Retrieve the destination address.
@@ -663,6 +744,7 @@ impl<'a> MutableIpv4Packet<'a> {
     /// Update the destination address.
     pub fn set_destination(&mut self, addr: Ipv4Addr) {
         self.raw_mut()[16..20].copy_from_slice(&addr.octets());
+        self.after_field_mutation();
     }
 }
 
@@ -869,5 +951,46 @@ mod tests {
         assert_eq!(frozen.header.ttl, 128);
         assert_eq!(frozen.header.destination, Ipv4Addr::new(192, 0, 2, 1));
         assert_eq!(frozen.payload[0], 0x11);
+    }
+    
+    #[test]
+    fn test_ipv4_auto_checksum_updates() {
+        let mut raw = [
+            0x45, 0x00, 0x00, 0x1c, 0x1c, 0x46, 0x40, 0x00, 0x40, 0x06, 0x00, 0x00, 0xc0, 0xa8,
+            0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
+        ];
+
+        let mut packet = MutableIpv4Packet::new(&mut raw).expect("mutable ipv4");
+        packet.enable_auto_checksum();
+        let baseline = packet.recompute_checksum().expect("checksum");
+        let before = packet.get_checksum();
+        assert_eq!(baseline, before);
+
+        packet.set_ttl(0x41);
+        let after = packet.get_checksum();
+        assert_ne!(before, after);
+        assert!(!packet.is_checksum_dirty());
+
+        let frozen = packet.freeze().expect("freeze");
+        let expected = checksum(&frozen);
+        assert_eq!(after, expected);
+    }
+
+    #[test]
+    fn test_ipv4_manual_checksum_tracking() {
+        let mut raw = [
+            0x45, 0x00, 0x00, 0x1c, 0x1c, 0x46, 0x40, 0x00, 0x40, 0x06, 0xb1, 0xe6, 0xc0, 0xa8,
+            0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
+        ];
+
+        let mut packet = MutableIpv4Packet::new(&mut raw).expect("mutable ipv4");
+        assert!(!packet.is_checksum_dirty());
+
+        packet.set_identification(0x1c47);
+        assert!(packet.is_checksum_dirty());
+
+        let recomputed = packet.recompute_checksum().expect("checksum");
+        assert_eq!(recomputed, packet.get_checksum());
+        assert!(!packet.is_checksum_dirty());
     }
 }
