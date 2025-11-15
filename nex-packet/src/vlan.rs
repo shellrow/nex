@@ -94,8 +94,6 @@ impl Packet for VlanPacket {
 
         // VLAN TCI
         let tci = bytes.get_u16();
-        let raw_pcp = ((tci >> 13) & 0b111) as u8;
-        println!("DEBUG: tci=0x{:04x}, raw_pcp={}", tci, raw_pcp);
         let pcp = ClassOfService::new(((tci >> 13) & 0b111) as u8);
         let drop_eligible_id = ((tci >> 12) & 0b1) as u1;
         let vlan_id = (tci & 0x0FFF) as u12be;
