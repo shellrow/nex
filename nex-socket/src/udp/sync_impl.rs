@@ -204,7 +204,12 @@ impl UdpSocket {
                                 pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
                             }
                             if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi_ifindex = ifindex;
+                                pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidInput,
+                                        "interface_index is out of range for this platform",
+                                    )
+                                })?;
                             }
                             let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
                             return sendmsg(
@@ -257,7 +262,12 @@ impl UdpSocket {
                                 pktinfo.ipi6_addr.s6_addr = src.octets();
                             }
                             if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi6_ifindex = ifindex;
+                                pktinfo.ipi6_ifindex = ifindex.try_into().map_err(|_| {
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidInput,
+                                        "interface_index is out of range for this platform",
+                                    )
+                                })?;
                             }
                             let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
                             return sendmsg(
@@ -329,7 +339,36 @@ impl UdpSocket {
         use std::os::fd::AsRawFd;
 
         let mut iov = [IoSliceMut::new(buf)];
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_vendor = "apple",
+            target_os = "netbsd"
+        ))]
         let mut cmsgspace = nix::cmsg_space!(libc::in_pktinfo, libc::in6_pktinfo);
+        #[cfg(all(
+            not(any(
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "linux",
+                target_vendor = "apple",
+                target_os = "netbsd"
+            )),
+            any(target_os = "freebsd", target_os = "openbsd")
+        ))]
+        let mut cmsgspace = nix::cmsg_space!(libc::in6_pktinfo);
+        #[cfg(all(
+            not(any(
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "linux",
+                target_vendor = "apple",
+                target_os = "netbsd"
+            )),
+            not(any(target_os = "freebsd", target_os = "openbsd"))
+        ))]
+        let mut cmsgspace = nix::cmsg_space!(libc::c_int);
         let msg = recvmsg::<SockaddrStorage>(
             self.socket.as_raw_fd(),
             &mut iov,
@@ -368,7 +407,12 @@ impl UdpSocket {
                         destination_addr = Some(IpAddr::V4(std::net::Ipv4Addr::from(
                             info.ipi_addr.s_addr.to_ne_bytes(),
                         )));
-                        interface_index = Some(info.ipi_ifindex as u32);
+                        interface_index = Some(info.ipi_ifindex.try_into().map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "received invalid interface index",
+                            )
+                        })?);
                     }
                     #[cfg(any(
                         target_os = "android",
@@ -385,7 +429,12 @@ impl UdpSocket {
                     ControlMessageOwned::Ipv6PacketInfo(info) => {
                         destination_addr =
                             Some(IpAddr::V6(std::net::Ipv6Addr::from(info.ipi6_addr.s6_addr)));
-                        interface_index = Some(info.ipi6_ifindex);
+                        interface_index = Some(info.ipi6_ifindex.try_into().map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "received invalid interface index",
+                            )
+                        })?);
                     }
                     _ => {}
                 }
