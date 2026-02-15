@@ -108,7 +108,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 
     let adapter = unsafe {
         let npf_if_name: String = windows::to_npf_name(&network_interface.name);
-        let net_if_str = CString::new(npf_if_name.as_bytes()).unwrap();
+        let net_if_str = CString::new(npf_if_name.as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "interface name contains NUL")
+        })?;
         windows::PacketOpenAdapter(net_if_str.as_ptr() as *mut libc::c_char)
     };
     if adapter.is_null() {

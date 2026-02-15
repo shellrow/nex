@@ -151,16 +151,18 @@ impl Stream for AsyncBpfSocketReceiver {
 /// Create a new asynchronous BPF socket channel.
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<AsyncChannel> {
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "openbsd"))]
-    fn get_fd(attempts: usize) -> RawFd {
+    fn get_fd(attempts: usize) -> io::Result<RawFd> {
         for i in 0..attempts {
             let file_name = format!("/dev/bpf{}", i);
-            let c_file_name = CString::new(file_name).unwrap();
+            let c_file_name = CString::new(file_name).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path")
+            })?;
             let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
             if fd != -1 {
-                return fd;
+                return Ok(fd);
             }
         }
-        -1
+        Err(io::Error::last_os_error())
     }
     #[cfg(any(
         target_os = "freebsd",
@@ -168,15 +170,18 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         target_os = "illumos",
         target_os = "solaris",
     ))]
-    fn get_fd(_attempts: usize) -> RawFd {
-        let c_file_name = CString::new("/dev/bpf").unwrap();
-        unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) }
+    fn get_fd(_attempts: usize) -> io::Result<RawFd> {
+        let c_file_name = CString::new("/dev/bpf")
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path"))?;
+        let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
+        if fd == -1 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(fd)
+        }
     }
 
-    let fd = get_fd(config.bpf_fd_attempts);
-    if fd == -1 {
-        return Err(io::Error::last_os_error());
-    }
+    let fd = get_fd(config.bpf_fd_attempts)?;
 
     let mut iface: bpf::ifreq = unsafe { mem::zeroed() };
     for (i, c) in network_interface.name.bytes().enumerate() {
