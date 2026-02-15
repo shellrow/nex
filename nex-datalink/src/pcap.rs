@@ -4,7 +4,7 @@
 use std::io;
 use std::marker::{Send, Sync};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use pcap::{Activated, Active};
@@ -110,6 +110,14 @@ struct RawSenderImpl {
     capture: Arc<Mutex<pcap::Capture<Active>>>,
 }
 
+fn lock_capture<T>(
+    capture: &Mutex<pcap::Capture<T>>,
+) -> io::Result<MutexGuard<'_, pcap::Capture<T>>> {
+    capture
+        .lock()
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "pcap capture mutex poisoned"))
+}
+
 impl RawSender for RawSenderImpl {
     #[inline]
     fn build_and_send(
@@ -121,7 +129,10 @@ impl RawSender for RawSenderImpl {
         for _ in 0..num_packets {
             let mut data = vec![0; packet_size];
             func(&mut data);
-            let mut cap = self.capture.lock().unwrap();
+            let mut cap = match lock_capture(&self.capture) {
+                Ok(cap) => cap,
+                Err(err) => return Some(Err(err)),
+            };
             if let Err(e) = cap.sendpacket(data) {
                 return Some(Err(io::Error::new(io::ErrorKind::Other, e)));
             }
@@ -131,7 +142,10 @@ impl RawSender for RawSenderImpl {
 
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
-        let mut cap = self.capture.lock().unwrap();
+        let mut cap = match lock_capture(&self.capture) {
+            Ok(cap) => cap,
+            Err(err) => return Some(Err(err)),
+        };
         Some(match cap.sendpacket(packet) {
             Ok(()) => Ok(()),
             Err(e) => Err(io::Error::new(io::ErrorKind::Other, e)),
@@ -165,7 +179,7 @@ struct RawReceiverImpl<T: Activated + Send + Sync> {
 
 impl<T: Activated + Send + Sync> RawReceiver for RawReceiverImpl<T> {
     fn next(&mut self) -> io::Result<&[u8]> {
-        let mut cap = self.capture.lock().unwrap();
+        let mut cap = lock_capture(&self.capture)?;
         match cap.next_packet() {
             Ok(pkt) => {
                 self.read_buffer.truncate(0);
