@@ -146,7 +146,7 @@ where
 }
 
 fn errno() -> i32 {
-    io::Error::last_os_error().raw_os_error().unwrap()
+    io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
 #[cfg(test)]
