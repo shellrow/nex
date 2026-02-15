@@ -344,9 +344,13 @@ impl Packet for ArpPacket {
         let hw_addr_len = bytes[4];
         let proto_addr_len = bytes[5];
         let operation = ArpOperation::new(u16::from_be_bytes([bytes[6], bytes[7]]));
-        let sender_hw_addr = MacAddr::from_octets(bytes[8..14].try_into().unwrap());
+        let sender_hw_addr = MacAddr::from_octets([
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
+        ]);
         let sender_proto_addr = Ipv4Addr::new(bytes[14], bytes[15], bytes[16], bytes[17]);
-        let target_hw_addr = MacAddr::from_octets(bytes[18..24].try_into().unwrap());
+        let target_hw_addr = MacAddr::from_octets([
+            bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+        ]);
         let target_proto_addr = Ipv4Addr::new(bytes[24], bytes[25], bytes[26], bytes[27]);
         let payload = Bytes::copy_from_slice(&bytes[ARP_HEADER_LEN..]);
 
@@ -546,7 +550,8 @@ impl<'a> MutableArpPacket<'a> {
     }
 
     pub fn get_sender_hw_addr(&self) -> MacAddr {
-        MacAddr::from_octets(self.raw()[8..14].try_into().unwrap())
+        let raw = self.raw();
+        MacAddr::from_octets([raw[8], raw[9], raw[10], raw[11], raw[12], raw[13]])
     }
 
     pub fn set_sender_hw_addr(&mut self, addr: MacAddr) {
@@ -567,7 +572,8 @@ impl<'a> MutableArpPacket<'a> {
     }
 
     pub fn get_target_hw_addr(&self) -> MacAddr {
-        MacAddr::from_octets(self.raw()[18..24].try_into().unwrap())
+        let raw = self.raw();
+        MacAddr::from_octets([raw[18], raw[19], raw[20], raw[21], raw[22], raw[23]])
     }
 
     pub fn set_target_hw_addr(&mut self, addr: MacAddr) {

@@ -92,11 +92,29 @@ impl Stream for AsyncWpcapSocketReceiver {
     type Item = io::Result<Vec<u8>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut queue = self.inner.packets.lock().unwrap();
+        let mut queue = match self.inner.packets.lock() {
+            Ok(queue) => queue,
+            Err(_) => {
+                return Poll::Ready(Some(Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "wpcap packet queue mutex poisoned",
+                ))));
+            }
+        };
         if let Some(pkt) = queue.pop_front() {
             Poll::Ready(Some(Ok(pkt)))
         } else {
-            *self.inner.waker.lock().unwrap() = Some(cx.waker().clone());
+            match self.inner.waker.lock() {
+                Ok(mut waker) => {
+                    *waker = Some(cx.waker().clone());
+                }
+                Err(_) => {
+                    return Poll::Ready(Some(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "wpcap waker mutex poisoned",
+                    ))));
+                }
+            }
             Poll::Pending
         }
     }
@@ -187,14 +205,21 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
                         let data_ptr = ((*read_packet).Buffer as isize + start) as *const u8;
                         let data = slice::from_raw_parts(data_ptr, caplen).to_vec();
                         {
-                            let mut queue = packets.lock().unwrap();
+                            let mut queue = match packets.lock() {
+                                Ok(queue) => queue,
+                                Err(poisoned) => poisoned.into_inner(),
+                            };
                             queue.push_back(data);
                         }
                         let offset = (*hdr).bh_hdrlen as isize + (*hdr).bh_caplen as isize;
                         ptr = ptr.offset(bpf::BPF_WORDALIGN(offset));
                     }
                 }
-                if let Some(w) = waker.lock().unwrap().take() {
+                let mut waker = match waker.lock() {
+                    Ok(waker) => waker,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if let Some(w) = waker.take() {
                     w.wake();
                 }
             }

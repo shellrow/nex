@@ -419,7 +419,11 @@ impl<'a> MutableIpv6Packet<'a> {
     }
 
     pub fn get_source(&self) -> Ipv6Addr {
-        Ipv6Addr::from(<[u8; 16]>::try_from(&self.raw()[8..24]).unwrap())
+        let raw = self.raw();
+        Ipv6Addr::from([
+            raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15], raw[16], raw[17],
+            raw[18], raw[19], raw[20], raw[21], raw[22], raw[23],
+        ])
     }
 
     pub fn set_source(&mut self, addr: Ipv6Addr) {
@@ -427,7 +431,11 @@ impl<'a> MutableIpv6Packet<'a> {
     }
 
     pub fn get_destination(&self) -> Ipv6Addr {
-        Ipv6Addr::from(<[u8; 16]>::try_from(&self.raw()[24..40]).unwrap())
+        let raw = self.raw();
+        Ipv6Addr::from([
+            raw[24], raw[25], raw[26], raw[27], raw[28], raw[29], raw[30], raw[31], raw[32],
+            raw[33], raw[34], raw[35], raw[36], raw[37], raw[38], raw[39],
+        ])
     }
 
     pub fn set_destination(&mut self, addr: Ipv6Addr) {
