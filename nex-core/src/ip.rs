@@ -1,6 +1,6 @@
 //! IP address utilities.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 /// Returns [`true`] if the address appears to be globally routable.
 pub fn is_global_ip(ip_addr: &IpAddr) -> bool {
@@ -8,6 +8,19 @@ pub fn is_global_ip(ip_addr: &IpAddr) -> bool {
         IpAddr::V4(ip) => is_global_ipv4(ip),
         IpAddr::V6(ip) => is_global_ipv6(ip),
     }
+}
+
+/// Returns an unspecified IP (`0.0.0.0` / `::`) with the same family as `ip_addr`.
+pub fn unspecified_ip_for(ip_addr: &IpAddr) -> IpAddr {
+    match ip_addr {
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    }
+}
+
+/// Returns an unspecified socket address with the same family as `ip_addr`.
+pub fn unspecified_socket_addr_for(ip_addr: &IpAddr, port: u16) -> SocketAddr {
+    SocketAddr::new(unspecified_ip_for(ip_addr), port)
 }
 
 /// Returns [`true`] if the address appears to be globally reachable
@@ -138,5 +151,23 @@ mod tests {
         assert!(is_global_ip(&ip_v6));
         assert!(!is_global_ip(&ip_private));
         assert!(!is_global_ip(&ip_ula));
+    }
+
+    #[test]
+    fn test_unspecified_helpers() {
+        let v4 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+        let v6 = IpAddr::V6(Ipv6Addr::LOCALHOST);
+
+        assert_eq!(unspecified_ip_for(&v4), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(unspecified_ip_for(&v6), IpAddr::V6(Ipv6Addr::UNSPECIFIED));
+
+        assert_eq!(
+            unspecified_socket_addr_for(&v4, 1234),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 1234)
+        );
+        assert_eq!(
+            unspecified_socket_addr_for(&v6, 4321),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 4321)
+        );
     }
 }

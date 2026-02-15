@@ -3,7 +3,6 @@
 use crate::ip::IpNextProtocol;
 use nex_core::bitfield::u16be;
 
-use core::convert::TryInto;
 use core::u8;
 use core::u16;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -153,8 +152,7 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
     let mut i = 0;
     while cur_data.len() >= 2 {
         if i != skipword {
-            // It's safe to unwrap because we verified there are at least 2 bytes
-            sum += u16::from_be_bytes(cur_data[0..2].try_into().unwrap()) as u32;
+            sum += ((cur_data[0] as u32) << 8) + cur_data[1] as u32;
         }
         cur_data = &cur_data[2..];
         i += 1;
