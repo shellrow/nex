@@ -1,5 +1,5 @@
 use socket2::Type as SockType;
-use std::{net::SocketAddr, time::Duration};
+use std::{io, net::SocketAddr, time::Duration};
 
 use crate::SocketFamily;
 
@@ -29,11 +29,14 @@ impl IcmpSocketType {
     }
 
     /// Converts the ICMP socket type from a `socket2::Type`.
-    pub(crate) fn from_sock_type(sock_type: SockType) -> Self {
+    pub(crate) fn try_from_sock_type(sock_type: SockType) -> io::Result<Self> {
         match sock_type {
-            SockType::DGRAM => IcmpSocketType::Dgram,
-            SockType::RAW => IcmpSocketType::Raw,
-            _ => panic!("Invalid ICMP socket type"),
+            SockType::DGRAM => Ok(IcmpSocketType::Dgram),
+            SockType::RAW => Ok(IcmpSocketType::Raw),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid ICMP socket type",
+            )),
         }
     }
 
@@ -88,6 +91,17 @@ impl IcmpConfig {
         }
     }
 
+    /// Creates a new ICMP configuration from a socket family.
+    pub fn from_family(socket_family: SocketFamily) -> Self {
+        Self {
+            socket_family,
+            ..Self::new(match socket_family {
+                SocketFamily::IPV4 => IcmpKind::V4,
+                SocketFamily::IPV6 => IcmpKind::V6,
+            })
+        }
+    }
+
     /// Set bind address for the socket.
     pub fn with_bind(mut self, addr: SocketAddr) -> Self {
         self.bind = Some(addr);
@@ -104,6 +118,11 @@ impl IcmpConfig {
     pub fn with_hoplimit(mut self, hops: u32) -> Self {
         self.hoplimit = Some(hops);
         self
+    }
+
+    /// Set the hop limit for IPv6 packets.
+    pub fn with_hop_limit(self, hops: u32) -> Self {
+        self.with_hoplimit(hops)
     }
 
     /// Set the read timeout for the socket.
@@ -140,6 +159,7 @@ impl IcmpConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn icmp_config_builders() {
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -153,5 +173,13 @@ mod tests {
         assert_eq!(cfg.ttl, Some(4));
         assert_eq!(cfg.interface.as_deref(), Some("eth0"));
         assert_eq!(cfg.sock_type_hint, IcmpSocketType::Raw);
+    }
+
+    #[test]
+    fn from_family_sets_expected_kind() {
+        let v4 = IcmpConfig::from_family(SocketFamily::IPV4);
+        let v6 = IcmpConfig::from_family(SocketFamily::IPV6);
+        assert_eq!(v4.socket_family, SocketFamily::IPV4);
+        assert_eq!(v6.socket_family, SocketFamily::IPV6);
     }
 }

@@ -79,10 +79,29 @@ impl UdpConfig {
         Self::default()
     }
 
+    /// Create a new UDP configuration for a specific socket family.
+    pub fn new_with_family(socket_family: SocketFamily) -> Self {
+        Self {
+            socket_family,
+            ..Self::default()
+        }
+    }
+
+    /// Set the socket family.
+    pub fn with_socket_family(mut self, socket_family: SocketFamily) -> Self {
+        self.socket_family = socket_family;
+        self
+    }
+
     /// Set the bind address.
     pub fn with_bind_addr(mut self, addr: SocketAddr) -> Self {
         self.bind_addr = Some(addr);
         self
+    }
+
+    /// Set the bind address.
+    pub fn with_bind(self, addr: SocketAddr) -> Self {
+        self.with_bind_addr(addr)
     }
 
     /// Enable address reuse.
@@ -107,6 +126,11 @@ impl UdpConfig {
     pub fn with_hoplimit(mut self, hops: u32) -> Self {
         self.hoplimit = Some(hops);
         self
+    }
+
+    /// Set the hop limit value.
+    pub fn with_hop_limit(self, hops: u32) -> Self {
+        self.with_hoplimit(hops)
     }
 
     /// Set the read timeout.
@@ -140,5 +164,13 @@ mod tests {
         assert!(cfg.broadcast.is_none());
         assert!(cfg.ttl.is_none());
         assert!(cfg.bind_device.is_none());
+    }
+
+    #[test]
+    fn udp_config_with_family_builder() {
+        let cfg =
+            UdpConfig::new_with_family(SocketFamily::IPV6).with_bind("[::1]:0".parse().unwrap());
+        assert_eq!(cfg.socket_family, SocketFamily::IPV6);
+        assert!(cfg.bind_addr.is_some());
     }
 }

@@ -63,6 +63,14 @@ pub struct TcpConfig {
 }
 
 impl TcpConfig {
+    /// Create a STREAM socket for the specified family.
+    pub fn new(socket_family: SocketFamily) -> Self {
+        match socket_family {
+            SocketFamily::IPV4 => Self::v4_stream(),
+            SocketFamily::IPV6 => Self::v6_stream(),
+        }
+    }
+
     /// Create a STREAM socket for IPv4.
     pub fn v4_stream() -> Self {
         Self {
@@ -116,6 +124,10 @@ impl TcpConfig {
         self
     }
 
+    pub fn with_bind_addr(self, addr: SocketAddr) -> Self {
+        self.with_bind(addr)
+    }
+
     pub fn with_nonblocking(mut self, flag: bool) -> Self {
         self.nonblocking = flag;
         self
@@ -146,6 +158,10 @@ impl TcpConfig {
         self
     }
 
+    pub fn with_hop_limit(self, hops: u32) -> Self {
+        self.with_hoplimit(hops)
+    }
+
     pub fn with_keepalive(mut self, on: bool) -> Self {
         self.keepalive = Some(on);
         self
@@ -174,8 +190,8 @@ mod tests {
     #[test]
     fn tcp_config_builders() {
         let addr: SocketAddr = "127.0.0.1:80".parse().unwrap();
-        let cfg = TcpConfig::v4_stream()
-            .with_bind(addr)
+        let cfg = TcpConfig::new(SocketFamily::IPV4)
+            .with_bind_addr(addr)
             .with_nonblocking(true)
             .with_reuseaddr(true)
             .with_nodelay(true)
@@ -188,5 +204,12 @@ mod tests {
         assert_eq!(cfg.reuseaddr, Some(true));
         assert_eq!(cfg.nodelay, Some(true));
         assert_eq!(cfg.ttl, Some(10));
+    }
+
+    #[test]
+    fn new_with_ipv6_family_creates_v6_stream() {
+        let cfg = TcpConfig::new(SocketFamily::IPV6);
+        assert_eq!(cfg.socket_family, SocketFamily::IPV6);
+        assert_eq!(cfg.socket_type, TcpSocketType::Stream);
     }
 }
