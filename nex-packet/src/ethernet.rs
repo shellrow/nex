@@ -197,9 +197,10 @@ impl Packet for EthernetPacket {
         if bytes.len() < ETHERNET_HEADER_LEN {
             return None;
         }
-        let destination = MacAddr::from_octets(bytes[0..MAC_ADDR_LEN].try_into().unwrap());
+        let destination =
+            MacAddr::from_octets([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]);
         let source =
-            MacAddr::from_octets(bytes[MAC_ADDR_LEN..2 * MAC_ADDR_LEN].try_into().unwrap());
+            MacAddr::from_octets([bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]]);
         let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
         let payload = Bytes::copy_from_slice(&bytes[ETHERNET_HEADER_LEN..]);
 
@@ -335,7 +336,8 @@ impl<'a> MutableEthernetPacket<'a> {
 
     /// Retrieve the destination MAC address.
     pub fn get_destination(&self) -> MacAddr {
-        MacAddr::from_octets(self.header()[0..MAC_ADDR_LEN].try_into().unwrap())
+        let h = self.header();
+        MacAddr::from_octets([h[0], h[1], h[2], h[3], h[4], h[5]])
     }
 
     /// Update the destination MAC address.
@@ -345,11 +347,8 @@ impl<'a> MutableEthernetPacket<'a> {
 
     /// Retrieve the source MAC address.
     pub fn get_source(&self) -> MacAddr {
-        MacAddr::from_octets(
-            self.header()[MAC_ADDR_LEN..2 * MAC_ADDR_LEN]
-                .try_into()
-                .unwrap(),
-        )
+        let h = self.header();
+        MacAddr::from_octets([h[6], h[7], h[8], h[9], h[10], h[11]])
     }
 
     /// Update the source MAC address.

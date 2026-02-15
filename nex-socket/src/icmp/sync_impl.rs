@@ -70,7 +70,7 @@ impl IcmpSocket {
 
         Ok(Self {
             inner: std_socket,
-            socket_type: IcmpSocketType::from_sock_type(sock_type),
+            socket_type: IcmpSocketType::try_from_sock_type(sock_type)?,
             socket_family: config.socket_family,
         })
     }

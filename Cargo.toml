@@ -10,19 +10,19 @@ members = [
 ]
 
 [workspace.package]
-version = "0.24.1"
+version = "0.25.0"
 edition = "2024"
 authors = ["shellrow <shellrow@foctal.com>"]
 
 [workspace.dependencies]
-nex-core = { version = "0.24.1", path = "nex-core" }
-nex-datalink = { version = "0.24.1", path = "nex-datalink" }
-nex-packet = { version = "0.24.1", path = "nex-packet" }
-nex-sys = { version = "0.24.1", path = "nex-sys" }
-nex-socket = { version = "0.24.1", path = "nex-socket" }
+nex-core = { version = "0.25.0", path = "nex-core" }
+nex-datalink = { version = "0.25.0", path = "nex-datalink" }
+nex-packet = { version = "0.25.0", path = "nex-packet" }
+nex-sys = { version = "0.25.0", path = "nex-sys" }
+nex-socket = { version = "0.25.0", path = "nex-socket" }
 serde = { version = "1" }
 libc = "0.2"
-netdev = { version = "0.39" }
+netdev = { version = "0.40" }
 bytes = "1"
 tokio = { version = "1" }
 rand = "0.8"

@@ -9,16 +9,13 @@ Cross-platform low-level networking library in Rust
 ## Overview
 
 `nex` is a Rust library that provides cross-platform low-level networking capabilities.   
-It includes a set of modules, each with a specific focus:
+It includes sub-crates with responsibilities:
 
-- `datalink`: Datalink layer networking. 
-- `packet`: Low-level packet parsing and building.  
-- `socket`: Socket-related functionality.
+- `nex-packet`: Low-level packet parsing and serialization.
+- `nex-datalink`: Raw datalink send/receive backends across platforms.
+- `nex-socket`: Low-level socket operations with cross-platform option handling.
 
-## Upcoming Features
-The project has plans to enhance nex with the following features:  
-- More Protocol Support: Expanding protocol support to include additional network protocols and standards.
-- Performance Improvements: Continuously working on performance enhancements for faster network operations.
+The project aims to expose portable low-level primitives.  
 
 ## Usage
 
@@ -26,7 +23,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.24"
+nex = "0.25"
 ```
 
 ## Using Specific Sub-crates

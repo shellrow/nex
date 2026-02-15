@@ -27,6 +27,11 @@ pub trait Packet: Sized {
     fn payload_len(&self) -> usize;
     /// Get the total length of the packet (header + payload).
     fn total_len(&self) -> usize;
+
+    /// Returns true when the serialized packet is empty.
+    fn is_empty(&self) -> bool {
+        self.total_len() == 0
+    }
     /// Convert the packet to a mutable byte buffer.
     fn to_bytes_mut(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(self.total_len());
@@ -77,6 +82,11 @@ pub trait MutablePacket<'a>: Sized {
 
     /// Get a mutable view over the payload bytes of the packet.
     fn payload_mut(&mut self) -> &mut [u8];
+
+    /// Returns true when the packet buffer is empty.
+    fn is_empty(&self) -> bool {
+        self.packet().is_empty()
+    }
 
     /// Convert the mutable packet into its immutable counterpart.
     fn freeze(&self) -> Option<Self::Packet> {

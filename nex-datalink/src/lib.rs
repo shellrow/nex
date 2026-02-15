@@ -1,4 +1,4 @@
-//! Provides functionality for interacting with the data link layer, support for sending and receiving packets.
+//! Cross-platform datalink I/O primitives for sending and receiving raw packets.
 
 #![deny(warnings)]
 
@@ -136,6 +136,71 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// Validates whether this configuration can be used safely.
+    pub fn validate(&self) -> io::Result<()> {
+        if self.write_buffer_size == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "write_buffer_size must be greater than 0",
+            ));
+        }
+        if self.read_buffer_size == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "read_buffer_size must be greater than 0",
+            ));
+        }
+        if self.bpf_fd_attempts == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bpf_fd_attempts must be greater than 0",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn with_write_buffer_size(mut self, write_buffer_size: usize) -> Self {
+        self.write_buffer_size = write_buffer_size;
+        self
+    }
+
+    pub fn with_read_buffer_size(mut self, read_buffer_size: usize) -> Self {
+        self.read_buffer_size = read_buffer_size;
+        self
+    }
+
+    pub fn with_read_timeout(mut self, read_timeout: Option<Duration>) -> Self {
+        self.read_timeout = read_timeout;
+        self
+    }
+
+    pub fn with_write_timeout(mut self, write_timeout: Option<Duration>) -> Self {
+        self.write_timeout = write_timeout;
+        self
+    }
+
+    pub fn with_channel_type(mut self, channel_type: ChannelType) -> Self {
+        self.channel_type = channel_type;
+        self
+    }
+
+    pub fn with_bpf_fd_attempts(mut self, bpf_fd_attempts: usize) -> Self {
+        self.bpf_fd_attempts = bpf_fd_attempts;
+        self
+    }
+
+    pub fn with_linux_fanout(mut self, linux_fanout: Option<FanoutOption>) -> Self {
+        self.linux_fanout = linux_fanout;
+        self
+    }
+
+    pub fn with_promiscuous(mut self, promiscuous: bool) -> Self {
+        self.promiscuous = promiscuous;
+        self
+    }
+}
+
 /// Creates a new datalink channel for sending and receiving raw packets.
 ///
 /// This function sets up a channel to send and receive raw packets directly from a data link layer
@@ -150,6 +215,7 @@ pub fn channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
 ) -> io::Result<Channel> {
+    configuration.validate()?;
     backend::channel(network_interface, (&configuration).into())
 }
 
@@ -197,5 +263,26 @@ mod tests {
         assert_eq!(cfg.bpf_fd_attempts, 1000);
         assert!(cfg.linux_fanout.is_none());
         assert!(cfg.promiscuous);
+    }
+
+    #[test]
+    fn config_validate_rejects_zero_buffer_size() {
+        let cfg = Config::default().with_read_buffer_size(0);
+        assert!(cfg.validate().is_err());
+
+        let cfg = Config::default().with_write_buffer_size(0);
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn config_builder_updates_fields() {
+        let cfg = Config::default()
+            .with_channel_type(ChannelType::Layer3(0x0800))
+            .with_promiscuous(false)
+            .with_bpf_fd_attempts(42);
+
+        assert_eq!(cfg.channel_type, ChannelType::Layer3(0x0800));
+        assert!(!cfg.promiscuous);
+        assert_eq!(cfg.bpf_fd_attempts, 42);
     }
 }

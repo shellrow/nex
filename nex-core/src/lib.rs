@@ -1,5 +1,5 @@
-//! Provides core network types and functionality.
-//! Primarily designed for use with nex, it also includes extensions to the standard net module.
+//! Core network types and helpers shared across the `nex` crates.
+//! Includes interface, MAC/IP, and bitfield utilities used by low-level networking code.
 
 pub use netdev;
 

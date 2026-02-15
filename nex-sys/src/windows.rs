@@ -64,5 +64,5 @@ where
 }
 
 fn errno() -> i32 {
-    std::io::Error::last_os_error().raw_os_error().unwrap()
+    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }

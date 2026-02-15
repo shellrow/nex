@@ -1,4 +1,4 @@
-//! Packet parsing and construction utilities for common network protocols.
+//! Low-level packet parsing and serialization primitives for common network protocols.
 
 pub mod arp;
 pub mod builder;

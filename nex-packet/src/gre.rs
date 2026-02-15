@@ -76,8 +76,8 @@ impl Packet for GrePacket {
         }
 
         if routing_present != 0 {
-            // Not implemented for this crate
-            panic!("Source routed GRE packets not supported");
+            // Source-routed GRE parsing is not yet supported.
+            return None;
         }
 
         let payload = Bytes::copy_from_slice(bytes);
@@ -145,9 +145,8 @@ impl Packet for GrePacket {
             }
         }
 
-        // Panic if routing_present is set (not supported by this implementation)
         if self.routing_present != 0 {
-            panic!("to_bytes does not support source routed GRE packets");
+            buf.put_slice(&self.routing);
         }
 
         buf.put_slice(&self.payload);
@@ -194,9 +193,8 @@ impl Packet for GrePacket {
             }
         }
 
-        // Panic if routing_present is set (not supported by this implementation)
         if self.routing_present != 0 {
-            panic!("header does not support source routed GRE packets");
+            buf.put_slice(&self.routing);
         }
 
         buf.freeze()
@@ -212,6 +210,7 @@ impl Packet for GrePacket {
             + self.offset_length()
             + self.key_length()
             + self.sequence_length()
+            + self.routing_length()
     }
 
     fn payload_len(&self) -> usize {
@@ -248,7 +247,7 @@ impl GrePacket {
         if 0 == self.routing_present {
             0
         } else {
-            panic!("Source routed GRE packets not supported")
+            self.routing.len()
         }
     }
 }
@@ -307,5 +306,52 @@ mod tests {
         let frozen = packet.freeze().expect("freeze");
         assert_eq!(frozen.protocol_type, 0x86dd);
         assert_eq!(frozen.payload[0], 0xff);
+    }
+
+    #[test]
+    fn gre_with_routing_present_is_not_parsed() {
+        let packet = Bytes::from_static(&[
+            0x40, 0x00, // routing flag on
+            0x08, 0x00, // protocol type
+            0x00, 0x00, // checksum
+            0x00, 0x00, // offset
+            0xaa, 0xbb, // routing data (unsupported)
+            0xcc, 0xdd, // payload
+        ]);
+
+        assert!(GrePacket::from_buf(&packet).is_none());
+    }
+
+    #[test]
+    fn gre_to_bytes_with_routing_present_does_not_panic() {
+        let packet = GrePacket {
+            checksum_present: 0,
+            routing_present: 1,
+            key_present: 0,
+            sequence_present: 0,
+            strict_source_route: 0,
+            recursion_control: 0,
+            zero_flags: 0,
+            version: 0,
+            protocol_type: 0x0800,
+            checksum: vec![0x1111],
+            offset: vec![0x2222],
+            key: vec![],
+            sequence: vec![],
+            routing: vec![0xaa, 0xbb],
+            payload: Bytes::from_static(&[0xcc]),
+        };
+
+        let bytes = packet.to_bytes();
+        assert_eq!(
+            bytes.as_ref(),
+            &[
+                0x40, 0x00, 0x08, 0x00, 0x11, 0x11, 0x22, 0x22, 0xaa, 0xbb, 0xcc
+            ]
+        );
+        assert_eq!(
+            packet.header().as_ref(),
+            &[0x40, 0x00, 0x08, 0x00, 0x11, 0x11, 0x22, 0x22, 0xaa, 0xbb]
+        );
     }
 }

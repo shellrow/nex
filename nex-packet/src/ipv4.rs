@@ -350,16 +350,6 @@ impl Packet for Ipv4Packet {
         let header_len = IPV4_HEADER_LEN + tmp_buf.len();
 
         let total_len_expected = header_len + self.payload.len();
-        // Check if the total length exceeds the header's total_length field
-        if total_len_expected > self.header.total_length as usize {
-            panic!(
-                "Payload too long: header {} + payload {} = {} > total_length {}",
-                header_len,
-                self.payload.len(),
-                total_len_expected,
-                self.header.total_length
-            );
-        }
 
         let header_len_words = (header_len / 4) as u8;
 
@@ -369,7 +359,9 @@ impl Packet for Ipv4Packet {
         buf.put_u8((self.header.dscp << 2 | self.header.ecn) as u8);
 
         // 2. Fixed header fields
-        buf.put_u16(self.header.total_length);
+        // Keep header total length consistent with the actual serialized packet length.
+        let total_length = total_len_expected.min(u16::MAX as usize) as u16;
+        buf.put_u16(total_length);
         buf.put_u16(self.header.identification);
         buf.put_u16(((self.header.flags as u16) << 13) | self.header.fragment_offset);
         buf.put_u8(self.header.ttl);
@@ -864,8 +856,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Payload too long")]
-    fn ipv4_payload_too_long_should_panic() {
+    fn ipv4_payload_too_long_updates_total_length() {
         let packet = Ipv4Packet {
             header: Ipv4Header {
                 version: 4,
@@ -886,8 +877,9 @@ mod tests {
             payload: Bytes::from_static(&[0, 1, 2, 3, 4, 5]), // 6 bytes payload
         };
 
-        // This should panic because the payload length exceeds the total_length specified in the header
-        let _ = packet.to_bytes();
+        let bytes = packet.to_bytes();
+        let reparsed = Ipv4Packet::from_bytes(bytes).expect("reparse");
+        assert_eq!(reparsed.header.total_length as usize, reparsed.total_len());
     }
 
     #[test]

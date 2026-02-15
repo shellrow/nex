@@ -74,25 +74,30 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         target_os = "illumos",
         target_os = "solaris"
     ))]
-    fn get_fd(_attempts: usize) -> libc::c_int {
-        let c_file_name = CString::new(&b"/dev/bpf"[..]).unwrap();
-        unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) }
+    fn get_fd(_attempts: usize) -> io::Result<libc::c_int> {
+        let c_file_name = CString::new(&b"/dev/bpf"[..])
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path"))?;
+        let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
+        if fd == -1 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(fd)
+        }
     }
 
     #[cfg(any(target_os = "openbsd", target_os = "macos", target_os = "ios"))]
-    fn get_fd(attempts: usize) -> libc::c_int {
+    fn get_fd(attempts: usize) -> io::Result<libc::c_int> {
         for i in 0..attempts {
-            let fd = unsafe {
-                let file_name = format!("/dev/bpf{}", i);
-                let c_file_name = CString::new(file_name.as_bytes()).unwrap();
-                libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0)
-            };
+            let file_name = format!("/dev/bpf{}", i);
+            let c_file_name = CString::new(file_name.as_bytes()).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path")
+            })?;
+            let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
             if fd != -1 {
-                return fd;
+                return Ok(fd);
             }
         }
-
-        -1
+        Err(io::Error::last_os_error())
     }
 
     #[cfg(any(
@@ -117,10 +122,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         Ok(())
     }
 
-    let fd = get_fd(config.bpf_fd_attempts);
-    if fd == -1 {
-        return Err(io::Error::last_os_error());
-    }
+    let fd = get_fd(config.bpf_fd_attempts)?;
     let mut iface: bpf::ifreq = unsafe { mem::zeroed() };
     for (i, c) in network_interface.name.bytes().enumerate() {
         iface.ifr_name[i] = c as libc::c_char;
@@ -409,7 +411,12 @@ impl RawReceiver for RawReceiverImpl {
                 }
             }
         }
-        let (mut start, mut len) = self.packets.pop_front().unwrap();
+        let (mut start, mut len) = self.packets.pop_front().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "packet queue unexpectedly empty",
+            )
+        })?;
         len += self.buffer_offset;
         // If on loopback, adjust the start position to include padding for the fake Ethernet header.
         if self.loopback {

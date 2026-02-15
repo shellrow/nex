@@ -76,7 +76,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
 
     let adapter = unsafe {
         let npf_if_name: String = windows::to_npf_name(&network_interface.name);
-        let net_if_str = CString::new(npf_if_name.as_bytes()).unwrap();
+        let net_if_str = CString::new(npf_if_name.as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "interface name contains NUL")
+        })?;
         windows::PacketOpenAdapter(net_if_str.as_ptr() as *mut libc::c_char)
     };
     if adapter.is_null() {
@@ -245,7 +247,12 @@ impl RawReceiver for RawReceiverImpl {
                 }
             }
         }
-        let (start, len) = self.packets.pop_front().unwrap();
+        let (start, len) = self.packets.pop_front().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "packet queue unexpectedly empty",
+            )
+        })?;
         let slice = unsafe {
             let data = (*self.packet.packet).Buffer as usize + start;
             slice::from_raw_parts(data as *const u8, len)

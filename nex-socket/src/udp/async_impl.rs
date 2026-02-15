@@ -25,6 +25,23 @@ impl AsyncUdpSocket {
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
+        #[cfg(any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos"
+        ))]
+        if let Some(flag) = config.reuseport {
+            socket.set_reuse_port(flag)?;
+        }
         if let Some(flag) = config.broadcast {
             socket.set_broadcast(flag)?;
         }
@@ -39,6 +56,38 @@ impl AsyncUdpSocket {
         }
         if let Some(timeout) = config.write_timeout {
             socket.set_write_timeout(Some(timeout))?;
+        }
+        if let Some(size) = config.recv_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+        }
+        if let Some(size) = config.send_buffer_size {
+            socket.set_send_buffer_size(size)?;
+        }
+        if let Some(tos) = config.tos {
+            socket.set_tos(tos)?;
+        }
+        #[cfg(any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos"
+        ))]
+        if let Some(tclass) = config.tclass_v6 {
+            socket.set_tclass_v6(tclass)?;
+        }
+        if let Some(only_v6) = config.only_v6 {
+            socket.set_only_v6(only_v6)?;
+        }
+        if let Some(on) = config.recv_pktinfo {
+            crate::udp::set_recv_pktinfo(&socket, config.socket_family, on)?;
         }
 
         // Linux: optional interface name
@@ -126,6 +175,38 @@ impl AsyncUdpSocket {
 
     pub fn into_tokio_socket(self) -> io::Result<UdpSocket> {
         Ok(self.inner)
+    }
+
+    /// Construct from a standard UDP socket.
+    pub fn from_std_socket(socket: StdUdpSocket) -> io::Result<Self> {
+        Ok(Self {
+            inner: UdpSocket::from_std(socket)?,
+        })
+    }
+
+    /// Convert into a standard UDP socket.
+    pub fn into_std_socket(self) -> io::Result<StdUdpSocket> {
+        self.inner.into_std()
+    }
+
+    /// Set IPv4 time-to-live.
+    pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
+        self.inner.set_ttl(ttl)
+    }
+
+    /// Get IPv4 time-to-live.
+    pub fn ttl(&self) -> io::Result<u32> {
+        self.inner.ttl()
+    }
+
+    /// Set broadcast mode.
+    pub fn set_broadcast(&self, on: bool) -> io::Result<()> {
+        self.inner.set_broadcast(on)
+    }
+
+    /// Get broadcast mode.
+    pub fn broadcast(&self) -> io::Result<bool> {
+        self.inner.broadcast()
     }
 
     #[cfg(unix)]
