@@ -74,7 +74,7 @@ pub(crate) fn set_recv_pktinfo_v4(socket: &Socket, on: bool) -> io::Result<()> {
 pub(crate) fn set_recv_pktinfo_v4(_socket: &Socket, _on: bool) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "IP_PKTINFO is not supported on this OS",
+        "IP_PKTINFO is not supported on this platform",
     ))
 }
 
@@ -87,7 +87,7 @@ pub(crate) fn set_recv_pktinfo_v6(socket: &Socket, on: bool) -> io::Result<()> {
 pub(crate) fn set_recv_pktinfo_v6(_socket: &Socket, _on: bool) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "IPV6_RECVPKTINFO is not supported on this OS",
+        "IPV6_RECVPKTINFO is not supported on this platform",
     ))
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn recv_pktinfo_v4(socket: &Socket) -> io::Result<bool> {
 pub(crate) fn recv_pktinfo_v4(_socket: &Socket) -> io::Result<bool> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "IP_PKTINFO is not supported on this OS",
+        "IP_PKTINFO is not supported on this platform",
     ))
 }
 
@@ -113,7 +113,7 @@ pub(crate) fn recv_pktinfo_v6(socket: &Socket) -> io::Result<bool> {
 pub(crate) fn recv_pktinfo_v6(_socket: &Socket) -> io::Result<bool> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "IPV6_RECVPKTINFO is not supported on this OS",
+        "IPV6_RECVPKTINFO is not supported on this platform",
     ))
 }
 

@@ -222,7 +222,7 @@ impl UdpSocket {
                     if meta.source_addr.is_some() || meta.interface_index.is_some() {
                         return Err(io::Error::new(
                             io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this OS",
+                            "send_msg packet-info metadata is not supported on this platform",
                         ));
                     }
                 }
@@ -275,7 +275,7 @@ impl UdpSocket {
                     if meta.source_addr.is_some() || meta.interface_index.is_some() {
                         return Err(io::Error::new(
                             io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this OS",
+                            "send_msg packet-info metadata is not supported on this platform",
                         ));
                     }
                 }
@@ -285,7 +285,7 @@ impl UdpSocket {
         }
     }
 
-    /// Send data with ancillary metadata (`sendmsg` is not available on this OS build).
+    /// Send data with ancillary metadata (`sendmsg` is not available on this platform build).
     #[cfg(not(unix))]
     pub fn send_msg(
         &self,
@@ -400,7 +400,7 @@ impl UdpSocket {
         })
     }
 
-    /// Receive data with ancillary metadata (`recvmsg` is not available on this OS build).
+    /// Receive data with ancillary metadata (`recvmsg` is not available on this platform build).
     #[cfg(not(unix))]
     pub fn recv_msg(&self, _buf: &mut [u8]) -> io::Result<UdpRecvMeta> {
         Err(io::Error::new(
@@ -578,7 +578,7 @@ impl UdpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get socket address"))
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
     }
 
     /// Convert into a raw `std::net::UdpSocket`.

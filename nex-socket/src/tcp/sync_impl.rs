@@ -491,7 +491,7 @@ impl TcpSocket {
             let _ = iface;
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "bind_device not supported on this OS",
+                "bind_device is not supported on this platform",
             ))
         }
     }
@@ -501,7 +501,7 @@ impl TcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to retrieve local address"))
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
     }
 
     /// Extract the RAW file descriptor for Unix.

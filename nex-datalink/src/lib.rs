@@ -1,4 +1,4 @@
-//! Provides functionality for interacting with the data link layer, support for sending and receiving packets.
+//! Cross-platform datalink I/O primitives for sending and receiving raw packets.
 
 #![deny(warnings)]
 

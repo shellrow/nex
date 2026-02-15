@@ -395,7 +395,7 @@ impl AsyncTcpSocket {
             let _ = iface;
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "bind_device not supported on this OS",
+                "bind_device is not supported on this platform",
             ))
         }
     }
@@ -405,7 +405,7 @@ impl AsyncTcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get socket address"))
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
     }
 
     /// Convert the internal socket into a Tokio `TcpStream`.
