@@ -26,6 +26,23 @@ impl AsyncTcpSocket {
         if let Some(flag) = config.reuseaddr {
             socket.set_reuse_address(flag)?;
         }
+        #[cfg(any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos"
+        ))]
+        if let Some(flag) = config.reuseport {
+            socket.set_reuse_port(flag)?;
+        }
         if let Some(flag) = config.nodelay {
             socket.set_nodelay(flag)?;
         }
@@ -43,6 +60,35 @@ impl AsyncTcpSocket {
         }
         if let Some(timeout) = config.write_timeout {
             socket.set_write_timeout(Some(timeout))?;
+        }
+        if let Some(size) = config.recv_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+        }
+        if let Some(size) = config.send_buffer_size {
+            socket.set_send_buffer_size(size)?;
+        }
+        if let Some(tos) = config.tos {
+            socket.set_tos(tos)?;
+        }
+        #[cfg(any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "tvos",
+            target_os = "visionos",
+            target_os = "watchos"
+        ))]
+        if let Some(tclass) = config.tclass_v6 {
+            socket.set_tclass_v6(tclass)?;
+        }
+        if let Some(only_v6) = config.only_v6 {
+            socket.set_only_v6(only_v6)?;
         }
 
         // Linux: optional interface name
@@ -173,9 +219,57 @@ impl AsyncTcpSocket {
         self.socket.set_reuse_address(on)
     }
 
+    /// Get reuse address option.
+    pub fn reuseaddr(&self) -> io::Result<bool> {
+        self.socket.reuse_address()
+    }
+
+    /// Set port reuse option where supported.
+    #[cfg(any(
+        target_os = "android",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "fuchsia",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos"
+    ))]
+    pub fn set_reuseport(&self, on: bool) -> io::Result<()> {
+        self.socket.set_reuse_port(on)
+    }
+
+    /// Get port reuse option where supported.
+    #[cfg(any(
+        target_os = "android",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "fuchsia",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos"
+    ))]
+    pub fn reuseport(&self) -> io::Result<bool> {
+        self.socket.reuse_port()
+    }
+
     /// Set no delay option for TCP.
     pub fn set_nodelay(&self, on: bool) -> io::Result<()> {
         self.socket.set_nodelay(on)
+    }
+
+    /// Get no delay option for TCP.
+    pub fn nodelay(&self) -> io::Result<bool> {
+        self.socket.nodelay()
     }
 
     /// Set linger option for the socket.
@@ -188,14 +282,107 @@ impl AsyncTcpSocket {
         self.socket.set_ttl(ttl)
     }
 
+    /// Get the time-to-live for IPv4 packets.
+    pub fn ttl(&self) -> io::Result<u32> {
+        self.socket.ttl()
+    }
+
     /// Set the hop limit for IPv6 packets.
     pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
         self.socket.set_unicast_hops_v6(hops)
     }
 
+    /// Get the hop limit for IPv6 packets.
+    pub fn hoplimit(&self) -> io::Result<u32> {
+        self.socket.unicast_hops_v6()
+    }
+
     /// Set the keepalive option for the socket.
     pub fn set_keepalive(&self, on: bool) -> io::Result<()> {
         self.socket.set_keepalive(on)
+    }
+
+    /// Get the keepalive option for the socket.
+    pub fn keepalive(&self) -> io::Result<bool> {
+        self.socket.keepalive()
+    }
+
+    /// Set the receive buffer size.
+    pub fn set_recv_buffer_size(&self, size: usize) -> io::Result<()> {
+        self.socket.set_recv_buffer_size(size)
+    }
+
+    /// Get the receive buffer size.
+    pub fn recv_buffer_size(&self) -> io::Result<usize> {
+        self.socket.recv_buffer_size()
+    }
+
+    /// Set the send buffer size.
+    pub fn set_send_buffer_size(&self, size: usize) -> io::Result<()> {
+        self.socket.set_send_buffer_size(size)
+    }
+
+    /// Get the send buffer size.
+    pub fn send_buffer_size(&self) -> io::Result<usize> {
+        self.socket.send_buffer_size()
+    }
+
+    /// Set IPv4 TOS / DSCP.
+    pub fn set_tos(&self, tos: u32) -> io::Result<()> {
+        self.socket.set_tos(tos)
+    }
+
+    /// Get IPv4 TOS / DSCP.
+    pub fn tos(&self) -> io::Result<u32> {
+        self.socket.tos()
+    }
+
+    /// Set IPv6 traffic class where supported.
+    #[cfg(any(
+        target_os = "android",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "fuchsia",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos"
+    ))]
+    pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
+        self.socket.set_tclass_v6(tclass)
+    }
+
+    /// Get IPv6 traffic class where supported.
+    #[cfg(any(
+        target_os = "android",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "fuchsia",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "tvos",
+        target_os = "visionos",
+        target_os = "watchos"
+    ))]
+    pub fn tclass_v6(&self) -> io::Result<u32> {
+        self.socket.tclass_v6()
+    }
+
+    /// Set whether this socket is IPv6 only.
+    pub fn set_only_v6(&self, only_v6: bool) -> io::Result<()> {
+        self.socket.set_only_v6(only_v6)
+    }
+
+    /// Get whether this socket is IPv6 only.
+    pub fn only_v6(&self) -> io::Result<bool> {
+        self.socket.only_v6()
     }
 
     /// Set the bind device for the socket (Linux specific).
@@ -225,6 +412,21 @@ impl AsyncTcpSocket {
     pub fn into_tokio_stream(self) -> io::Result<TcpStream> {
         let std_stream: StdTcpStream = self.socket.into();
         TcpStream::from_std(std_stream)
+    }
+
+    /// Construct from a raw `socket2::Socket`.
+    pub fn from_socket(socket: Socket) -> Self {
+        Self { socket }
+    }
+
+    /// Borrow the inner `socket2::Socket`.
+    pub fn socket(&self) -> &Socket {
+        &self.socket
+    }
+
+    /// Consume and return the inner `socket2::Socket`.
+    pub fn into_socket(self) -> Socket {
+        self.socket
     }
 
     /// Extract the RAW file descriptor for Unix.

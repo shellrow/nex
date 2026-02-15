@@ -42,6 +42,8 @@ pub struct UdpConfig {
     pub bind_addr: Option<SocketAddr>,
     /// Enable address reuse (`SO_REUSEADDR`).
     pub reuseaddr: Option<bool>,
+    /// Whether to allow port reuse (`SO_REUSEPORT`) where supported.
+    pub reuseport: Option<bool>,
     /// Allow broadcast (`SO_BROADCAST`).
     pub broadcast: Option<bool>,
     /// Time to live value.
@@ -52,6 +54,18 @@ pub struct UdpConfig {
     pub read_timeout: Option<Duration>,
     /// Write timeout for the socket.
     pub write_timeout: Option<Duration>,
+    /// Optional receive buffer size in bytes.
+    pub recv_buffer_size: Option<usize>,
+    /// Optional send buffer size in bytes.
+    pub send_buffer_size: Option<usize>,
+    /// Optional IPv4 TOS / DSCP field value.
+    pub tos: Option<u32>,
+    /// Optional IPv6 traffic class value (`IPV6_TCLASS`) where supported.
+    pub tclass_v6: Option<u32>,
+    /// Enable receiving packet info ancillary data (`IP_PKTINFO` / `IPV6_RECVPKTINFO`) where supported.
+    pub recv_pktinfo: Option<bool>,
+    /// Whether to force IPv6-only behavior on dual-stack sockets.
+    pub only_v6: Option<bool>,
     /// Bind to a specific interface (Linux only).
     pub bind_device: Option<String>,
 }
@@ -63,11 +77,18 @@ impl Default for UdpConfig {
             socket_type: UdpSocketType::Dgram,
             bind_addr: None,
             reuseaddr: None,
+            reuseport: None,
             broadcast: None,
             ttl: None,
             hoplimit: None,
             read_timeout: None,
             write_timeout: None,
+            recv_buffer_size: None,
+            send_buffer_size: None,
+            tos: None,
+            tclass_v6: None,
+            recv_pktinfo: None,
+            only_v6: None,
             bind_device: None,
         }
     }
@@ -110,6 +131,12 @@ impl UdpConfig {
         self
     }
 
+    /// Enable port reuse.
+    pub fn with_reuseport(mut self, on: bool) -> Self {
+        self.reuseport = Some(on);
+        self
+    }
+
     /// Allow broadcast.
     pub fn with_broadcast(mut self, on: bool) -> Self {
         self.broadcast = Some(on);
@@ -145,6 +172,42 @@ impl UdpConfig {
         self
     }
 
+    /// Set the receive buffer size.
+    pub fn with_recv_buffer_size(mut self, size: usize) -> Self {
+        self.recv_buffer_size = Some(size);
+        self
+    }
+
+    /// Set the send buffer size.
+    pub fn with_send_buffer_size(mut self, size: usize) -> Self {
+        self.send_buffer_size = Some(size);
+        self
+    }
+
+    /// Set the IPv4 TOS / DSCP field value.
+    pub fn with_tos(mut self, tos: u32) -> Self {
+        self.tos = Some(tos);
+        self
+    }
+
+    /// Set the IPv6 traffic class value.
+    pub fn with_tclass_v6(mut self, tclass: u32) -> Self {
+        self.tclass_v6 = Some(tclass);
+        self
+    }
+
+    /// Enable packet-info ancillary data receiving.
+    pub fn with_recv_pktinfo(mut self, on: bool) -> Self {
+        self.recv_pktinfo = Some(on);
+        self
+    }
+
+    /// Set whether the socket is IPv6 only.
+    pub fn with_only_v6(mut self, only_v6: bool) -> Self {
+        self.only_v6 = Some(only_v6);
+        self
+    }
+
     /// Bind to a specific interface (Linux only).
     pub fn with_bind_device(mut self, iface: impl Into<String>) -> Self {
         self.bind_device = Some(iface.into());
@@ -161,8 +224,15 @@ mod tests {
         let cfg = UdpConfig::default();
         assert!(cfg.bind_addr.is_none());
         assert!(cfg.reuseaddr.is_none());
+        assert!(cfg.reuseport.is_none());
         assert!(cfg.broadcast.is_none());
         assert!(cfg.ttl.is_none());
+        assert!(cfg.recv_buffer_size.is_none());
+        assert!(cfg.send_buffer_size.is_none());
+        assert!(cfg.tos.is_none());
+        assert!(cfg.tclass_v6.is_none());
+        assert!(cfg.recv_pktinfo.is_none());
+        assert!(cfg.only_v6.is_none());
         assert!(cfg.bind_device.is_none());
     }
 
