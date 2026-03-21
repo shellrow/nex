@@ -12,7 +12,13 @@ license = "MIT"
 
 [dependencies]
 netdev = { workspace = true }
+mac-addr = { workspace = true }
+ipnet = { workspace = true }
+libc = { workspace = true }
+nex-sys = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 
 [features]
-serde = ["dep:serde", "netdev/serde"]
+default = ["gateway"]
+gateway = ["netdev/gateway"]
+serde = ["dep:serde", "mac-addr/serde", "ipnet/serde", "netdev/serde"]

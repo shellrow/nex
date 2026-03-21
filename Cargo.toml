@@ -22,7 +22,9 @@ nex-sys = { version = "0.25.0", path = "nex-sys" }
 nex-socket = { version = "0.25.0", path = "nex-socket" }
 serde = { version = "1" }
 libc = "0.2"
-netdev = { version = "0.40" }
+netdev = { version = "0.41.0" }
+mac-addr = { version = "0.3.0" }
+ipnet = { version = "2.12" }
 bytes = "1"
 tokio = { version = "1" }
 rand = "0.8"
