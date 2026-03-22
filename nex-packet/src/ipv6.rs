@@ -1,5 +1,6 @@
 use crate::ip::IpNextProtocol;
 use crate::packet::{MutablePacket, Packet};
+use crate::parse::ParseError;
 use bytes::{BufMut, Bytes, BytesMut};
 use std::net::Ipv6Addr;
 
@@ -32,151 +33,10 @@ impl Packet for Ipv6Packet {
     type Header = Ipv6Header;
 
     fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < IPV6_HEADER_LEN {
-            return None;
-        }
-
-        // --- Parse the header section ---
-        let version_traffic_flow = &bytes[..4];
-        let version = version_traffic_flow[0] >> 4;
-        let traffic_class =
-            ((version_traffic_flow[0] & 0x0F) << 4) | (version_traffic_flow[1] >> 4);
-        let flow_label = u32::from(version_traffic_flow[1] & 0x0F) << 16
-            | u32::from(version_traffic_flow[2]) << 8
-            | u32::from(version_traffic_flow[3]);
-
-        let payload_length = u16::from_be_bytes([bytes[4], bytes[5]]);
-        let mut next_header = IpNextProtocol::new(bytes[6]);
-        let hop_limit = bytes[7];
-
-        let source = Ipv6Addr::from(<[u8; 16]>::try_from(&bytes[8..24]).ok()?);
-        let destination = Ipv6Addr::from(<[u8; 16]>::try_from(&bytes[24..40]).ok()?);
-
-        let header = Ipv6Header {
-            version,
-            traffic_class,
-            flow_label,
-            payload_length,
-            next_header,
-            hop_limit,
-            source,
-            destination,
-        };
-
-        // --- Walk through the extension headers ---
-        let mut offset = IPV6_HEADER_LEN;
-        let mut extensions = Vec::new();
-
-        loop {
-            match next_header {
-                IpNextProtocol::Hopopt
-                | IpNextProtocol::Ipv6Route
-                | IpNextProtocol::Ipv6Frag
-                | IpNextProtocol::Ipv6Opts => {
-                    if offset + 2 > bytes.len() {
-                        return None;
-                    }
-
-                    let nh = IpNextProtocol::new(bytes[offset]);
-                    let ext_len = bytes[offset + 1] as usize;
-
-                    match next_header {
-                        IpNextProtocol::Hopopt | IpNextProtocol::Ipv6Opts => {
-                            let total_len = 8 + ext_len * 8;
-                            if offset + total_len > bytes.len() {
-                                return None;
-                            }
-
-                            let data =
-                                Bytes::copy_from_slice(&bytes[offset + 2..offset + total_len]);
-                            let ext = match next_header {
-                                IpNextProtocol::Hopopt => {
-                                    Ipv6ExtensionHeader::HopByHop { next: nh, data }
-                                }
-                                IpNextProtocol::Ipv6Opts => {
-                                    Ipv6ExtensionHeader::Destination { next: nh, data }
-                                }
-                                _ => Ipv6ExtensionHeader::Raw {
-                                    next: nh,
-                                    raw: Bytes::copy_from_slice(&bytes[offset..offset + total_len]),
-                                },
-                            };
-
-                            extensions.push(ext);
-                            next_header = nh;
-                            offset += total_len;
-                        }
-
-                        IpNextProtocol::Ipv6Route => {
-                            if offset + 4 > bytes.len() {
-                                return None;
-                            }
-
-                            let routing_type = bytes[offset + 2];
-                            let segments_left = bytes[offset + 3];
-                            let total_len = 8 + ext_len * 8;
-                            if offset + total_len > bytes.len() {
-                                return None;
-                            }
-
-                            let data =
-                                Bytes::copy_from_slice(&bytes[offset + 4..offset + total_len]);
-                            extensions.push(Ipv6ExtensionHeader::Routing {
-                                next: nh,
-                                routing_type,
-                                segments_left,
-                                data,
-                            });
-
-                            next_header = nh;
-                            offset += total_len;
-                        }
-
-                        IpNextProtocol::Ipv6Frag => {
-                            if offset + 8 > bytes.len() {
-                                return None;
-                            }
-
-                            //let reserved = bytes[offset + 1];
-                            let frag_off_flags =
-                                u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]);
-                            let offset_val = frag_off_flags >> 3;
-                            let more = (frag_off_flags & 0x1) != 0;
-                            let id = u32::from_be_bytes([
-                                bytes[offset + 4],
-                                bytes[offset + 5],
-                                bytes[offset + 6],
-                                bytes[offset + 7],
-                            ]);
-
-                            extensions.push(Ipv6ExtensionHeader::Fragment {
-                                next: nh,
-                                offset: offset_val,
-                                more,
-                                id,
-                            });
-
-                            next_header = nh;
-                            offset += 8;
-                        }
-
-                        _ => break,
-                    }
-                }
-
-                _ => break,
-            }
-        }
-
-        let payload = Bytes::copy_from_slice(&bytes[offset..]);
-        Some(Ipv6Packet {
-            header,
-            extensions,
-            payload,
-        })
+        Self::try_from_buf(bytes).ok()
     }
     fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+        Self::try_from_bytes(bytes).ok()
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -289,6 +149,26 @@ impl Packet for Ipv6Packet {
 }
 
 impl Ipv6Packet {
+    /// Parse an IPv6 packet and return a structured error on failure.
+    pub fn try_from_buf(bytes: &[u8]) -> Result<Self, ParseError> {
+        parse_ipv6_from_slice(bytes, false)
+    }
+
+    /// Parse an IPv6 packet from owned bytes while preserving payload slices when possible.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        parse_ipv6_from_bytes(bytes, false)
+    }
+
+    /// Parse an IPv6 packet using validation-oriented strict checks.
+    pub fn try_from_buf_strict(bytes: &[u8]) -> Result<Self, ParseError> {
+        parse_ipv6_from_slice(bytes, true)
+    }
+
+    /// Parse an IPv6 packet from owned bytes using validation-oriented strict checks.
+    pub fn try_from_bytes_strict(bytes: Bytes) -> Result<Self, ParseError> {
+        parse_ipv6_from_bytes(bytes, true)
+    }
+
     pub fn total_len(&self) -> usize {
         IPV6_HEADER_LEN
             + self.extensions.iter().map(|ext| ext.len()).sum::<usize>()
@@ -297,6 +177,187 @@ impl Ipv6Packet {
     pub fn get_extension(&self, kind: ExtensionHeaderType) -> Option<&Ipv6ExtensionHeader> {
         self.extensions.iter().find(|ext| ext.kind() == kind)
     }
+}
+
+fn parse_ipv6_from_slice(bytes: &[u8], strict: bool) -> Result<Ipv6Packet, ParseError> {
+    parse_ipv6_parts(bytes, strict, |range| Bytes::copy_from_slice(&bytes[range]))
+}
+
+fn parse_ipv6_from_bytes(bytes: Bytes, strict: bool) -> Result<Ipv6Packet, ParseError> {
+    parse_ipv6_parts(&bytes, strict, |range| bytes.slice(range))
+}
+
+fn parse_ipv6_parts<F>(
+    bytes: &[u8],
+    strict: bool,
+    mut slice_bytes: F,
+) -> Result<Ipv6Packet, ParseError>
+where
+    F: FnMut(std::ops::Range<usize>) -> Bytes,
+{
+    if bytes.len() < IPV6_HEADER_LEN {
+        return Err(ParseError::BufferTooShort {
+            context: "IPv6 packet",
+            minimum: IPV6_HEADER_LEN,
+            actual: bytes.len(),
+        });
+    }
+
+    let version_traffic_flow = &bytes[..4];
+    let version = version_traffic_flow[0] >> 4;
+    if version != 6 {
+        return Err(ParseError::Malformed {
+            context: "IPv6 packet version",
+        });
+    }
+    let traffic_class = ((version_traffic_flow[0] & 0x0F) << 4) | (version_traffic_flow[1] >> 4);
+    let flow_label = u32::from(version_traffic_flow[1] & 0x0F) << 16
+        | u32::from(version_traffic_flow[2]) << 8
+        | u32::from(version_traffic_flow[3]);
+    let payload_length = u16::from_be_bytes([bytes[4], bytes[5]]);
+    let mut next_header = IpNextProtocol::new(bytes[6]);
+    let hop_limit = bytes[7];
+    let source =
+        Ipv6Addr::from(
+            <[u8; 16]>::try_from(&bytes[8..24]).map_err(|_| ParseError::Malformed {
+                context: "IPv6 source address",
+            })?,
+        );
+    let destination = Ipv6Addr::from(<[u8; 16]>::try_from(&bytes[24..40]).map_err(|_| {
+        ParseError::Malformed {
+            context: "IPv6 destination address",
+        }
+    })?);
+
+    let header = Ipv6Header {
+        version,
+        traffic_class,
+        flow_label,
+        payload_length,
+        next_header,
+        hop_limit,
+        source,
+        destination,
+    };
+
+    let declared_total_len = IPV6_HEADER_LEN + payload_length as usize;
+    if strict && declared_total_len > bytes.len() {
+        return Err(ParseError::Truncated {
+            context: "IPv6 payload",
+            expected: declared_total_len,
+            actual: bytes.len(),
+        });
+    }
+    let available_end = declared_total_len.min(bytes.len());
+
+    let mut offset = IPV6_HEADER_LEN;
+    let mut extensions = Vec::new();
+    loop {
+        match next_header {
+            IpNextProtocol::Hopopt
+            | IpNextProtocol::Ipv6Route
+            | IpNextProtocol::Ipv6Frag
+            | IpNextProtocol::Ipv6Opts => {
+                if offset + 2 > available_end {
+                    return Err(ParseError::Truncated {
+                        context: "IPv6 extension header",
+                        expected: offset + 2,
+                        actual: available_end,
+                    });
+                }
+
+                let nh = IpNextProtocol::new(bytes[offset]);
+                let ext_len = bytes[offset + 1] as usize;
+                match next_header {
+                    IpNextProtocol::Hopopt | IpNextProtocol::Ipv6Opts => {
+                        let total_len = 8 + ext_len * 8;
+                        if offset + total_len > available_end {
+                            return Err(ParseError::Truncated {
+                                context: "IPv6 extension header",
+                                expected: offset + total_len,
+                                actual: available_end,
+                            });
+                        }
+                        let data = slice_bytes(offset + 2..offset + total_len);
+                        let ext = match next_header {
+                            IpNextProtocol::Hopopt => {
+                                Ipv6ExtensionHeader::HopByHop { next: nh, data }
+                            }
+                            IpNextProtocol::Ipv6Opts => {
+                                Ipv6ExtensionHeader::Destination { next: nh, data }
+                            }
+                            _ => unreachable!(),
+                        };
+                        extensions.push(ext);
+                        next_header = nh;
+                        offset += total_len;
+                    }
+                    IpNextProtocol::Ipv6Route => {
+                        if offset + 4 > available_end {
+                            return Err(ParseError::Truncated {
+                                context: "IPv6 routing header",
+                                expected: offset + 4,
+                                actual: available_end,
+                            });
+                        }
+                        let routing_type = bytes[offset + 2];
+                        let segments_left = bytes[offset + 3];
+                        let total_len = 8 + ext_len * 8;
+                        if offset + total_len > available_end {
+                            return Err(ParseError::Truncated {
+                                context: "IPv6 routing header",
+                                expected: offset + total_len,
+                                actual: available_end,
+                            });
+                        }
+                        extensions.push(Ipv6ExtensionHeader::Routing {
+                            next: nh,
+                            routing_type,
+                            segments_left,
+                            data: slice_bytes(offset + 4..offset + total_len),
+                        });
+                        next_header = nh;
+                        offset += total_len;
+                    }
+                    IpNextProtocol::Ipv6Frag => {
+                        if offset + 8 > available_end {
+                            return Err(ParseError::Truncated {
+                                context: "IPv6 fragment header",
+                                expected: offset + 8,
+                                actual: available_end,
+                            });
+                        }
+                        let frag_off_flags =
+                            u16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]);
+                        let offset_val = frag_off_flags >> 3;
+                        let more = (frag_off_flags & 0x1) != 0;
+                        let id = u32::from_be_bytes([
+                            bytes[offset + 4],
+                            bytes[offset + 5],
+                            bytes[offset + 6],
+                            bytes[offset + 7],
+                        ]);
+                        extensions.push(Ipv6ExtensionHeader::Fragment {
+                            next: nh,
+                            offset: offset_val,
+                            more,
+                            id,
+                        });
+                        next_header = nh;
+                        offset += 8;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            _ => break,
+        }
+    }
+
+    Ok(Ipv6Packet {
+        header,
+        extensions,
+        payload: slice_bytes(offset..available_end),
+    })
 }
 
 /// Represents a mutable IPv6 packet.
@@ -753,5 +814,17 @@ mod tests {
         assert_eq!(frozen.header.flow_label, 0x12345);
         assert_eq!(frozen.header.source, Ipv6Addr::LOCALHOST);
         assert_eq!(frozen.payload[0], 0xaa);
+    }
+
+    #[test]
+    fn ipv6_try_from_buf_reports_strict_truncation() {
+        let raw = Bytes::from_static(&[
+            0x60, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4,
+        ]);
+
+        let err = Ipv6Packet::try_from_buf_strict(&raw).expect_err("strict parse should fail");
+        assert!(matches!(err, ParseError::Truncated { .. }));
+        assert!(Ipv6Packet::from_buf(&raw).is_some());
     }
 }

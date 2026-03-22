@@ -3,6 +3,7 @@
 use crate::checksum::{ChecksumMode, ChecksumState, TransportChecksumContext};
 use crate::ip::IpNextProtocol;
 use crate::packet::{MutablePacket, Packet};
+use crate::parse::ParseError;
 
 use crate::util::{self, Octets};
 use std::net::Ipv6Addr;
@@ -466,91 +467,10 @@ impl Packet for TcpPacket {
     type Header = TcpHeader;
 
     fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < TCP_HEADER_LEN {
-            return None;
-        }
-
-        let source = bytes.get_u16();
-        let destination = bytes.get_u16();
-        let sequence = bytes.get_u32();
-        let acknowledgement = bytes.get_u32();
-
-        let offset_reserved = bytes.get_u8();
-        let data_offset = offset_reserved >> 4;
-        let reserved = offset_reserved & 0x0F;
-
-        let flags = bytes.get_u8();
-        let window = bytes.get_u16();
-        let checksum = bytes.get_u16();
-        let urgent_ptr = bytes.get_u16();
-
-        let header_len = data_offset as usize * 4;
-        if header_len < TCP_HEADER_LEN || bytes.len() + 20 < header_len {
-            return None;
-        }
-
-        let mut options = Vec::new();
-        let options_len = header_len - TCP_HEADER_LEN;
-        let (mut options_bytes, rest) = bytes.split_at(options_len);
-        bytes = rest;
-
-        while options_bytes.has_remaining() {
-            let kind = TcpOptionKind::new(options_bytes.get_u8());
-            match kind {
-                TcpOptionKind::EOL => {
-                    options.push(TcpOptionPacket {
-                        kind,
-                        length: None,
-                        data: Bytes::new(),
-                    });
-                    break;
-                }
-                TcpOptionKind::NOP => {
-                    options.push(TcpOptionPacket {
-                        kind,
-                        length: None,
-                        data: Bytes::new(),
-                    });
-                }
-                _ => {
-                    if options_bytes.remaining() < 1 {
-                        return None;
-                    }
-                    let len = options_bytes.get_u8();
-                    if len < 2 || (len as usize) > options_bytes.remaining() + 2 {
-                        return None;
-                    }
-                    let data_len = (len - 2) as usize;
-                    let (data_slice, rest) = options_bytes.split_at(data_len);
-                    options_bytes = rest;
-                    options.push(TcpOptionPacket {
-                        kind,
-                        length: Some(len),
-                        data: Bytes::copy_from_slice(data_slice),
-                    });
-                }
-            }
-        }
-
-        Some(TcpPacket {
-            header: TcpHeader {
-                source,
-                destination,
-                sequence,
-                acknowledgement,
-                data_offset: u4::from_be(data_offset),
-                reserved: u4::from_be(reserved),
-                flags,
-                window,
-                checksum,
-                urgent_ptr,
-                options,
-            },
-            payload: Bytes::copy_from_slice(bytes),
-        })
+        Self::try_from_buf(&mut bytes).ok()
     }
     fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+        Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -657,6 +577,219 @@ impl Packet for TcpPacket {
 }
 
 impl TcpPacket {
+    /// Parse a TCP packet and return a structured error on failure.
+    pub fn try_from_buf(mut bytes: &[u8]) -> Result<Self, ParseError> {
+        if bytes.len() < TCP_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "TCP packet",
+                minimum: TCP_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let source = bytes.get_u16();
+        let destination = bytes.get_u16();
+        let sequence = bytes.get_u32();
+        let acknowledgement = bytes.get_u32();
+
+        let offset_reserved = bytes.get_u8();
+        let data_offset = offset_reserved >> 4;
+        let reserved = offset_reserved & 0x0F;
+
+        let flags = bytes.get_u8();
+        let window = bytes.get_u16();
+        let checksum = bytes.get_u16();
+        let urgent_ptr = bytes.get_u16();
+
+        let header_len = data_offset as usize * 4;
+        if header_len < TCP_HEADER_LEN {
+            return Err(ParseError::InvalidLength {
+                context: "TCP data offset",
+                value: header_len,
+            });
+        }
+        if bytes.len() + TCP_HEADER_LEN < header_len {
+            return Err(ParseError::Truncated {
+                context: "TCP header",
+                expected: header_len,
+                actual: bytes.len() + TCP_HEADER_LEN,
+            });
+        }
+
+        let mut options = Vec::new();
+        let options_len = header_len - TCP_HEADER_LEN;
+        let (mut options_bytes, rest) = bytes.split_at(options_len);
+        bytes = rest;
+
+        while options_bytes.has_remaining() {
+            let kind = TcpOptionKind::new(options_bytes.get_u8());
+            match kind {
+                TcpOptionKind::EOL => {
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
+                    break;
+                }
+                TcpOptionKind::NOP => {
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
+                }
+                _ => {
+                    if options_bytes.remaining() < 1 {
+                        return Err(ParseError::Malformed {
+                            context: "TCP options",
+                        });
+                    }
+                    let len = options_bytes.get_u8();
+                    if len < 2 || (len as usize) > options_bytes.remaining() + 2 {
+                        return Err(ParseError::InvalidLength {
+                            context: "TCP option length",
+                            value: len as usize,
+                        });
+                    }
+                    let data_len = (len - 2) as usize;
+                    let (data_slice, rest) = options_bytes.split_at(data_len);
+                    options_bytes = rest;
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: Some(len),
+                        data: Bytes::copy_from_slice(data_slice),
+                    });
+                }
+            }
+        }
+
+        Ok(TcpPacket {
+            header: TcpHeader {
+                source,
+                destination,
+                sequence,
+                acknowledgement,
+                data_offset: u4::from_be(data_offset),
+                reserved: u4::from_be(reserved),
+                flags,
+                window,
+                checksum,
+                urgent_ptr,
+                options,
+            },
+            payload: Bytes::copy_from_slice(bytes),
+        })
+    }
+
+    /// Parse a TCP packet from owned bytes while preserving payload slices when possible.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        if bytes.len() < TCP_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "TCP packet",
+                minimum: TCP_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let source = u16::from_be_bytes([bytes[0], bytes[1]]);
+        let destination = u16::from_be_bytes([bytes[2], bytes[3]]);
+        let sequence = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let acknowledgement = u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let offset_reserved = bytes[12];
+        let data_offset = offset_reserved >> 4;
+        let reserved = offset_reserved & 0x0F;
+        let flags = bytes[13];
+        let window = u16::from_be_bytes([bytes[14], bytes[15]]);
+        let checksum = u16::from_be_bytes([bytes[16], bytes[17]]);
+        let urgent_ptr = u16::from_be_bytes([bytes[18], bytes[19]]);
+
+        let header_len = data_offset as usize * 4;
+        if header_len < TCP_HEADER_LEN {
+            return Err(ParseError::InvalidLength {
+                context: "TCP data offset",
+                value: header_len,
+            });
+        }
+        if bytes.len() < header_len {
+            return Err(ParseError::Truncated {
+                context: "TCP header",
+                expected: header_len,
+                actual: bytes.len(),
+            });
+        }
+
+        let mut options = Vec::new();
+        let mut offset = TCP_HEADER_LEN;
+        while offset < header_len {
+            let kind = TcpOptionKind::new(bytes[offset]);
+            offset += 1;
+            match kind {
+                TcpOptionKind::EOL => {
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
+                    break;
+                }
+                TcpOptionKind::NOP => {
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: None,
+                        data: Bytes::new(),
+                    });
+                }
+                _ => {
+                    if offset >= header_len {
+                        return Err(ParseError::Malformed {
+                            context: "TCP options",
+                        });
+                    }
+                    let len = bytes[offset];
+                    offset += 1;
+                    if len < 2 {
+                        return Err(ParseError::InvalidLength {
+                            context: "TCP option length",
+                            value: len as usize,
+                        });
+                    }
+                    let data_len = (len - 2) as usize;
+                    if offset + data_len > header_len {
+                        return Err(ParseError::Truncated {
+                            context: "TCP option data",
+                            expected: data_len,
+                            actual: header_len.saturating_sub(offset),
+                        });
+                    }
+                    options.push(TcpOptionPacket {
+                        kind,
+                        length: Some(len),
+                        data: bytes.slice(offset..offset + data_len),
+                    });
+                    offset += data_len;
+                }
+            }
+        }
+
+        Ok(TcpPacket {
+            header: TcpHeader {
+                source,
+                destination,
+                sequence,
+                acknowledgement,
+                data_offset: u4::from_be(data_offset),
+                reserved: u4::from_be(reserved),
+                flags,
+                window,
+                checksum,
+                urgent_ptr,
+                options,
+            },
+            payload: bytes.slice(header_len..),
+        })
+    }
+
     pub fn tcp_options_length(&self) -> usize {
         if self.header.data_offset > 5 {
             self.header.data_offset as usize * 4 - 20
