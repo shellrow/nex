@@ -389,7 +389,16 @@ where
     }
 
     let declared_total_length = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
-    if declared_total_length < ihl_bytes {
+    let effective_declared_total_length = if declared_total_length == 0 {
+        // Some offloaded captures report a zero IPv4 total length even though the
+        // full packet bytes are present in the capture buffer. Treat those as
+        // "use the captured buffer length" for non-strict parsing.
+        bytes.len()
+    } else {
+        declared_total_length
+    };
+
+    if effective_declared_total_length < ihl_bytes {
         return Err(ParseError::InvalidLength {
             context: "IPv4 total length",
             value: declared_total_length,
@@ -397,16 +406,16 @@ where
     }
 
     let total_length = if strict {
-        if declared_total_length > bytes.len() {
+        if effective_declared_total_length > bytes.len() {
             return Err(ParseError::Truncated {
                 context: "IPv4 packet",
-                expected: declared_total_length,
+                expected: effective_declared_total_length,
                 actual: bytes.len(),
             });
         }
-        declared_total_length
+        effective_declared_total_length
     } else {
-        declared_total_length.min(bytes.len())
+        effective_declared_total_length.min(bytes.len())
     };
 
     let mut options = Vec::new();
@@ -483,7 +492,7 @@ where
             header_length: header_length as u4,
             dscp: (bytes[1] >> 2) as u6,
             ecn: (bytes[1] & 0x03) as u2,
-            total_length: u16::from_be_bytes([bytes[2], bytes[3]]) as u16be,
+            total_length: total_length as u16be,
             identification: u16::from_be_bytes([bytes[4], bytes[5]]) as u16be,
             flags: (bytes[6] >> 5) as u3,
             fragment_offset: ((u16::from_be_bytes([bytes[6], bytes[7]])) & 0x1FFF) as u13be,
@@ -1083,5 +1092,19 @@ mod tests {
         let err = Ipv4Packet::try_from_buf_strict(&raw).expect_err("strict parse should fail");
         assert!(matches!(err, ParseError::Truncated { .. }));
         assert!(Ipv4Packet::from_buf(&raw).is_some());
+    }
+
+    #[test]
+    fn ipv4_zero_total_length_uses_captured_length() {
+        let raw = Bytes::from_static(&[
+            0x45, 0x00, 0x00, 0x00, // total length reported as zero
+            0x68, 0x23, 0x40, 0x00, 0x80, 0x06, 0x00, 0x00, 192, 168, 10, 113, 192, 168, 10, 10,
+            0xde, 0xad, 0xbe, 0xef,
+        ]);
+
+        let packet = Ipv4Packet::from_bytes(raw.clone()).expect("TSO-style packet should parse");
+        assert_eq!(packet.header.total_length as usize, raw.len());
+        assert_eq!(packet.payload.len(), raw.len() - IPV4_HEADER_LEN);
+        assert_eq!(packet.payload, Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef]));
     }
 }
