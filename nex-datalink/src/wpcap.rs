@@ -47,6 +47,9 @@ pub struct Config {
     pub read_buffer_size: usize,
 }
 
+const DEFAULT_WRITE_BUFFER_SIZE: usize = 4096;
+const DEFAULT_READ_BUFFER_SIZE: usize = 65536;
+
 impl<'a> From<&'a super::Config> for Config {
     fn from(config: &super::Config) -> Config {
         Config {
@@ -59,8 +62,8 @@ impl<'a> From<&'a super::Config> for Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            write_buffer_size: 4096,
-            read_buffer_size: 4096,
+            write_buffer_size: DEFAULT_WRITE_BUFFER_SIZE,
+            read_buffer_size: DEFAULT_READ_BUFFER_SIZE,
         }
     }
 }
@@ -84,29 +87,31 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     if adapter.is_null() {
         return Err(io::Error::last_os_error());
     }
+    let adapter = Arc::new(WinPcapAdapter { adapter });
 
-    let ret = unsafe { windows::PacketSetHwFilter(adapter, windows::NDIS_PACKET_TYPE_PROMISCUOUS) };
+    let ret = unsafe {
+        windows::PacketSetHwFilter(adapter.adapter, windows::NDIS_PACKET_TYPE_PROMISCUOUS)
+    };
     if ret == 0 {
         return Err(io::Error::last_os_error());
     }
 
     // Set kernel buffer size
-    let ret = unsafe { windows::PacketSetBuff(adapter, config.read_buffer_size as libc::c_int) };
+    let ret = unsafe {
+        windows::PacketSetBuff(adapter.adapter, config.read_buffer_size as libc::c_int)
+    };
     if ret == 0 {
         return Err(io::Error::last_os_error());
     }
 
     // Immediate mode
-    let ret = unsafe { windows::PacketSetMinToCopy(adapter, 1) };
+    let ret = unsafe { windows::PacketSetMinToCopy(adapter.adapter, 1) };
     if ret == 0 {
         return Err(io::Error::last_os_error());
     }
 
     let read_packet = unsafe { windows::PacketAllocatePacket() };
     if read_packet.is_null() {
-        unsafe {
-            windows::PacketCloseAdapter(adapter);
-        }
         return Err(io::Error::last_os_error());
     }
 
@@ -120,10 +125,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
 
     let write_packet = unsafe { windows::PacketAllocatePacket() };
     if write_packet.is_null() {
-        unsafe {
-            windows::PacketFreePacket(read_packet);
-            windows::PacketCloseAdapter(adapter);
-        }
+        unsafe { windows::PacketFreePacket(read_packet) };
         return Err(io::Error::last_os_error());
     }
 
@@ -135,7 +137,6 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         )
     }
 
-    let adapter = Arc::new(WinPcapAdapter { adapter: adapter });
     let sender = Box::new(RawSenderImpl {
         adapter: adapter.clone(),
         _write_buffer: write_buffer,
@@ -153,6 +154,25 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         packets: VecDeque::with_capacity(unsafe { (*read_packet).Length } as usize / 64),
     });
     Ok(super::Channel::Ethernet(sender, receiver))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_from_preserves_explicit_read_buffer() {
+        let cfg = crate::Config::default().with_read_buffer_size(4096);
+        let backend_cfg = Config::from(&cfg);
+        assert_eq!(backend_cfg.read_buffer_size, 4096);
+    }
+
+    #[test]
+    fn config_default_uses_large_read_buffer() {
+        let cfg = Config::default();
+        assert_eq!(cfg.write_buffer_size, DEFAULT_WRITE_BUFFER_SIZE);
+        assert_eq!(cfg.read_buffer_size, DEFAULT_READ_BUFFER_SIZE);
+    }
 }
 
 struct RawSenderImpl {
