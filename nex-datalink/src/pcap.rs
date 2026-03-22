@@ -208,7 +208,9 @@ pub fn interfaces() -> Vec<Interface> {
                 ipv6: Vec::new(),
                 ipv6_scope_ids: Vec::new(),
                 flags: dev.flags.if_flags.bits(),
-                oper_state: nex_core::interface::OperState::from_if_flags(dev.flags.if_flags.bits()),
+                oper_state: nex_core::interface::OperState::from_if_flags(
+                    dev.flags.if_flags.bits(),
+                ),
                 transmit_speed: None,
                 receive_speed: None,
                 stats: None,

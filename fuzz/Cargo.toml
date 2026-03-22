@@ -1,0 +1,50 @@
+[package]
+name = "nex-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nex-packet = { path = "../nex-packet" }
+bytes = "1"
+
+[[bin]]
+name = "frame_parse"
+path = "fuzz_targets/frame_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ipv4_parse"
+path = "fuzz_targets/ipv4_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ipv6_parse"
+path = "fuzz_targets/ipv6_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tcp_options"
+path = "fuzz_targets/tcp_options.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dns_name"
+path = "fuzz_targets/dns_name.rs"
+test = false
+doc = false
+bench = false
