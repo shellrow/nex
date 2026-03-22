@@ -1,4 +1,7 @@
-use crate::packet::{GenericMutablePacket, Packet};
+use crate::{
+    packet::{GenericMutablePacket, Packet},
+    parse::ParseError,
+};
 use bytes::{BufMut, Bytes, BytesMut};
 use core::str;
 use nex_core::bitfield::{u1, u16be, u32be};
@@ -720,6 +723,12 @@ impl DnsQueryPacket {
         }
         Ok(qname)
     }
+
+    /// Parse the query name with compression-pointer validation.
+    pub fn try_get_qname_parsed(&self) -> Result<String, ParseError> {
+        decode_dns_name(&self.qname, 0).map(|(name, _)| name)
+    }
+
     pub fn qname_length(&self) -> usize {
         self.to_bytes().iter().take_while(|w| *w != &0).count() + 1
     }
@@ -1013,83 +1022,11 @@ pub struct DnsPacket {
 impl Packet for DnsPacket {
     type Header = ();
     fn from_buf(buf: &[u8]) -> Option<Self> {
-        if buf.len() < 12 {
-            return None;
-        }
-
-        let mut cursor = buf;
-
-        // Read DNS header
-        let id = u16::from_be_bytes([cursor[0], cursor[1]]);
-        let flags = u16::from_be_bytes([cursor[2], cursor[3]]);
-        let query_count = u16::from_be_bytes([cursor[4], cursor[5]]);
-        let response_count = u16::from_be_bytes([cursor[6], cursor[7]]);
-        let authority_rr_count = u16::from_be_bytes([cursor[8], cursor[9]]);
-        let additional_rr_count = u16::from_be_bytes([cursor[10], cursor[11]]);
-        cursor = &cursor[12..];
-
-        let header = DnsHeader {
-            id: id.into(),
-            is_response: ((flags >> 15) & 0x1) as u8,
-            opcode: OpCode::new(((flags >> 11) & 0xF) as u8),
-            is_authoriative: ((flags >> 10) & 0x1) as u8,
-            is_truncated: ((flags >> 9) & 0x1) as u8,
-            is_recursion_desirable: ((flags >> 8) & 0x1) as u8,
-            is_recursion_available: ((flags >> 7) & 0x1) as u8,
-            zero_reserved: ((flags >> 6) & 0x1) as u8,
-            is_answer_authenticated: ((flags >> 5) & 0x1) as u8,
-            is_non_authenticated_data: ((flags >> 4) & 0x1) as u8,
-            rcode: RetCode::new((flags & 0xF) as u8),
-            query_count: query_count.into(),
-            response_count: response_count.into(),
-            authority_rr_count: authority_rr_count.into(),
-            additional_rr_count: additional_rr_count.into(),
-        };
-
-        // Parse each section, passing mutable slices
-        fn parse_queries(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsQueryPacket>> {
-            (0..count)
-                .map(|_| DnsQueryPacket::from_buf_mut(buf))
-                .collect()
-        }
-
-        fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
-            let mut packets = Vec::with_capacity(count);
-            for _ in 0..count {
-                match DnsResponsePacket::from_buf_mut(buf) {
-                    Some(pkt) => {
-                        packets.push(pkt);
-                    }
-                    _ => {
-                        break;
-                    }
-                }
-            }
-            Some(packets)
-        }
-
-        let mut working_buf = cursor;
-
-        let queries = parse_queries(query_count as usize, &mut working_buf)?;
-        let responses = parse_responses(response_count as usize, &mut working_buf)?;
-        let authorities = parse_responses(authority_rr_count as usize, &mut working_buf)?;
-        let additionals = parse_responses(additional_rr_count as usize, &mut working_buf)?;
-
-        // Remaining data becomes the payload
-        let payload = Bytes::copy_from_slice(working_buf);
-
-        Some(Self {
-            header,
-            queries,
-            responses,
-            authorities,
-            additionals,
-            payload,
-        })
+        Self::try_from_buf(buf).ok()
     }
 
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::try_from_bytes(bytes).ok()
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -1157,7 +1094,7 @@ impl Packet for DnsPacket {
     }
 
     fn total_len(&self) -> usize {
-        self.header_len() + self.payload_len()
+        self.header_len() + self.payload.len()
     }
 
     fn into_parts(self) -> (Self::Header, Bytes) {
@@ -1167,7 +1104,111 @@ impl Packet for DnsPacket {
     }
 }
 
+impl DnsPacket {
+    /// Parse a DNS packet and return a structured error on failure.
+    pub fn try_from_buf(buf: &[u8]) -> Result<Self, ParseError> {
+        if buf.len() < 12 {
+            return Err(ParseError::BufferTooShort {
+                context: "DNS packet",
+                minimum: 12,
+                actual: buf.len(),
+            });
+        }
+
+        let mut cursor = buf;
+
+        // Read DNS header
+        let id = u16::from_be_bytes([cursor[0], cursor[1]]);
+        let flags = u16::from_be_bytes([cursor[2], cursor[3]]);
+        let query_count = u16::from_be_bytes([cursor[4], cursor[5]]);
+        let response_count = u16::from_be_bytes([cursor[6], cursor[7]]);
+        let authority_rr_count = u16::from_be_bytes([cursor[8], cursor[9]]);
+        let additional_rr_count = u16::from_be_bytes([cursor[10], cursor[11]]);
+        cursor = &cursor[12..];
+
+        let header = DnsHeader {
+            id: id.into(),
+            is_response: ((flags >> 15) & 0x1) as u8,
+            opcode: OpCode::new(((flags >> 11) & 0xF) as u8),
+            is_authoriative: ((flags >> 10) & 0x1) as u8,
+            is_truncated: ((flags >> 9) & 0x1) as u8,
+            is_recursion_desirable: ((flags >> 8) & 0x1) as u8,
+            is_recursion_available: ((flags >> 7) & 0x1) as u8,
+            zero_reserved: ((flags >> 6) & 0x1) as u8,
+            is_answer_authenticated: ((flags >> 5) & 0x1) as u8,
+            is_non_authenticated_data: ((flags >> 4) & 0x1) as u8,
+            rcode: RetCode::new((flags & 0xF) as u8),
+            query_count: query_count.into(),
+            response_count: response_count.into(),
+            authority_rr_count: authority_rr_count.into(),
+            additional_rr_count: additional_rr_count.into(),
+        };
+
+        // Parse each section, passing mutable slices
+        fn parse_queries(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsQueryPacket>> {
+            (0..count)
+                .map(|_| DnsQueryPacket::from_buf_mut(buf))
+                .collect()
+        }
+
+        fn parse_responses(count: usize, buf: &mut &[u8]) -> Option<Vec<DnsResponsePacket>> {
+            let mut packets = Vec::with_capacity(count);
+            for _ in 0..count {
+                match DnsResponsePacket::from_buf_mut(buf) {
+                    Some(pkt) => {
+                        packets.push(pkt);
+                    }
+                    _ => {
+                        break;
+                    }
+                }
+            }
+            Some(packets)
+        }
+
+        let mut working_buf = cursor;
+
+        let queries =
+            parse_queries(query_count as usize, &mut working_buf).ok_or(ParseError::Malformed {
+                context: "DNS query section",
+            })?;
+        let responses = parse_responses(response_count as usize, &mut working_buf).ok_or(
+            ParseError::Malformed {
+                context: "DNS answer section",
+            },
+        )?;
+        let authorities = parse_responses(authority_rr_count as usize, &mut working_buf).ok_or(
+            ParseError::Malformed {
+                context: "DNS authority section",
+            },
+        )?;
+        let additionals = parse_responses(additional_rr_count as usize, &mut working_buf).ok_or(
+            ParseError::Malformed {
+                context: "DNS additional section",
+            },
+        )?;
+
+        // Remaining data becomes the payload
+        let payload = Bytes::copy_from_slice(working_buf);
+
+        Ok(Self {
+            header,
+            queries,
+            responses,
+            authorities,
+            additionals,
+            payload,
+        })
+    }
+
+    /// Parse a DNS packet from owned bytes and return a structured error on failure.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        Self::try_from_buf(&bytes)
+    }
+}
+
 /// Represents a DNS name
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DnsName(String);
 
 impl DnsName {
@@ -1203,12 +1244,108 @@ impl DnsName {
     pub fn labels(&self) -> Vec<&str> {
         self.0.split('.').collect()
     }
+
+    /// Parses a DNS name with compression-pointer validation.
+    pub fn try_from_bytes(buf: &[u8]) -> Result<Self, ParseError> {
+        decode_dns_name(buf, 0).map(|(name, _)| DnsName(name))
+    }
 }
 
 impl std::fmt::Display for DnsName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+const DNS_MAX_COMPRESSION_DEPTH: usize = 16;
+
+fn decode_dns_name(buf: &[u8], start: usize) -> Result<(String, usize), ParseError> {
+    let mut labels = Vec::new();
+    let mut pos = start;
+    let mut consumed = 0usize;
+    let mut jumped = false;
+    let mut visited = Vec::new();
+    let mut depth = 0usize;
+
+    loop {
+        if pos >= buf.len() {
+            return Err(ParseError::Truncated {
+                context: "DNS name",
+                expected: pos + 1,
+                actual: buf.len(),
+            });
+        }
+
+        let len = buf[pos];
+        if !jumped {
+            consumed += 1;
+        }
+
+        if len == 0 {
+            break;
+        }
+
+        if (len & 0xC0) == 0xC0 {
+            if pos + 1 >= buf.len() {
+                return Err(ParseError::Truncated {
+                    context: "DNS compression pointer",
+                    expected: pos + 2,
+                    actual: buf.len(),
+                });
+            }
+            let pointer = (((len & 0x3F) as usize) << 8) | buf[pos + 1] as usize;
+            if pointer >= buf.len() {
+                return Err(ParseError::InvalidCompression {
+                    context: "DNS compression pointer",
+                });
+            }
+            if visited.contains(&pointer) {
+                return Err(ParseError::CompressionLoop {
+                    context: "DNS name",
+                });
+            }
+            visited.push(pointer);
+            depth += 1;
+            if depth > DNS_MAX_COMPRESSION_DEPTH {
+                return Err(ParseError::CompressionLoop {
+                    context: "DNS name",
+                });
+            }
+            if !jumped {
+                consumed += 1;
+            }
+            pos = pointer;
+            jumped = true;
+            continue;
+        }
+
+        if (len & 0xC0) != 0 {
+            return Err(ParseError::InvalidCompression {
+                context: "DNS label encoding",
+            });
+        }
+
+        let label_len = len as usize;
+        pos += 1;
+        if pos + label_len > buf.len() {
+            return Err(ParseError::Truncated {
+                context: "DNS label",
+                expected: pos + label_len,
+                actual: buf.len(),
+            });
+        }
+        let label =
+            str::from_utf8(&buf[pos..pos + label_len]).map_err(|_| ParseError::InvalidUtf8 {
+                context: "DNS label",
+            })?;
+        labels.push(label.to_string());
+        if !jumped {
+            consumed += label_len;
+        }
+        pos += label_len;
+    }
+
+    Ok((labels.join("."), consumed))
 }
 
 /// Represents a mutable DNS packet.
@@ -1315,5 +1452,29 @@ mod tests {
         let frozen = packet.freeze().expect("freeze");
         assert_eq!(frozen.header.id, 0x1234);
         assert_eq!(frozen.payload[0], 0xaa);
+    }
+
+    #[test]
+    fn dns_name_detects_compression_loop() {
+        let err = DnsName::try_from_bytes(&[0xc0, 0x00]).expect_err("loop should fail");
+        assert!(matches!(err, ParseError::CompressionLoop { .. }));
+    }
+
+    #[test]
+    fn dns_query_try_get_qname_parsed_supports_compression() {
+        let query = DnsQueryPacket {
+            qname: vec![
+                0x03, b'w', b'w', b'w', 0xc0, 0x06, 0x07, b'e', b'x', b'a', b'm', b'p', b'l', b'e',
+                0x03, b'c', b'o', b'm', 0x00,
+            ],
+            qtype: DnsType::A,
+            qclass: DnsClass::IN,
+            payload: Bytes::new(),
+        };
+
+        assert_eq!(
+            query.try_get_qname_parsed().expect("compressed name"),
+            "www.example.com"
+        );
     }
 }
