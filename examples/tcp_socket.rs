@@ -6,6 +6,7 @@ use nex_socket::tcp::TcpSocket;
 use std::env;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 
 fn main() -> std::io::Result<()> {
     let ip: IpAddr = env::args().nth(1).expect("IP").parse().expect("ip");
@@ -20,8 +21,7 @@ fn main() -> std::io::Result<()> {
         SocketAddr::V4(_) => TcpSocket::v4_stream()?,
         SocketAddr::V6(_) => TcpSocket::v6_stream()?,
     };
-    socket.connect(addr)?;
-    let mut stream = socket.to_tcp_stream()?;
+    let mut stream = socket.connect_timeout(addr, Duration::from_secs(5))?;
 
     let req = format!("GET / HTTP/1.1\r\nHost: {}\r\n\r\n", ip);
     stream.write_all(req.as_bytes())?;

@@ -672,6 +672,7 @@ mod tests {
     #[test]
     fn create_v4_socket() {
         let sock = UdpSocket::v4_dgram().expect("create socket");
+        sock.socket.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into()).expect("bind");
         let addr = sock.local_addr().expect("addr");
         assert!(addr.is_ipv4());
     }
