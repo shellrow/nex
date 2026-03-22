@@ -2,6 +2,7 @@ use crate::ip::{is_global_ip, is_global_ipv4, is_global_ipv6};
 use crate::mac::MacAddr;
 pub use ipnet::{self, Ipv4Net, Ipv6Net};
 use std::convert::TryFrom;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::SystemTime;
 
@@ -228,12 +229,8 @@ impl From<netdev::interface::types::InterfaceType> for InterfaceType {
             netdev::interface::types::InterfaceType::FastEthernetFx => {
                 InterfaceType::FastEthernetFx
             }
-            netdev::interface::types::InterfaceType::Wireless80211 => {
-                InterfaceType::Wireless80211
-            }
-            netdev::interface::types::InterfaceType::AsymmetricDsl => {
-                InterfaceType::AsymmetricDsl
-            }
+            netdev::interface::types::InterfaceType::Wireless80211 => InterfaceType::Wireless80211,
+            netdev::interface::types::InterfaceType::AsymmetricDsl => InterfaceType::AsymmetricDsl,
             netdev::interface::types::InterfaceType::RateAdaptDsl => InterfaceType::RateAdaptDsl,
             netdev::interface::types::InterfaceType::SymmetricDsl => InterfaceType::SymmetricDsl,
             netdev::interface::types::InterfaceType::VeryHighSpeedDsl => {
@@ -358,6 +355,7 @@ pub struct Interface {
 
 impl Interface {
     #[cfg(feature = "gateway")]
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Interface, String> {
         get_default_interface()
     }
@@ -386,6 +384,18 @@ impl Interface {
             #[cfg(feature = "gateway")]
             default: false,
         }
+    }
+
+    /// Refresh all interface fields from the operating system.
+    ///
+    /// This performs a fresh system lookup and may be more expensive than
+    /// the accessor methods on `Interface`.
+    pub fn refresh(&mut self) -> io::Result<()> {
+        let refreshed = lookup_interface(&self.name, self.index).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "interface could not be refreshed")
+        })?;
+        *self = refreshed.into();
+        Ok(())
     }
 
     pub fn is_up(&self) -> bool {
@@ -426,7 +436,9 @@ impl Interface {
     pub fn is_physical(&self) -> bool {
         lookup_interface(&self.name, self.index)
             .map(|iface| iface.is_physical())
-            .unwrap_or_else(|| self.is_up() && self.is_running() && !self.is_tun() && !self.is_loopback())
+            .unwrap_or_else(|| {
+                self.is_up() && self.is_running() && !self.is_tun() && !self.is_loopback()
+            })
     }
 
     pub fn oper_state(&self) -> OperState {
@@ -437,26 +449,54 @@ impl Interface {
         self.oper_state == OperState::Up
     }
 
-    pub fn update_oper_state(&mut self) {
+    /// Refresh the operational state from the operating system.
+    ///
+    /// This may perform a fresh interface lookup.
+    pub fn refresh_oper_state(&mut self) -> io::Result<()> {
         if let Some(iface) = lookup_interface(&self.name, self.index) {
             self.oper_state = iface.oper_state.into();
+            return Ok(());
         }
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "interface operational state could not be refreshed",
+        ))
+    }
+
+    /// Refresh the operational state from the operating system.
+    ///
+    /// This may perform a fresh interface lookup.
+    pub fn update_oper_state(&mut self) {
+        let _ = self.refresh_oper_state();
+    }
+
+    /// Iterate IPv4 addresses without allocating a new vector.
+    pub fn ipv4_addr_iter(&self) -> impl Iterator<Item = Ipv4Addr> + '_ {
+        self.ipv4.iter().map(|net| net.addr())
     }
 
     pub fn ipv4_addrs(&self) -> Vec<Ipv4Addr> {
-        self.ipv4.iter().map(|net| net.addr()).collect()
+        self.ipv4_addr_iter().collect()
+    }
+
+    /// Iterate IPv6 addresses without allocating a new vector.
+    pub fn ipv6_addr_iter(&self) -> impl Iterator<Item = Ipv6Addr> + '_ {
+        self.ipv6.iter().map(|net| net.addr())
     }
 
     pub fn ipv6_addrs(&self) -> Vec<Ipv6Addr> {
-        self.ipv6.iter().map(|net| net.addr()).collect()
+        self.ipv6_addr_iter().collect()
+    }
+
+    /// Iterate IP addresses without allocating a new vector.
+    pub fn ip_addr_iter(&self) -> impl Iterator<Item = IpAddr> + '_ {
+        self.ipv4_addr_iter()
+            .map(IpAddr::V4)
+            .chain(self.ipv6_addr_iter().map(IpAddr::V6))
     }
 
     pub fn ip_addrs(&self) -> Vec<IpAddr> {
-        self.ipv4_addrs()
-            .into_iter()
-            .map(IpAddr::V4)
-            .chain(self.ipv6_addrs().into_iter().map(IpAddr::V6))
-            .collect()
+        self.ip_addr_iter().collect()
     }
 
     pub fn has_ipv4(&self) -> bool {
@@ -480,28 +520,36 @@ impl Interface {
     }
 
     pub fn global_ipv4_addrs(&self) -> Vec<Ipv4Addr> {
-        self.ipv4_addrs()
-            .into_iter()
-            .filter(is_global_ipv4)
-            .collect()
+        self.ipv4_addr_iter().filter(is_global_ipv4).collect()
     }
 
     pub fn global_ipv6_addrs(&self) -> Vec<Ipv6Addr> {
-        self.ipv6_addrs()
-            .into_iter()
-            .filter(is_global_ipv6)
-            .collect()
+        self.ipv6_addr_iter().filter(is_global_ipv6).collect()
     }
 
     pub fn global_ip_addrs(&self) -> Vec<IpAddr> {
-        self.ip_addrs().into_iter().filter(is_global_ip).collect()
+        self.ip_addr_iter().filter(is_global_ip).collect()
     }
 
-    pub fn update_stats(&mut self) -> std::io::Result<()> {
+    /// Refresh interface statistics from the operating system.
+    ///
+    /// This may perform a fresh interface lookup.
+    pub fn refresh_stats(&mut self) -> io::Result<()> {
         if let Some(iface) = lookup_interface(&self.name, self.index) {
             self.stats = iface.stats.map(Into::into);
+            return Ok(());
         }
-        Ok(())
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "interface statistics could not be refreshed",
+        ))
+    }
+
+    /// Refresh interface statistics from the operating system.
+    ///
+    /// This may perform a fresh interface lookup.
+    pub fn update_stats(&mut self) -> io::Result<()> {
+        self.refresh_stats()
     }
 }
 
@@ -534,7 +582,10 @@ impl From<netdev::Interface> for Interface {
 }
 
 pub fn get_interfaces() -> Vec<Interface> {
-    netdev::get_interfaces().into_iter().map(Into::into).collect()
+    netdev::get_interfaces()
+        .into_iter()
+        .map(Into::into)
+        .collect()
 }
 
 #[cfg(feature = "gateway")]
