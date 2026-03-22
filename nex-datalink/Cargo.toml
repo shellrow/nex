@@ -20,7 +20,7 @@ nex-sys = { workspace = true }
 futures-core = "0.3"
 
 [target.'cfg(windows)'.dependencies.windows-sys]
-version = "0.59.0"
+version = "0.61"
 features = [
   "Win32_Foundation",
   "Win32_Networking_WinSock",

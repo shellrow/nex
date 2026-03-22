@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
-use windows_sys::Win32::Foundation::{BOOLEAN, HANDLE};
+use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::IO::OVERLAPPED;
 use windows_sys::core::PCWSTR;
 
@@ -25,6 +25,7 @@ pub type LPPACKET = *mut _PACKET;
 
 pub type TCHAR = libc::c_char;
 pub type PTSTR = *mut TCHAR;
+pub type BOOLEAN = u8;
 
 pub type PVOID = *mut std::ffi::c_void;
 pub type PCHAR = *mut libc::c_char;
