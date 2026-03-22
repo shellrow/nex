@@ -29,6 +29,12 @@ pub const AF_INET6: libc::c_int = libc::AF_INET6;
 
 pub use libc::{IFF_BROADCAST, IFF_LOOPBACK, IFF_MULTICAST, IFF_POINTOPOINT, IFF_UP};
 
+/// Close a raw socket/file descriptor.
+///
+/// # Safety
+///
+/// `sock` must be a valid descriptor owned by the caller. It must not be used
+/// again after this function returns.
 pub unsafe fn close(sock: CSocket) {
     unsafe {
         let _ = libc::close(sock);
@@ -42,7 +48,7 @@ fn ntohs(u: u16) -> u16 {
 pub fn sockaddr_to_addr(storage: &SockAddrStorage, len: usize) -> io::Result<SocketAddr> {
     match storage.ss_family as libc::c_int {
         AF_INET => {
-            assert!(len as usize >= mem::size_of::<SockAddrIn>());
+            assert!(len >= mem::size_of::<SockAddrIn>());
             let storage: &SockAddrIn = unsafe { mem::transmute(storage) };
             let ip = ipv4_addr_int(storage.sin_addr);
             // octets
@@ -55,7 +61,7 @@ pub fn sockaddr_to_addr(storage: &SockAddrStorage, len: usize) -> io::Result<Soc
             Ok(SocketAddr::V4(sockaddrv4))
         }
         AF_INET6 => {
-            assert!(len as usize >= mem::size_of::<SockAddrIn6>());
+            assert!(len >= mem::size_of::<SockAddrIn6>());
             let storage: &SockAddrIn6 = unsafe { mem::transmute(storage) };
             let arr: [u16; 8] = unsafe { mem::transmute(storage.sin6_addr.s6_addr) };
             // hextets
@@ -81,7 +87,7 @@ pub fn sockaddr_to_addr(storage: &SockAddrStorage, len: usize) -> io::Result<Soc
 
 #[inline(always)]
 pub fn ipv4_addr_int(addr: InAddr) -> u32 {
-    (addr.s_addr as u32).to_be()
+    addr.s_addr.to_be()
 }
 
 /// Convert a platform specific `timeval` into a Duration.
@@ -110,6 +116,12 @@ pub fn duration_to_timespec(dur: Duration) -> libc::timespec {
     }
 }
 
+/// Call `sendto(2)` using raw socket arguments.
+///
+/// # Safety
+///
+/// `buf` must be valid for reads of `len` bytes. `addr` must point to a valid
+/// socket address of length `addrlen`.
 pub unsafe fn sendto(
     socket: CSocket,
     buf: Buf,
@@ -121,6 +133,12 @@ pub unsafe fn sendto(
     unsafe { libc::sendto(socket, buf, len, flags, addr, addrlen) }
 }
 
+/// Call `recvfrom(2)` using raw socket arguments.
+///
+/// # Safety
+///
+/// `buf` must be valid for writes of `len` bytes. `addr` and `addrlen` must
+/// point to writable storage for the returned socket address.
 pub unsafe fn recvfrom(
     socket: CSocket,
     buf: MutBuf,

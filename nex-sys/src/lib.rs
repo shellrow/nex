@@ -24,6 +24,7 @@ impl Drop for FileDesc {
 }
 
 /// Sends data to a socket, returning the number of bytes sent.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn send_to(
     socket: CSocket,
     buffer: &[u8],
