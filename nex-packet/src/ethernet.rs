@@ -7,7 +7,10 @@ use nex_core::mac::MacAddr;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::packet::{MutablePacket, Packet};
+use crate::{
+    packet::{MutablePacket, Packet},
+    parse::ParseError,
+};
 
 /// Represents the Ethernet header length.
 pub const ETHERNET_HEADER_LEN: usize = 14;
@@ -194,27 +197,10 @@ impl Packet for EthernetPacket {
     type Header = EthernetHeader;
 
     fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < ETHERNET_HEADER_LEN {
-            return None;
-        }
-        let destination =
-            MacAddr::from_octets([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]);
-        let source =
-            MacAddr::from_octets([bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]]);
-        let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
-        let payload = Bytes::copy_from_slice(&bytes[ETHERNET_HEADER_LEN..]);
-
-        Some(EthernetPacket {
-            header: EthernetHeader {
-                destination,
-                source,
-                ethertype,
-            },
-            payload,
-        })
+        Self::try_from_buf(bytes).ok()
     }
     fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+        Self::try_from_bytes(bytes).ok()
     }
     fn to_bytes(&self) -> Bytes {
         let mut buf = Vec::with_capacity(ETHERNET_HEADER_LEN + self.payload.len());
@@ -270,6 +256,58 @@ impl EthernetPacket {
         } else {
             None
         }
+    }
+
+    /// Parse an Ethernet packet and return a structured error on failure.
+    pub fn try_from_buf(bytes: &[u8]) -> Result<Self, ParseError> {
+        if bytes.len() < ETHERNET_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "Ethernet packet",
+                minimum: ETHERNET_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let destination =
+            MacAddr::from_octets([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]);
+        let source =
+            MacAddr::from_octets([bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
+
+        Ok(EthernetPacket {
+            header: EthernetHeader {
+                destination,
+                source,
+                ethertype,
+            },
+            payload: Bytes::copy_from_slice(&bytes[ETHERNET_HEADER_LEN..]),
+        })
+    }
+
+    /// Parse an Ethernet packet from owned bytes while preserving the payload slice.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        if bytes.len() < ETHERNET_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "Ethernet packet",
+                minimum: ETHERNET_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let destination =
+            MacAddr::from_octets([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]);
+        let source =
+            MacAddr::from_octets([bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let ethertype = EtherType::new(u16::from_be_bytes([bytes[12], bytes[13]]));
+
+        Ok(EthernetPacket {
+            header: EthernetHeader {
+                destination,
+                source,
+                ethertype,
+            },
+            payload: bytes.slice(ETHERNET_HEADER_LEN..),
+        })
     }
 }
 
