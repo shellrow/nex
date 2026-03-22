@@ -67,7 +67,7 @@ pub fn is_global_ipv6(ipv6_addr: &Ipv6Addr) -> bool {
                 || matches!(ipv6_addr.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
                 // ORCHIDv2 (`2001:20::/28`)
                 // Drone Remote ID Protocol Entity Tags (DETs) Prefix (`2001:30::/28`)`
-                || matches!(ipv6_addr.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x3F)
+                || matches!(ipv6_addr.segments(), [0x2001, b, _, _, _, _, _, _] if (0x20..=0x3F).contains(&b))
             ))
         // 6to4 (`2002::/16`) - it's not explicitly documented as globally reachable,
         // IANA says N/A.

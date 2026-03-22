@@ -4,6 +4,7 @@ use crate::{
     checksum::{ChecksumMode, ChecksumState},
     ip::IpNextProtocol,
     packet::{MutablePacket, Packet},
+    parse::ParseError,
     util,
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -211,113 +212,11 @@ impl Packet for Ipv4Packet {
     type Header = Ipv4Header;
 
     fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < IPV4_HEADER_LEN {
-            return None;
-        }
-
-        let version = (bytes[0] & 0xF0) >> 4;
-        let header_length = (bytes[0] & 0x0F) as usize;
-        let total_length = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
-        let total_length = if total_length > bytes.len() {
-            // fallback
-            bytes.len()
-        } else {
-            total_length
-        };
-
-        if header_length < 5 {
-            return None;
-        }
-
-        let ihl_bytes = header_length * 4;
-        if ihl_bytes < IPV4_HEADER_LEN || ihl_bytes > total_length {
-            return None;
-        }
-        let payload = Bytes::copy_from_slice(&bytes[ihl_bytes..total_length]);
-
-        let mut options = Vec::new();
-        let mut i = IPV4_HEADER_LEN;
-
-        while i < ihl_bytes {
-            let b = bytes[i];
-            let copied = (b >> 7) & 0x01;
-            let class = (b >> 5) & 0x03;
-            let number = Ipv4OptionType::new(b & 0b0001_1111);
-
-            match number {
-                Ipv4OptionType::EOL => {
-                    options.push(Ipv4OptionPacket {
-                        header: Ipv4OptionHeader {
-                            copied,
-                            class,
-                            number,
-                            length: None,
-                        },
-                        data: Bytes::new(),
-                    });
-                    break;
-                }
-                Ipv4OptionType::NOP => {
-                    options.push(Ipv4OptionPacket {
-                        header: Ipv4OptionHeader {
-                            copied,
-                            class,
-                            number,
-                            length: None,
-                        },
-                        data: Bytes::new(),
-                    });
-                    i += 1;
-                }
-                _ => {
-                    if i + 2 > ihl_bytes {
-                        break;
-                    }
-                    let len = bytes[i + 1] as usize;
-                    if len < 2 || i + len > ihl_bytes {
-                        break;
-                    }
-
-                    let data = Bytes::copy_from_slice(&bytes[i + 2..i + len]);
-
-                    options.push(Ipv4OptionPacket {
-                        header: Ipv4OptionHeader {
-                            copied,
-                            class,
-                            number,
-                            length: Some(len as u8),
-                        },
-                        data,
-                    });
-
-                    i += len;
-                }
-            }
-        }
-
-        Some(Self {
-            header: Ipv4Header {
-                version: version as u4,
-                header_length: header_length as u4,
-                dscp: (bytes[1] >> 2) as u6,
-                ecn: (bytes[1] & 0x03) as u2,
-                total_length: u16::from_be_bytes([bytes[2], bytes[3]]) as u16be,
-                identification: u16::from_be_bytes([bytes[4], bytes[5]]) as u16be,
-                flags: (bytes[6] >> 5) as u3,
-                fragment_offset: ((u16::from_be_bytes([bytes[6], bytes[7]])) & 0x1FFF) as u13be,
-                ttl: bytes[8],
-                next_level_protocol: IpNextProtocol::new(bytes[9]),
-                checksum: u16::from_be_bytes([bytes[10], bytes[11]]) as u16be,
-                source: Ipv4Addr::new(bytes[12], bytes[13], bytes[14], bytes[15]),
-                destination: Ipv4Addr::new(bytes[16], bytes[17], bytes[18], bytes[19]),
-                options,
-            },
-            payload,
-        })
+        Self::try_from_buf(bytes).ok()
     }
 
     fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+        Self::try_from_bytes(bytes).ok()
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -405,10 +304,207 @@ impl Packet for Ipv4Packet {
 }
 
 impl Ipv4Packet {
+    /// Parse an IPv4 packet and return a structured error on failure.
+    pub fn try_from_buf(bytes: &[u8]) -> Result<Self, ParseError> {
+        parse_ipv4_from_slice(bytes, false)
+    }
+
+    /// Parse an IPv4 packet from owned bytes while preserving payload slices when possible.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        parse_ipv4_from_bytes(bytes, false)
+    }
+
+    /// Parse an IPv4 packet using validation-oriented strict checks.
+    pub fn try_from_buf_strict(bytes: &[u8]) -> Result<Self, ParseError> {
+        parse_ipv4_from_slice(bytes, true)
+    }
+
+    /// Parse an IPv4 packet from owned bytes using validation-oriented strict checks.
+    pub fn try_from_bytes_strict(bytes: Bytes) -> Result<Self, ParseError> {
+        parse_ipv4_from_bytes(bytes, true)
+    }
+
+    /// Parse an IPv4 packet using validation-oriented strict checks.
+    pub fn from_buf_strict(bytes: &[u8]) -> Option<Self> {
+        Self::try_from_buf_strict(bytes).ok()
+    }
+
+    /// Parse an IPv4 packet from owned bytes using validation-oriented strict checks.
+    pub fn from_bytes_strict(bytes: Bytes) -> Option<Self> {
+        Self::try_from_bytes_strict(bytes).ok()
+    }
+
     pub fn with_computed_checksum(mut self) -> Self {
         self.header.checksum = checksum(&self);
         self
     }
+}
+
+fn parse_ipv4_from_slice(bytes: &[u8], strict: bool) -> Result<Ipv4Packet, ParseError> {
+    parse_ipv4_parts(bytes, strict, |range| Bytes::copy_from_slice(&bytes[range]))
+}
+
+fn parse_ipv4_from_bytes(bytes: Bytes, strict: bool) -> Result<Ipv4Packet, ParseError> {
+    parse_ipv4_parts(&bytes, strict, |range| bytes.slice(range))
+}
+
+fn parse_ipv4_parts<F>(
+    bytes: &[u8],
+    strict: bool,
+    mut slice_bytes: F,
+) -> Result<Ipv4Packet, ParseError>
+where
+    F: FnMut(std::ops::Range<usize>) -> Bytes,
+{
+    if bytes.len() < IPV4_HEADER_LEN {
+        return Err(ParseError::BufferTooShort {
+            context: "IPv4 packet",
+            minimum: IPV4_HEADER_LEN,
+            actual: bytes.len(),
+        });
+    }
+
+    let version = (bytes[0] & 0xF0) >> 4;
+    if version != 4 {
+        return Err(ParseError::Malformed {
+            context: "IPv4 packet version",
+        });
+    }
+
+    let header_length = (bytes[0] & 0x0F) as usize;
+    if header_length < 5 {
+        return Err(ParseError::InvalidLength {
+            context: "IPv4 header length",
+            value: header_length,
+        });
+    }
+
+    let ihl_bytes = header_length * IPV4_HEADER_LENGTH_BYTE_UNITS;
+    if ihl_bytes < IPV4_HEADER_LEN || ihl_bytes > bytes.len() {
+        return Err(ParseError::Truncated {
+            context: "IPv4 header",
+            expected: ihl_bytes,
+            actual: bytes.len(),
+        });
+    }
+
+    let declared_total_length = u16::from_be_bytes([bytes[2], bytes[3]]) as usize;
+    let effective_declared_total_length = if declared_total_length == 0 {
+        // Some offloaded captures report a zero IPv4 total length even though the
+        // full packet bytes are present in the capture buffer. Treat those as
+        // "use the captured buffer length" for non-strict parsing.
+        bytes.len()
+    } else {
+        declared_total_length
+    };
+
+    if effective_declared_total_length < ihl_bytes {
+        return Err(ParseError::InvalidLength {
+            context: "IPv4 total length",
+            value: declared_total_length,
+        });
+    }
+
+    let total_length = if strict {
+        if effective_declared_total_length > bytes.len() {
+            return Err(ParseError::Truncated {
+                context: "IPv4 packet",
+                expected: effective_declared_total_length,
+                actual: bytes.len(),
+            });
+        }
+        effective_declared_total_length
+    } else {
+        effective_declared_total_length.min(bytes.len())
+    };
+
+    let mut options = Vec::new();
+    let mut i = IPV4_HEADER_LEN;
+    while i < ihl_bytes {
+        let b = bytes[i];
+        let copied = (b >> 7) & 0x01;
+        let class = (b >> 5) & 0x03;
+        let number = Ipv4OptionType::new(b & 0b0001_1111);
+
+        match number {
+            Ipv4OptionType::EOL => {
+                options.push(Ipv4OptionPacket {
+                    header: Ipv4OptionHeader {
+                        copied,
+                        class,
+                        number,
+                        length: None,
+                    },
+                    data: Bytes::new(),
+                });
+                break;
+            }
+            Ipv4OptionType::NOP => {
+                options.push(Ipv4OptionPacket {
+                    header: Ipv4OptionHeader {
+                        copied,
+                        class,
+                        number,
+                        length: None,
+                    },
+                    data: Bytes::new(),
+                });
+                i += 1;
+            }
+            _ => {
+                if i + 2 > ihl_bytes {
+                    if strict {
+                        return Err(ParseError::Malformed {
+                            context: "IPv4 options",
+                        });
+                    }
+                    break;
+                }
+                let len = bytes[i + 1] as usize;
+                if len < 2 || i + len > ihl_bytes {
+                    if strict {
+                        return Err(ParseError::InvalidLength {
+                            context: "IPv4 option length",
+                            value: len,
+                        });
+                    }
+                    break;
+                }
+
+                options.push(Ipv4OptionPacket {
+                    header: Ipv4OptionHeader {
+                        copied,
+                        class,
+                        number,
+                        length: Some(len as u8),
+                    },
+                    data: slice_bytes(i + 2..i + len),
+                });
+
+                i += len;
+            }
+        }
+    }
+
+    Ok(Ipv4Packet {
+        header: Ipv4Header {
+            version: version as u4,
+            header_length: header_length as u4,
+            dscp: (bytes[1] >> 2) as u6,
+            ecn: (bytes[1] & 0x03) as u2,
+            total_length: total_length as u16be,
+            identification: u16::from_be_bytes([bytes[4], bytes[5]]) as u16be,
+            flags: (bytes[6] >> 5) as u3,
+            fragment_offset: ((u16::from_be_bytes([bytes[6], bytes[7]])) & 0x1FFF) as u13be,
+            ttl: bytes[8],
+            next_level_protocol: IpNextProtocol::new(bytes[9]),
+            checksum: u16::from_be_bytes([bytes[10], bytes[11]]) as u16be,
+            source: Ipv4Addr::new(bytes[12], bytes[13], bytes[14], bytes[15]),
+            destination: Ipv4Addr::new(bytes[16], bytes[17], bytes[18], bytes[19]),
+            options,
+        },
+        payload: slice_bytes(ihl_bytes..total_length),
+    })
 }
 
 /// Represents a mutable IPv4 packet.
@@ -984,5 +1080,31 @@ mod tests {
         let recomputed = packet.recompute_checksum().expect("checksum");
         assert_eq!(recomputed, packet.get_checksum());
         assert!(!packet.is_checksum_dirty());
+    }
+
+    #[test]
+    fn ipv4_try_from_buf_reports_strict_truncation() {
+        let raw = [
+            0x45, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 64, 17, 0, 0, 127, 0, 0, 1, 127, 0, 0,
+            1, 1, 2, 3, 4,
+        ];
+
+        let err = Ipv4Packet::try_from_buf_strict(&raw).expect_err("strict parse should fail");
+        assert!(matches!(err, ParseError::Truncated { .. }));
+        assert!(Ipv4Packet::from_buf(&raw).is_some());
+    }
+
+    #[test]
+    fn ipv4_zero_total_length_uses_captured_length() {
+        let raw = Bytes::from_static(&[
+            0x45, 0x00, 0x00, 0x00, // total length reported as zero
+            0x68, 0x23, 0x40, 0x00, 0x80, 0x06, 0x00, 0x00, 192, 168, 10, 113, 192, 168, 10, 10,
+            0xde, 0xad, 0xbe, 0xef,
+        ]);
+
+        let packet = Ipv4Packet::from_bytes(raw.clone()).expect("TSO-style packet should parse");
+        assert_eq!(packet.header.total_length as usize, raw.len());
+        assert_eq!(packet.payload.len(), raw.len() - IPV4_HEADER_LEN);
+        assert_eq!(packet.payload, Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef]));
     }
 }

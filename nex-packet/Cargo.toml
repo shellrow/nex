@@ -18,3 +18,10 @@ rand = { workspace = true }
 
 [features]
 serde = ["dep:serde", "nex-core/serde", "bytes/serde"]
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "packet_parse"
+harness = false

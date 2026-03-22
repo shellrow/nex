@@ -122,6 +122,7 @@ impl Stream for AsyncWpcapSocketReceiver {
 
 /// Create a new asynchronous WinPcap channel.
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<AsyncChannel> {
+    let read_buffer_size = config.read_buffer_size;
     let mut write_buffer = vec![0u8; config.write_buffer_size];
 
     let adapter = unsafe {
@@ -141,7 +142,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         return Err(io::Error::last_os_error());
     }
 
-    let ret = unsafe { windows::PacketSetBuff(adapter, config.read_buffer_size as libc::c_int) };
+    let ret = unsafe { windows::PacketSetBuff(adapter, read_buffer_size as libc::c_int) };
     if ret == 0 {
         unsafe { windows::PacketCloseAdapter(adapter) };
         return Err(io::Error::last_os_error());
@@ -174,7 +175,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         let adapter = adapter.clone();
         let packets = packets.clone();
         let waker = waker.clone();
-        let read_buffer_size = config.read_buffer_size;
+        let read_buffer_size = read_buffer_size;
         thread::spawn(move || {
             let mut read_buffer = vec![0u8; read_buffer_size];
             let read_packet = unsafe { windows::PacketAllocatePacket() };

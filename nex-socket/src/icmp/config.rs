@@ -154,6 +154,56 @@ impl IcmpConfig {
         self.fib = Some(fib);
         self
     }
+
+    /// Validate the configuration before socket creation.
+    pub fn validate(&self) -> io::Result<()> {
+        if let Some(addr) = self.bind {
+            let addr_family = crate::SocketFamily::from_socket_addr(&addr);
+            if addr_family != self.socket_family {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "bind address family does not match socket_family",
+                ));
+            }
+        }
+
+        if self.socket_family.is_v4() && self.hoplimit.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hoplimit is only supported for IPv6 ICMP sockets",
+            ));
+        }
+
+        if self.socket_family.is_v6() && self.ttl.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ttl is only supported for IPv4 ICMP sockets",
+            ));
+        }
+
+        if matches!(self.read_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "read_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.write_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "write_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.interface.as_deref(), Some("")) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "interface must not be empty",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -181,5 +231,11 @@ mod tests {
         let v6 = IcmpConfig::from_family(SocketFamily::IPV6);
         assert_eq!(v4.socket_family, SocketFamily::IPV4);
         assert_eq!(v6.socket_family, SocketFamily::IPV6);
+    }
+
+    #[test]
+    fn icmp_config_validate_rejects_family_mismatch() {
+        let cfg = IcmpConfig::new(IcmpKind::V4).with_bind("[::1]:0".parse().unwrap());
+        assert!(cfg.validate().is_err());
     }
 }

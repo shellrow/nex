@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use pcap::{Activated, Active};
+use pcap::{Activated, Active, State};
 
 use crate::Channel::Ethernet;
 use crate::{RawReceiver, RawSender};
@@ -110,7 +110,7 @@ struct RawSenderImpl {
     capture: Arc<Mutex<pcap::Capture<Active>>>,
 }
 
-fn lock_capture<T>(
+fn lock_capture<T: State>(
     capture: &Mutex<pcap::Capture<T>>,
 ) -> io::Result<MutexGuard<'_, pcap::Capture<T>>> {
     capture
@@ -172,12 +172,12 @@ impl RawSender for InvalidRawSenderImpl {
     }
 }
 
-struct RawReceiverImpl<T: Activated + Send + Sync> {
+struct RawReceiverImpl<T: Activated + State + Send + Sync> {
     capture: Arc<Mutex<pcap::Capture<T>>>,
     read_buffer: Vec<u8>,
 }
 
-impl<T: Activated + Send + Sync> RawReceiver for RawReceiverImpl<T> {
+impl<T: Activated + State + Send + Sync> RawReceiver for RawReceiverImpl<T> {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut cap = lock_capture(&self.capture)?;
         match cap.next_packet() {
@@ -206,11 +206,17 @@ pub fn interfaces() -> Vec<Interface> {
                 mac_addr: None,
                 ipv4: Vec::new(),
                 ipv6: Vec::new(),
+                ipv6_scope_ids: Vec::new(),
                 flags: dev.flags.if_flags.bits(),
+                oper_state: nex_core::interface::OperState::from_if_flags(
+                    dev.flags.if_flags.bits(),
+                ),
                 transmit_speed: None,
                 receive_speed: None,
+                stats: None,
                 gateway: None,
                 dns_servers: Vec::new(),
+                mtu: None,
                 default: false,
             })
             .collect()

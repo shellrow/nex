@@ -15,6 +15,7 @@ pub mod ip;
 pub mod ipv4;
 pub mod ipv6;
 pub mod packet;
+pub mod parse;
 pub mod tcp;
 pub mod udp;
 pub mod util;

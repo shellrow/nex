@@ -9,17 +9,20 @@ use crate::tcp::TcpConfig;
 use std::os::fd::AsRawFd;
 
 #[cfg(unix)]
-use nix::poll::{PollFd, PollFlags, poll};
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 /// Low level synchronous TCP socket.
 #[derive(Debug)]
 pub struct TcpSocket {
     socket: Socket,
+    nonblocking: bool,
 }
 
 impl TcpSocket {
     /// Build a socket according to `TcpSocketConfig`.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let socket = Socket::new(
             config.socket_family.to_domain(),
             config.socket_type.to_sock_type(),
@@ -111,14 +114,20 @@ impl TcpSocket {
             socket.bind(&addr.into())?;
         }
 
-        Ok(Self { socket })
+        Ok(Self {
+            socket,
+            nonblocking: config.nonblocking,
+        })
     }
 
     /// Create a socket of arbitrary type (STREAM or RAW).
     pub fn new(domain: Domain, sock_type: SockType) -> io::Result<Self> {
         let socket = Socket::new(domain, sock_type, Some(Protocol::TCP))?;
         socket.set_nonblocking(false)?;
-        Ok(Self { socket })
+        Ok(Self {
+            socket,
+            nonblocking: false,
+        })
     }
 
     /// Convenience constructor for an IPv4 STREAM socket.
@@ -151,14 +160,17 @@ impl TcpSocket {
         self.socket.connect(&addr.into())
     }
 
-    /// Connect to the target address with a timeout.
+    /// Connect to the target address with a timeout and return the connected stream.
+    ///
+    /// The returned `TcpStream` must be used for subsequent I/O.
     #[cfg(unix)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
-        let raw_fd = self.socket.as_raw_fd();
-        self.socket.set_nonblocking(true)?;
+        let socket = self.socket.try_clone()?;
+        socket.set_nonblocking(true)?;
+        let raw_fd = socket.as_raw_fd();
 
         // Try to connect first
-        match self.socket.connect(&target.into()) {
+        match socket.connect(&target.into()) {
             Ok(_) => { /* succeeded immediately */ }
             Err(err)
                 if err.kind() == io::ErrorKind::WouldBlock
@@ -170,22 +182,21 @@ impl TcpSocket {
         }
 
         // Wait for the connection using poll
-        let timeout_ms = timeout.as_millis() as i32;
         use std::os::unix::io::BorrowedFd;
         // Safety: raw_fd is valid for the lifetime of this scope
         let mut fds = [PollFd::new(
             unsafe { BorrowedFd::borrow_raw(raw_fd) },
             PollFlags::POLLOUT,
         )];
-        let n = poll(&mut fds, Some(timeout_ms as u16))?;
+        let poll_timeout = PollTimeout::try_from(timeout).unwrap_or(PollTimeout::MAX);
+        let n = poll(&mut fds, poll_timeout)?;
 
         if n == 0 {
             return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out"));
         }
 
         // Check the result with `SO_ERROR`
-        let err: i32 = self
-            .socket
+        let err: i32 = socket
             .take_error()?
             .map(|e| e.raw_os_error().unwrap_or(0))
             .unwrap_or(0);
@@ -193,9 +204,9 @@ impl TcpSocket {
             return Err(io::Error::from_raw_os_error(err));
         }
 
-        self.socket.set_nonblocking(false)?;
+        socket.set_nonblocking(self.nonblocking)?;
 
-        match self.socket.try_clone() {
+        match socket.try_clone() {
             Ok(cloned_socket) => {
                 // Convert the socket into a `std::net::TcpStream`
                 let std_stream: TcpStream = cloned_socket.into();
@@ -205,6 +216,9 @@ impl TcpSocket {
         }
     }
 
+    /// Connect to the target address with a timeout and return the connected stream.
+    ///
+    /// The returned `TcpStream` must be used for subsequent I/O.
     #[cfg(windows)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
         use std::mem::size_of;
@@ -213,11 +227,12 @@ impl TcpSocket {
             POLLWRNORM, SO_ERROR, SOCKET, SOCKET_ERROR, SOL_SOCKET, WSAPOLLFD, WSAPoll, getsockopt,
         };
 
-        let sock = self.socket.as_raw_socket() as SOCKET;
-        self.socket.set_nonblocking(true)?;
+        let socket = self.socket.try_clone()?;
+        socket.set_nonblocking(true)?;
+        let sock = socket.as_raw_socket() as SOCKET;
 
         // Start connect
-        match self.socket.connect(&target.into()) {
+        match socket.connect(&target.into()) {
             Ok(_) => { /* connection succeeded immediately */ }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.raw_os_error() == Some(10035) /* WSAEWOULDBLOCK */ => {}
             Err(e) => return Err(e),
@@ -255,9 +270,9 @@ impl TcpSocket {
             return Err(io::Error::from_raw_os_error(so_error));
         }
 
-        self.socket.set_nonblocking(false)?;
+        socket.set_nonblocking(self.nonblocking)?;
 
-        let std_stream: TcpStream = self.socket.try_clone()?.into();
+        let std_stream: TcpStream = socket.into();
         Ok(std_stream)
     }
 
@@ -520,7 +535,13 @@ impl TcpSocket {
 
     /// Construct from a raw `socket2::Socket`.
     pub fn from_socket(socket: Socket) -> Self {
-        Self { socket }
+        Self {
+            socket,
+            // `socket2::Socket` does not expose a portable getter for the current
+            // blocking mode, so externally supplied sockets default to blocking
+            // expectations in this synchronous wrapper.
+            nonblocking: false,
+        }
     }
 
     /// Borrow the inner `socket2::Socket`.
@@ -531,5 +552,50 @@ impl TcpSocket {
     /// Consume and return the inner `socket2::Socket`.
     pub fn into_socket(self) -> Socket {
         self.socket
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    use super::*;
+    #[cfg(unix)]
+    use libc::{F_GETFL, O_NONBLOCK, fcntl};
+    #[cfg(unix)]
+    use std::net::TcpListener as StdTcpListener;
+
+    #[cfg(unix)]
+    fn socket_is_nonblocking(socket: &Socket) -> bool {
+        let flags = unsafe { fcntl(socket.as_raw_fd(), F_GETFL) };
+        assert!(flags >= 0, "F_GETFL failed: {}", io::Error::last_os_error());
+        (flags & O_NONBLOCK) != 0
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn connect_timeout_does_not_mutate_original_nonblocking_state_after_invalid_input() {
+        let sock = TcpSocket::v4_stream().expect("socket");
+        sock.socket.set_nonblocking(true).expect("set nonblocking");
+
+        let result = sock.connect_timeout("[::1]:80".parse().unwrap(), Duration::from_secs(1));
+        assert!(result.is_err());
+        assert!(socket_is_nonblocking(&sock.socket));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn connect_timeout_does_not_mutate_original_blocking_state_after_success() {
+        let listener = StdTcpListener::bind("127.0.0.1:0").expect("listener");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = std::thread::spawn(move || listener.accept().expect("accept"));
+
+        let sock = TcpSocket::v4_stream().expect("socket");
+        sock.socket.set_nonblocking(false).expect("set blocking");
+        let _stream = sock
+            .connect_timeout(addr, Duration::from_secs(1))
+            .expect("connect");
+
+        assert!(!socket_is_nonblocking(&sock.socket));
+        let _ = handle.join();
     }
 }

@@ -13,7 +13,6 @@ license = "MIT"
 [dependencies]
 libc = { workspace = true }
 bytes = { workspace = true }
-netdev = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 pcap = { version = "2.0", optional = true }
 nex-core = { workspace = true }
@@ -21,7 +20,7 @@ nex-sys = { workspace = true }
 futures-core = "0.3"
 
 [target.'cfg(windows)'.dependencies.windows-sys]
-version = "0.59.0"
+version = "0.61"
 features = [
   "Win32_Foundation",
   "Win32_Networking_WinSock",
@@ -31,7 +30,7 @@ features = [
 ]
 
 [features]
-serde = ["dep:serde", "netdev/serde"]
+serde = ["dep:serde", "nex-core/serde"]
 pcap = ["dep:pcap"]
 
 [dev-dependencies]

@@ -21,7 +21,7 @@ libc = { workspace = true }
 nix = { version = "0.30", features = ["poll", "net", "uio"] }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
-version = "0.59.0"
+version = "0.61"
 features = [
   "Win32_Foundation",
   "Win32_Networking_WinSock",

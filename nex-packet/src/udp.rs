@@ -3,6 +3,7 @@
 use crate::checksum::{ChecksumMode, ChecksumState, TransportChecksumContext};
 use crate::ip::IpNextProtocol;
 use crate::packet::{MutablePacket, Packet};
+use crate::parse::ParseError;
 
 use crate::util;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -35,38 +36,10 @@ pub struct UdpPacket {
 impl Packet for UdpPacket {
     type Header = UdpHeader;
     fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < UDP_HEADER_LEN {
-            return None;
-        }
-
-        let source = bytes.get_u16();
-        let destination = bytes.get_u16();
-        let length = bytes.get_u16();
-        let checksum = bytes.get_u16();
-
-        if length < UDP_HEADER_LEN as u16 {
-            return None;
-        }
-
-        let payload_len = length as usize - UDP_HEADER_LEN;
-        if bytes.len() < payload_len {
-            return None;
-        }
-
-        let (payload_slice, _) = bytes.split_at(payload_len);
-
-        Some(UdpPacket {
-            header: UdpHeader {
-                source,
-                destination,
-                length,
-                checksum,
-            },
-            payload: Bytes::copy_from_slice(payload_slice),
-        })
+        Self::try_from_buf(&mut bytes).ok()
     }
     fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+        Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
     }
     fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::with_capacity(UDP_HEADER_LEN + self.payload.len());
@@ -166,6 +139,92 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
         let total_len = self.total_len();
         let (_, payload) = (&mut *self.buffer).split_at_mut(UDP_HEADER_LEN);
         &mut payload[..total_len.saturating_sub(UDP_HEADER_LEN)]
+    }
+}
+
+impl UdpPacket {
+    /// Parse a UDP packet and return a structured error on failure.
+    pub fn try_from_buf(mut bytes: &[u8]) -> Result<Self, ParseError> {
+        if bytes.len() < UDP_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "UDP packet",
+                minimum: UDP_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let source = bytes.get_u16();
+        let destination = bytes.get_u16();
+        let length = bytes.get_u16();
+        let checksum = bytes.get_u16();
+
+        if length < UDP_HEADER_LEN as u16 {
+            return Err(ParseError::InvalidLength {
+                context: "UDP length",
+                value: length as usize,
+            });
+        }
+
+        let payload_len = length as usize - UDP_HEADER_LEN;
+        if bytes.len() < payload_len {
+            return Err(ParseError::Truncated {
+                context: "UDP payload",
+                expected: payload_len,
+                actual: bytes.len(),
+            });
+        }
+
+        Ok(UdpPacket {
+            header: UdpHeader {
+                source,
+                destination,
+                length,
+                checksum,
+            },
+            payload: Bytes::copy_from_slice(&bytes[..payload_len]),
+        })
+    }
+
+    /// Parse a UDP packet from owned bytes while preserving the payload slice.
+    pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
+        if bytes.len() < UDP_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "UDP packet",
+                minimum: UDP_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+
+        let source = u16::from_be_bytes([bytes[0], bytes[1]]);
+        let destination = u16::from_be_bytes([bytes[2], bytes[3]]);
+        let length = u16::from_be_bytes([bytes[4], bytes[5]]);
+        let checksum = u16::from_be_bytes([bytes[6], bytes[7]]);
+
+        if length < UDP_HEADER_LEN as u16 {
+            return Err(ParseError::InvalidLength {
+                context: "UDP length",
+                value: length as usize,
+            });
+        }
+
+        let payload_len = length as usize - UDP_HEADER_LEN;
+        if bytes.len() < UDP_HEADER_LEN + payload_len {
+            return Err(ParseError::Truncated {
+                context: "UDP payload",
+                expected: payload_len,
+                actual: bytes.len().saturating_sub(UDP_HEADER_LEN),
+            });
+        }
+
+        Ok(UdpPacket {
+            header: UdpHeader {
+                source,
+                destination,
+                length,
+                checksum,
+            },
+            payload: bytes.slice(UDP_HEADER_LEN..UDP_HEADER_LEN + payload_len),
+        })
     }
 }
 

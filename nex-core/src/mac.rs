@@ -1,1 +1,1 @@
-pub use netdev::net::mac::*;
+pub use mac_addr::MacAddr;
