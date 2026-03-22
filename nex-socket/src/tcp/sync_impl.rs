@@ -9,7 +9,7 @@ use crate::tcp::TcpConfig;
 use std::os::fd::AsRawFd;
 
 #[cfg(unix)]
-use nix::poll::{PollFd, PollFlags, poll};
+use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 /// Low level synchronous TCP socket.
 #[derive(Debug)]
@@ -20,6 +20,8 @@ pub struct TcpSocket {
 impl TcpSocket {
     /// Build a socket according to `TcpSocketConfig`.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let socket = Socket::new(
             config.socket_family.to_domain(),
             config.socket_type.to_sock_type(),
@@ -154,7 +156,23 @@ impl TcpSocket {
     /// Connect to the target address with a timeout.
     #[cfg(unix)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+        struct NonblockingRestoreGuard<'a> {
+            socket: &'a Socket,
+            original: bool,
+        }
+
+        impl Drop for NonblockingRestoreGuard<'_> {
+            fn drop(&mut self) {
+                let _ = self.socket.set_nonblocking(self.original);
+            }
+        }
+
         let raw_fd = self.socket.as_raw_fd();
+        let original_nonblocking = self.socket.nonblocking()?;
+        let _restore_guard = NonblockingRestoreGuard {
+            socket: &self.socket,
+            original: original_nonblocking,
+        };
         self.socket.set_nonblocking(true)?;
 
         // Try to connect first
@@ -170,14 +188,14 @@ impl TcpSocket {
         }
 
         // Wait for the connection using poll
-        let timeout_ms = timeout.as_millis() as i32;
         use std::os::unix::io::BorrowedFd;
         // Safety: raw_fd is valid for the lifetime of this scope
         let mut fds = [PollFd::new(
             unsafe { BorrowedFd::borrow_raw(raw_fd) },
             PollFlags::POLLOUT,
         )];
-        let n = poll(&mut fds, Some(timeout_ms as u16))?;
+        let poll_timeout = PollTimeout::try_from(timeout).unwrap_or(PollTimeout::MAX);
+        let n = poll(&mut fds, poll_timeout)?;
 
         if n == 0 {
             return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out"));
@@ -192,8 +210,6 @@ impl TcpSocket {
         if err != 0 {
             return Err(io::Error::from_raw_os_error(err));
         }
-
-        self.socket.set_nonblocking(false)?;
 
         match self.socket.try_clone() {
             Ok(cloned_socket) => {
@@ -213,7 +229,23 @@ impl TcpSocket {
             POLLWRNORM, SO_ERROR, SOCKET, SOCKET_ERROR, SOL_SOCKET, WSAPOLLFD, WSAPoll, getsockopt,
         };
 
+        struct NonblockingRestoreGuard<'a> {
+            socket: &'a Socket,
+            original: bool,
+        }
+
+        impl Drop for NonblockingRestoreGuard<'_> {
+            fn drop(&mut self) {
+                let _ = self.socket.set_nonblocking(self.original);
+            }
+        }
+
         let sock = self.socket.as_raw_socket() as SOCKET;
+        let original_nonblocking = self.socket.nonblocking()?;
+        let _restore_guard = NonblockingRestoreGuard {
+            socket: &self.socket,
+            original: original_nonblocking,
+        };
         self.socket.set_nonblocking(true)?;
 
         // Start connect
@@ -254,8 +286,6 @@ impl TcpSocket {
         if ret == SOCKET_ERROR || so_error != 0 {
             return Err(io::Error::from_raw_os_error(so_error));
         }
-
-        self.socket.set_nonblocking(false)?;
 
         let std_stream: TcpStream = self.socket.try_clone()?.into();
         Ok(std_stream)
@@ -531,5 +561,39 @@ impl TcpSocket {
     /// Consume and return the inner `socket2::Socket`.
     pub fn into_socket(self) -> Socket {
         self.socket
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener as StdTcpListener;
+
+    #[cfg(unix)]
+    #[test]
+    fn connect_timeout_restores_nonblocking_state_after_invalid_input() {
+        let sock = TcpSocket::v4_stream().expect("socket");
+        sock.socket.set_nonblocking(true).expect("set nonblocking");
+
+        let result = sock.connect_timeout("[::1]:80".parse().unwrap(), Duration::from_secs(1));
+        assert!(result.is_err());
+        assert!(sock.socket.nonblocking().expect("nonblocking state"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn connect_timeout_restores_blocking_state_after_success() {
+        let listener = StdTcpListener::bind("127.0.0.1:0").expect("listener");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = std::thread::spawn(move || listener.accept().expect("accept"));
+
+        let sock = TcpSocket::v4_stream().expect("socket");
+        sock.socket.set_nonblocking(false).expect("set blocking");
+        let _stream = sock
+            .connect_timeout(addr, Duration::from_secs(1))
+            .expect("connect");
+
+        assert!(!sock.socket.nonblocking().expect("nonblocking state"));
+        let _ = handle.join();
     }
 }

@@ -1,4 +1,5 @@
 use socket2::Type as SockType;
+use std::io;
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -229,6 +230,84 @@ impl TcpConfig {
         self.bind_device = Some(iface.into());
         self
     }
+
+    /// Validate the configuration before socket creation.
+    pub fn validate(&self) -> io::Result<()> {
+        if let Some(addr) = self.bind_addr {
+            let addr_family = crate::SocketFamily::from_socket_addr(&addr);
+            if addr_family != self.socket_family {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "bind_addr family does not match socket_family",
+                ));
+            }
+        }
+
+        if self.socket_family.is_v4() {
+            if self.hoplimit.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "hoplimit is only supported for IPv6 TCP sockets",
+                ));
+            }
+            if self.tclass_v6.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "tclass_v6 is only supported for IPv6 TCP sockets",
+                ));
+            }
+            if self.only_v6.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "only_v6 is only supported for IPv6 TCP sockets",
+                ));
+            }
+        }
+
+        if self.socket_family.is_v6() && self.ttl.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ttl is only supported for IPv4 TCP sockets",
+            ));
+        }
+
+        if matches!(self.read_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "read_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.write_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "write_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.recv_buffer_size, Some(0)) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "recv_buffer_size must be greater than zero",
+            ));
+        }
+
+        if matches!(self.send_buffer_size, Some(0)) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "send_buffer_size must be greater than zero",
+            ));
+        }
+
+        if matches!(self.bind_device.as_deref(), Some("")) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bind_device must not be empty",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -269,5 +348,11 @@ mod tests {
         let cfg = TcpConfig::new(SocketFamily::IPV6);
         assert_eq!(cfg.socket_family, SocketFamily::IPV6);
         assert_eq!(cfg.socket_type, TcpSocketType::Stream);
+    }
+
+    #[test]
+    fn tcp_config_validate_rejects_family_mismatch() {
+        let cfg = TcpConfig::v4_stream().with_bind("[::1]:0".parse().unwrap());
+        assert!(cfg.validate().is_err());
     }
 }

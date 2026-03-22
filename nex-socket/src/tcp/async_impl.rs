@@ -14,6 +14,8 @@ pub struct AsyncTcpSocket {
 impl AsyncTcpSocket {
     /// Create a socket from the given configuration without connecting.
     pub fn from_config(config: &TcpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let socket = Socket::new(
             config.socket_family.to_domain(),
             config.socket_type.to_sock_type(),

@@ -35,6 +35,8 @@ pub struct UdpSendMeta {
 impl UdpSocket {
     /// Create a socket from the provided configuration.
     pub fn from_config(config: &UdpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let socket = Socket::new(
             config.socket_family.to_domain(),
             config.socket_type.to_sock_type(),

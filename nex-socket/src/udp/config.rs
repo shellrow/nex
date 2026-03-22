@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{io, net::SocketAddr, time::Duration};
 
 use socket2::Type as SockType;
 
@@ -213,6 +213,92 @@ impl UdpConfig {
         self.bind_device = Some(iface.into());
         self
     }
+
+    /// Validate the configuration before socket creation.
+    pub fn validate(&self) -> io::Result<()> {
+        if let Some(addr) = self.bind_addr {
+            let addr_family = crate::SocketFamily::from_socket_addr(&addr);
+            if addr_family != self.socket_family {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "bind_addr family does not match socket_family",
+                ));
+            }
+        }
+
+        if self.socket_family.is_v4() {
+            if self.hoplimit.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "hoplimit is only supported for IPv6 UDP sockets",
+                ));
+            }
+            if self.tclass_v6.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "tclass_v6 is only supported for IPv6 UDP sockets",
+                ));
+            }
+            if self.only_v6.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "only_v6 is only supported for IPv6 UDP sockets",
+                ));
+            }
+        }
+
+        if self.socket_family.is_v6() {
+            if self.ttl.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "ttl is only supported for IPv4 UDP sockets",
+                ));
+            }
+            if self.broadcast.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "broadcast is only supported for IPv4 UDP sockets",
+                ));
+            }
+        }
+
+        if matches!(self.read_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "read_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.write_timeout, Some(timeout) if timeout.is_zero()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "write_timeout must be greater than zero",
+            ));
+        }
+
+        if matches!(self.recv_buffer_size, Some(0)) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "recv_buffer_size must be greater than zero",
+            ));
+        }
+
+        if matches!(self.send_buffer_size, Some(0)) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "send_buffer_size must be greater than zero",
+            ));
+        }
+
+        if matches!(self.bind_device.as_deref(), Some("")) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "bind_device must not be empty",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -242,5 +328,11 @@ mod tests {
             UdpConfig::new_with_family(SocketFamily::IPV6).with_bind("[::1]:0".parse().unwrap());
         assert_eq!(cfg.socket_family, SocketFamily::IPV6);
         assert!(cfg.bind_addr.is_some());
+    }
+
+    #[test]
+    fn udp_config_validate_rejects_ipv6_broadcast() {
+        let cfg = UdpConfig::new_with_family(SocketFamily::IPV6).with_broadcast(true);
+        assert!(cfg.validate().is_err());
     }
 }
