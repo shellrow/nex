@@ -41,7 +41,7 @@ impl IcmpSocketType {
     }
 
     /// Converts the ICMP socket type to a `socket2::Type`.
-    pub(crate) fn to_sock_type(&self) -> SockType {
+    pub(crate) fn to_sock_type(self) -> SockType {
         match self {
             IcmpSocketType::Dgram => SockType::DGRAM,
             IcmpSocketType::Raw => SockType::RAW,

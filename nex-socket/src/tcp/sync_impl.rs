@@ -516,7 +516,7 @@ impl TcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Extract the RAW file descriptor for Unix.

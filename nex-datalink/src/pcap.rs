@@ -28,7 +28,7 @@ pub struct Config {
     pub promiscuous: bool,
 }
 
-impl<'a> From<&'a super::Config> for Config {
+impl From<&super::Config> for Config {
     fn from(config: &super::Config) -> Config {
         let mut c = Config {
             read_buffer_size: config.read_buffer_size,
@@ -61,7 +61,7 @@ impl Default for Config {
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let cap = match pcap::Capture::from_device(&*network_interface.name) {
         Ok(cap) => cap,
-        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+        Err(e) => return Err(io::Error::other(e)),
     }
     .buffer_size(config.read_buffer_size as i32);
     // Set pcap timeout (in milliseconds).
@@ -75,7 +75,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let cap = cap.promisc(config.promiscuous);
     let cap = match cap.open() {
         Ok(cap) => cap,
-        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+        Err(e) => return Err(io::Error::other(e)),
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
@@ -94,7 +94,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
 pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::Channel> {
     let cap = match pcap::Capture::from_file(path) {
         Ok(cap) => cap,
-        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+        Err(e) => return Err(io::Error::other(e)),
     };
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
@@ -115,7 +115,7 @@ fn lock_capture<T: State>(
 ) -> io::Result<MutexGuard<'_, pcap::Capture<T>>> {
     capture
         .lock()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "pcap capture mutex poisoned"))
+        .map_err(|_| io::Error::other("pcap capture mutex poisoned"))
 }
 
 impl RawSender for RawSenderImpl {
@@ -134,7 +134,7 @@ impl RawSender for RawSenderImpl {
                 Err(err) => return Some(Err(err)),
             };
             if let Err(e) = cap.sendpacket(data) {
-                return Some(Err(io::Error::new(io::ErrorKind::Other, e)));
+                return Some(Err(io::Error::other(e)));
             }
         }
         Some(Ok(()))
@@ -148,7 +148,7 @@ impl RawSender for RawSenderImpl {
         };
         Some(match cap.sendpacket(packet) {
             Ok(()) => Ok(()),
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e)),
+            Err(e) => Err(io::Error::other(e)),
         })
     }
 }
@@ -185,7 +185,7 @@ impl<T: Activated + State + Send + Sync> RawReceiver for RawReceiverImpl<T> {
                 self.read_buffer.truncate(0);
                 self.read_buffer.extend(pkt.data);
             }
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e)),
+            Err(e) => return Err(io::Error::other(e)),
         };
         Ok(&self.read_buffer)
     }

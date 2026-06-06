@@ -3,18 +3,13 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Controls how and when checksum recalculation happens for a packet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ChecksumMode {
     /// Checksum updates are handled manually by the caller.
+    #[default]
     Manual,
     /// Checksum updates happen automatically whenever a tracked field changes.
     Automatic,
-}
-
-impl Default for ChecksumMode {
-    fn default() -> Self {
-        ChecksumMode::Manual
-    }
 }
 
 /// Tracks whether a packet's checksum needs to be recomputed.

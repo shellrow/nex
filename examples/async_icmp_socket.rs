@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
 
     let src_ip = interface
         .ipv4
-        .get(0)
+        .first()
         .map(|v| v.addr())
         .expect("No IPv4 address on interface");
 
@@ -54,29 +54,24 @@ async fn main() -> std::io::Result<()> {
         loop {
             if let Ok((n, from)) = socket_clone.recv_from(&mut buf).await {
                 println!("Received {} bytes from {}", n, from.ip());
-                if let Some(ipv4_packet) = Ipv4Packet::from_buf(&buf[..n]) {
-                    if ipv4_packet.header.next_level_protocol
+                if let Some(ipv4_packet) = Ipv4Packet::from_buf(&buf[..n])
+                    && ipv4_packet.header.next_level_protocol
                         == nex_packet::ip::IpNextProtocol::Icmp
-                    {
-                        if let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload()) {
-                            println!(
-                                "\t{:?} from: {:?} to {:?}, TTL: {}",
-                                icmp_packet.header.icmp_type,
-                                ipv4_packet.header.source,
-                                ipv4_packet.header.destination,
-                                ipv4_packet.header.ttl
-                            );
-                            match EchoReplyPacket::try_from(icmp_packet) {
-                                Ok(reply) => {
-                                    println!(
-                                        "\tID: {}, Seq: {}",
-                                        reply.identifier, reply.sequence_number
-                                    );
-                                }
-                                Err(_) => {
-                                    println!("\tReceived non-echo-reply ICMP packet");
-                                }
-                            }
+                    && let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload())
+                {
+                    println!(
+                        "\t{:?} from: {:?} to {:?}, TTL: {}",
+                        icmp_packet.header.icmp_type,
+                        ipv4_packet.header.source,
+                        ipv4_packet.header.destination,
+                        ipv4_packet.header.ttl
+                    );
+                    match EchoReplyPacket::try_from(icmp_packet) {
+                        Ok(reply) => {
+                            println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                        }
+                        Err(_) => {
+                            println!("\tReceived non-echo-reply ICMP packet");
                         }
                     }
                 }

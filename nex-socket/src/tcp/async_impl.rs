@@ -141,7 +141,7 @@ impl AsyncTcpSocket {
             Ok(_) => {
                 // connection completed immediately (rare case)
                 let std_stream: StdTcpStream = self.socket.into();
-                return TcpStream::from_std(std_stream);
+                TcpStream::from_std(std_stream)
             }
             Err(e)
                 if e.kind() == io::ErrorKind::WouldBlock
@@ -157,11 +157,9 @@ impl AsyncTcpSocket {
                     return Err(err);
                 }
 
-                return Ok(stream);
+                Ok(stream)
             }
-            Err(e) => {
-                return Err(e);
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -407,7 +405,7 @@ impl AsyncTcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Convert the internal socket into a Tokio `TcpStream`.

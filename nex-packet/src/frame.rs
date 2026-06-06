@@ -43,18 +43,10 @@ pub struct TransportLayer {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Default)]
 pub struct ParseOption {
     pub from_ip_packet: bool,
     pub offset: usize,
-}
-
-impl Default for ParseOption {
-    fn default() -> Self {
-        Self {
-            from_ip_packet: false,
-            offset: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -377,6 +369,42 @@ fn find_payload_slice<'a>(
     &available[available.len() - payload_len..]
 }
 
+fn parse_icmp_packet(packet: Bytes, frame: &mut Frame) {
+    match IcmpPacket::from_bytes(packet.clone()) {
+        Some(icmp_packet) => {
+            let (header, payload) = icmp_packet.into_parts();
+            if let Some(ip) = &mut frame.ip {
+                ip.icmp = Some(header);
+            }
+            frame.payload = payload;
+        }
+        None => {
+            if let Some(ip) = &mut frame.ip {
+                ip.icmp = None;
+            }
+            frame.payload = packet;
+        }
+    }
+}
+
+fn parse_icmpv6_packet(packet: Bytes, frame: &mut Frame) {
+    match Icmpv6Packet::from_bytes(packet.clone()) {
+        Some(icmpv6_packet) => {
+            let (header, payload) = icmpv6_packet.into_parts();
+            if let Some(ip) = &mut frame.ip {
+                ip.icmpv6 = Some(header);
+            }
+            frame.payload = payload;
+        }
+        None => {
+            if let Some(ip) = &mut frame.ip {
+                ip.icmpv6 = None;
+            }
+            frame.payload = packet;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,41 +490,5 @@ mod tests {
         let packet = create_dummy_ethernet_packet(&ipv4, 0).expect("dummy ethernet");
         assert_eq!(packet.header.ethertype, EtherType::Ipv4);
         assert_eq!(packet.payload, Bytes::from(ipv4.to_vec()));
-    }
-}
-
-fn parse_icmp_packet(packet: Bytes, frame: &mut Frame) {
-    match IcmpPacket::from_bytes(packet.clone()) {
-        Some(icmp_packet) => {
-            let (header, payload) = icmp_packet.into_parts();
-            if let Some(ip) = &mut frame.ip {
-                ip.icmp = Some(header);
-            }
-            frame.payload = payload;
-        }
-        None => {
-            if let Some(ip) = &mut frame.ip {
-                ip.icmp = None;
-            }
-            frame.payload = packet;
-        }
-    }
-}
-
-fn parse_icmpv6_packet(packet: Bytes, frame: &mut Frame) {
-    match Icmpv6Packet::from_bytes(packet.clone()) {
-        Some(icmpv6_packet) => {
-            let (header, payload) = icmpv6_packet.into_parts();
-            if let Some(ip) = &mut frame.ip {
-                ip.icmpv6 = Some(header);
-            }
-            frame.payload = payload;
-        }
-        None => {
-            if let Some(ip) = &mut frame.ip {
-                ip.icmpv6 = None;
-            }
-            frame.payload = packet;
-        }
     }
 }

@@ -97,9 +97,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     // Set kernel buffer size
-    let ret = unsafe {
-        windows::PacketSetBuff(adapter.adapter, config.read_buffer_size as libc::c_int)
-    };
+    let ret =
+        unsafe { windows::PacketSetBuff(adapter.adapter, config.read_buffer_size as libc::c_int) };
     if ret == 0 {
         return Err(io::Error::last_os_error());
     }

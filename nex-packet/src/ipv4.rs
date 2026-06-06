@@ -242,7 +242,7 @@ impl Packet for Ipv4Packet {
         }
 
         // padding
-        while tmp_buf.len() % 4 != 0 {
+        while !tmp_buf.len().is_multiple_of(4) {
             tmp_buf.put_u8(0);
         }
 
@@ -254,8 +254,8 @@ impl Packet for Ipv4Packet {
 
         let mut buf = BytesMut::with_capacity(self.total_len());
 
-        buf.put_u8((self.header.version << 4 | header_len_words) as u8);
-        buf.put_u8((self.header.dscp << 2 | self.header.ecn) as u8);
+        buf.put_u8(self.header.version << 4 | header_len_words);
+        buf.put_u8(self.header.dscp << 2 | self.header.ecn);
 
         // 2. Fixed header fields
         // Keep header total length consistent with the actual serialized packet length.
@@ -557,7 +557,7 @@ impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
 
     fn header_mut(&mut self) -> &mut [u8] {
         let header_len = self.header_len();
-        let (header, _) = (&mut *self.buffer).split_at_mut(header_len);
+        let (header, _) = self.buffer.split_at_mut(header_len);
         header
     }
 
@@ -570,7 +570,7 @@ impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
     fn payload_mut(&mut self) -> &mut [u8] {
         let header_len = self.header_len();
         let payload_len = self.payload_len();
-        let (_, payload) = (&mut *self.buffer).split_at_mut(header_len);
+        let (_, payload) = self.buffer.split_at_mut(header_len);
         &mut payload[..payload_len]
     }
 }
@@ -1030,7 +1030,7 @@ mod tests {
         }
 
         let frozen = packet.freeze().expect("freeze mutable packet");
-        drop(packet);
+        let _ = packet;
 
         assert_eq!(raw[8], 128);
         assert_eq!(&raw[16..20], &[192, 0, 2, 1]);
@@ -1105,6 +1105,9 @@ mod tests {
         let packet = Ipv4Packet::from_bytes(raw.clone()).expect("TSO-style packet should parse");
         assert_eq!(packet.header.total_length as usize, raw.len());
         assert_eq!(packet.payload.len(), raw.len() - IPV4_HEADER_LEN);
-        assert_eq!(packet.payload, Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(
+            packet.payload,
+            Bytes::from_static(&[0xde, 0xad, 0xbe, 0xef])
+        );
     }
 }

@@ -187,6 +187,7 @@ fn parse_ipv6_from_bytes(bytes: Bytes, strict: bool) -> Result<Ipv6Packet, Parse
     parse_ipv6_parts(&bytes, strict, |range| bytes.slice(range))
 }
 
+#[allow(clippy::while_let_loop)]
 fn parse_ipv6_parts<F>(
     bytes: &[u8],
     strict: bool,
@@ -389,7 +390,7 @@ impl<'a> MutablePacket<'a> for MutableIpv6Packet<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(IPV6_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(IPV6_HEADER_LEN);
         header
     }
 
@@ -398,7 +399,7 @@ impl<'a> MutablePacket<'a> for MutableIpv6Packet<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(IPV6_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(IPV6_HEADER_LEN);
         payload
     }
 }
@@ -556,16 +557,21 @@ impl Ipv6ExtensionHeader {
             Ipv6ExtensionHeader::HopByHop { data, .. }
             | Ipv6ExtensionHeader::Destination { data, .. } => {
                 let base = 2 + data.len();
-                (base + 7) / 8 * 8 // padding to multiple of 8
+                base.div_ceil(8) * 8 // padding to multiple of 8
             }
             Ipv6ExtensionHeader::Routing { data, .. } => {
                 let base = 4 + data.len();
-                (base + 7) / 8 * 8
+                base.div_ceil(8) * 8
             }
             Ipv6ExtensionHeader::Fragment { .. } => 8,
             Ipv6ExtensionHeader::Raw { raw, .. } => raw.len(),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn kind(&self) -> ExtensionHeaderType {
         match self {
             Ipv6ExtensionHeader::HopByHop { .. } => ExtensionHeaderType::HopByHop,
@@ -574,7 +580,7 @@ impl Ipv6ExtensionHeader {
             Ipv6ExtensionHeader::Fragment { .. } => ExtensionHeaderType::Fragment,
             Ipv6ExtensionHeader::Raw { raw, .. } => {
                 // Even for Raw we can read the first byte to guess the kind
-                let kind = raw.get(0).copied().unwrap_or(0xff);
+                let kind = raw.first().copied().unwrap_or(0xff);
                 match kind {
                     0 => ExtensionHeaderType::HopByHop,
                     43 => ExtensionHeaderType::Routing,

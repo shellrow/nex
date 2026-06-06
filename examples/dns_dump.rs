@@ -80,14 +80,14 @@ fn main() {
                             IpAddr::V4(ipv4.header.destination),
                         );
                     }
-                } else if let EtherType::Ipv6 = eth_packet.header.ethertype {
-                    if let Some(ipv6) = Ipv6Packet::from_bytes(eth_packet.payload.clone()) {
-                        handle_udp(
-                            ipv6.payload,
-                            IpAddr::V6(ipv6.header.source),
-                            IpAddr::V6(ipv6.header.destination),
-                        );
-                    }
+                } else if let EtherType::Ipv6 = eth_packet.header.ethertype
+                    && let Some(ipv6) = Ipv6Packet::from_bytes(eth_packet.payload.clone())
+                {
+                    handle_udp(
+                        ipv6.payload,
+                        IpAddr::V6(ipv6.header.source),
+                        IpAddr::V6(ipv6.header.destination),
+                    );
                 }
             }
             Err(e) => eprintln!("Failed to read packet: {}", e),
@@ -96,57 +96,56 @@ fn main() {
 }
 
 fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
-    if let Some(udp) = UdpPacket::from_bytes(packet.clone()) {
-        if udp.payload.len() > 0 {
-            if let Some(dns) = DnsPacket::from_bytes(udp.payload.clone()) {
-                println!(
-                    "DNS Packet: {}:{} > {}:{}",
-                    src, udp.header.source, dst, udp.header.destination
-                );
+    if let Some(udp) = UdpPacket::from_bytes(packet.clone())
+        && !udp.payload.is_empty()
+        && let Some(dns) = DnsPacket::from_bytes(udp.payload.clone())
+    {
+        println!(
+            "DNS Packet: {}:{} > {}:{}",
+            src, udp.header.source, dst, udp.header.destination
+        );
 
-                for query in &dns.queries {
-                    println!(
-                        "  Query: {:?} (type: {:?}, class: {:?})",
-                        query.get_qname_parsed(),
-                        query.qtype,
-                        query.qclass
-                    );
-                }
+        for query in &dns.queries {
+            println!(
+                "  Query: {:?} (type: {:?}, class: {:?})",
+                query.get_qname_parsed(),
+                query.qtype,
+                query.qclass
+            );
+        }
 
-                for response in &dns.responses {
-                    match response.rtype {
-                        DnsType::A | DnsType::AAAA => {
-                            if let Some(ip) = response.get_ip() {
-                                println!(
-                                    "  Response: {} (type: {:?}, ttl: {})",
-                                    ip, response.rtype, response.ttl
-                                );
-                            } else {
-                                println!("  Invalid IP data for type: {:?}", response.rtype);
-                            }
-                        }
-                        DnsType::CNAME | DnsType::NS | DnsType::PTR => {
-                            if let Some(name) = response.get_name() {
-                                println!(
-                                    "  Response: {} (type: {:?}, ttl: {})",
-                                    name, response.rtype, response.ttl
-                                );
-                            } else {
-                                println!("  Invalid name data for type: {:?}", response.rtype);
-                            }
-                        }
-                        DnsType::TXT => {
-                            if let Some(txts) = response.get_txt_strings() {
-                                for txt in txts {
-                                    println!("  TXT: \"{}\" (ttl: {})", txt, response.ttl);
-                                }
-                            } else {
-                                println!("  Invalid TXT data");
-                            }
-                        }
-                        _ => {}
+        for response in &dns.responses {
+            match response.rtype {
+                DnsType::A | DnsType::AAAA => {
+                    if let Some(ip) = response.get_ip() {
+                        println!(
+                            "  Response: {} (type: {:?}, ttl: {})",
+                            ip, response.rtype, response.ttl
+                        );
+                    } else {
+                        println!("  Invalid IP data for type: {:?}", response.rtype);
                     }
                 }
+                DnsType::CNAME | DnsType::NS | DnsType::PTR => {
+                    if let Some(name) = response.get_name() {
+                        println!(
+                            "  Response: {} (type: {:?}, ttl: {})",
+                            name, response.rtype, response.ttl
+                        );
+                    } else {
+                        println!("  Invalid name data for type: {:?}", response.rtype);
+                    }
+                }
+                DnsType::TXT => {
+                    if let Some(txts) = response.get_txt_strings() {
+                        for txt in txts {
+                            println!("  TXT: \"{}\" (ttl: {})", txt, response.ttl);
+                        }
+                    } else {
+                        println!("  Invalid TXT data");
+                    }
+                }
+                _ => {}
             }
         }
     }

@@ -11,20 +11,18 @@ mod bindings;
 pub mod async_io;
 
 #[cfg(windows)]
-#[path = "wpcap.rs"]
-mod backend;
-
-#[cfg(windows)]
 pub mod wpcap;
 
-#[cfg(all(any(target_os = "linux", target_os = "android")))]
-#[path = "linux.rs"]
-mod backend;
+#[cfg(windows)]
+use wpcap as backend;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod linux;
 
-#[cfg(all(any(
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use linux as backend;
+
+#[cfg(any(
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd",
@@ -32,19 +30,19 @@ pub mod linux;
     target_os = "solaris",
     target_os = "macos",
     target_os = "ios"
-)))]
-#[path = "bpf.rs"]
-mod backend;
+))]
+pub mod bpf;
 
 #[cfg(any(
     target_os = "freebsd",
+    target_os = "openbsd",
     target_os = "netbsd",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "macos",
     target_os = "ios"
 ))]
-pub mod bpf;
+use bpf as backend;
 
 #[cfg(feature = "pcap")]
 pub mod pcap;

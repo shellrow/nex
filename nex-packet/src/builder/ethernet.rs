@@ -11,6 +11,12 @@ pub struct EthernetPacketBuilder {
     packet: EthernetPacket,
 }
 
+impl Default for EthernetPacketBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EthernetPacketBuilder {
     /// Create a new builder instance.
     pub fn new() -> Self {

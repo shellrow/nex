@@ -12,6 +12,12 @@ pub struct Ipv6PacketBuilder {
     packet: Ipv6Packet,
 }
 
+impl Default for Ipv6PacketBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ipv6PacketBuilder {
     /// Create a new builder
     pub fn new() -> Self {

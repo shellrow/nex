@@ -112,8 +112,8 @@ impl Packet for VlanPacket {
             payload: Bytes::copy_from_slice(bytes),
         })
     }
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&bytes)
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -121,7 +121,7 @@ impl Packet for VlanPacket {
 
         let pcp_bits = (self.header.priority_code_point.value() as u16 & 0b111) << 13;
         let dei_bits = (self.header.drop_eligible_id as u16 & 0b1) << 12;
-        let vlan_bits = self.header.vlan_id as u16 & 0x0FFF;
+        let vlan_bits = self.header.vlan_id & 0x0FFF;
 
         let tci = pcp_bits | dei_bits | vlan_bits;
 
@@ -198,7 +198,7 @@ impl<'a> MutablePacket<'a> for MutableVlanPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(VLAN_HEADER_LEN);
         header
     }
 
@@ -207,7 +207,7 @@ impl<'a> MutablePacket<'a> for MutableVlanPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(VLAN_HEADER_LEN);
         payload
     }
 }
@@ -241,7 +241,7 @@ impl<'a> MutableVlanPacket<'a> {
 
     pub fn set_drop_eligible_id(&mut self, dei: u1) {
         let buf = self.raw_mut();
-        buf[0] = (buf[0] & !(1 << 4)) | (((dei & 0x1) as u8) << 4);
+        buf[0] = (buf[0] & !(1 << 4)) | ((dei & 0x1) << 4);
     }
 
     pub fn get_vlan_id(&self) -> u16 {

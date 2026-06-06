@@ -91,7 +91,7 @@ impl Packet for GrePacket {
             recursion_control,
             zero_flags,
             version,
-            protocol_type: protocol_type.into(),
+            protocol_type,
             checksum,
             offset,
             key,
@@ -122,7 +122,7 @@ impl Packet for GrePacket {
         flags |= self.version as u16;
 
         buf.put_u16(flags);
-        buf.put_u16(self.protocol_type.into());
+        buf.put_u16(self.protocol_type);
 
         if self.checksum_present != 0 || self.routing_present != 0 {
             for c in &self.checksum {
@@ -170,7 +170,7 @@ impl Packet for GrePacket {
         flags |= self.version as u16;
 
         buf.put_u16(flags);
-        buf.put_u16(self.protocol_type.into());
+        buf.put_u16(self.protocol_type);
 
         if self.checksum_present != 0 || self.routing_present != 0 {
             for c in &self.checksum {
@@ -269,7 +269,7 @@ mod tests {
             0x00,
         ]);
 
-        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+        let gre_packet = GrePacket::from_buf(&packet.clone()).unwrap();
 
         assert_eq!(&gre_packet.to_bytes(), &packet);
     }
@@ -285,7 +285,7 @@ mod tests {
             0x00,
         ]);
 
-        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+        let gre_packet = GrePacket::from_buf(&packet.clone()).unwrap();
 
         assert_eq!(&gre_packet.to_bytes(), &packet);
     }

@@ -663,8 +663,8 @@ impl Packet for DnsQueryPacket {
         })
     }
 
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&bytes)
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -795,7 +795,7 @@ impl Packet for DnsResponsePacket {
 
         let mut pos = 0;
 
-        let name_tag = u16::from_be_bytes([buf[pos], buf[pos + 1]]).into();
+        let name_tag = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
         pos += 2;
 
         let rtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
@@ -804,10 +804,10 @@ impl Packet for DnsResponsePacket {
         let rclass = DnsClass::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
         pos += 2;
 
-        let ttl = u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]).into();
+        let ttl = u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
 
-        let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]).into();
+        let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
         pos += 2;
 
         let data_len_usize = data_len as usize;
@@ -831,18 +831,18 @@ impl Packet for DnsResponsePacket {
             payload,
         })
     }
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::from_buf(&bytes)
     }
 
     fn to_bytes(&self) -> Bytes {
         let mut buf = bytes::BytesMut::with_capacity(self.total_len());
 
-        buf.put_u16(self.name_tag.into());
+        buf.put_u16(self.name_tag);
         buf.put_u16(self.rtype.value());
         buf.put_u16(self.rclass.value());
-        buf.put_u32(self.ttl.into());
-        buf.put_u16(self.data_len.into());
+        buf.put_u32(self.ttl);
+        buf.put_u16(self.data_len);
         buf.put_slice(&self.data);
 
         buf.freeze()
@@ -883,7 +883,7 @@ impl DnsResponsePacket {
         }
 
         // name_tag (2)
-        let name_tag = u16::from_be_bytes([buf[0], buf[1]]).into();
+        let name_tag = u16::from_be_bytes([buf[0], buf[1]]);
         *buf = &buf[2..];
 
         // rtype (2)
@@ -895,7 +895,7 @@ impl DnsResponsePacket {
         *buf = &buf[2..];
 
         // ttl (4)
-        let ttl = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]).into();
+        let ttl = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
         *buf = &buf[4..];
 
         // data_len (2)
@@ -914,7 +914,7 @@ impl DnsResponsePacket {
             rtype,
             rclass,
             ttl,
-            data_len: data_len.into(),
+            data_len,
             data,
             payload,
         })
@@ -1047,12 +1047,12 @@ impl Packet for DnsPacket {
         flags |= (self.header.is_non_authenticated_data as u16) << 4;
         flags |= self.header.rcode.value() as u16;
 
-        buf.put_u16(self.header.id.into());
+        buf.put_u16(self.header.id);
         buf.put_u16(flags);
-        buf.put_u16(self.header.query_count.into());
-        buf.put_u16(self.header.response_count.into());
-        buf.put_u16(self.header.authority_rr_count.into());
-        buf.put_u16(self.header.additional_rr_count.into());
+        buf.put_u16(self.header.query_count);
+        buf.put_u16(self.header.response_count);
+        buf.put_u16(self.header.authority_rr_count);
+        buf.put_u16(self.header.additional_rr_count);
 
         // Write all queries
         for query in &self.queries {
@@ -1127,7 +1127,7 @@ impl DnsPacket {
         cursor = &cursor[12..];
 
         let header = DnsHeader {
-            id: id.into(),
+            id,
             is_response: ((flags >> 15) & 0x1) as u8,
             opcode: OpCode::new(((flags >> 11) & 0xF) as u8),
             is_authoriative: ((flags >> 10) & 0x1) as u8,
@@ -1138,10 +1138,10 @@ impl DnsPacket {
             is_answer_authenticated: ((flags >> 5) & 0x1) as u8,
             is_non_authenticated_data: ((flags >> 4) & 0x1) as u8,
             rcode: RetCode::new((flags & 0xF) as u8),
-            query_count: query_count.into(),
-            response_count: response_count.into(),
-            authority_rr_count: authority_rr_count.into(),
-            additional_rr_count: additional_rr_count.into(),
+            query_count,
+            response_count,
+            authority_rr_count,
+            additional_rr_count,
         };
 
         // Parse each section, passing mutable slices

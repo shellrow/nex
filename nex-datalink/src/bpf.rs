@@ -3,7 +3,6 @@
 use crate::bindings::bpf;
 use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
-use nex_sys;
 
 use std::collections::VecDeque;
 use std::ffi::CString;
@@ -40,7 +39,7 @@ pub struct Config {
     pub bpf_fd_attempts: usize,
 }
 
-impl<'a> From<&'a super::Config> for Config {
+impl From<&super::Config> for Config {
     fn from(config: &super::Config) -> Config {
         Config {
             write_buffer_size: config.write_buffer_size,
@@ -182,9 +181,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         allocated_read_buffer_size += buffer_offset;
 
         // Allow packets to be read back after they are written
-        if let Err(e) = set_feedback(fd) {
-            return Err(e);
-        }
+        set_feedback(fd)?
     } else {
         // Don't fill in source MAC
         if unsafe { bpf::ioctl(fd, bpf::BIOCSHDRCMPLT, &1) } == -1 {
@@ -205,15 +202,13 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         return Err(err);
     }
 
-    let fd = Arc::new(nex_sys::FileDesc { fd: fd });
+    let fd = Arc::new(nex_sys::FileDesc { fd });
     let mut sender = Box::new(RawSenderImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
-        loopback: loopback,
-        timeout: config
-            .write_timeout
-            .map(|to| nex_sys::duration_to_timespec(to)),
+        loopback,
+        timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
     });
     unsafe {
         libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
@@ -223,11 +218,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; allocated_read_buffer_size],
-        buffer_offset: buffer_offset,
-        loopback: loopback,
-        timeout: config
-            .read_timeout
-            .map(|to| nex_sys::duration_to_timespec(to)),
+        buffer_offset,
+        loopback,
+        timeout: config.read_timeout.map(nex_sys::duration_to_timespec),
         // Enough room for minimally sized packets without reallocating
         packets: VecDeque::with_capacity(allocated_read_buffer_size / 64),
     });
@@ -287,17 +280,15 @@ impl RawSender for RawSenderImpl {
                     return Some(Err(io::Error::last_os_error()));
                 } else if ret == 0 {
                     return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
-                } else {
-                    match unsafe {
-                        libc::write(
-                            self.fd.fd,
-                            chunk.as_ptr().offset(offset as isize) as *const libc::c_void,
-                            (chunk.len() - offset) as libc::size_t,
-                        )
-                    } {
-                        len if len == -1 => return Some(Err(io::Error::last_os_error())),
-                        _ => (),
-                    }
+                } else if unsafe {
+                    libc::write(
+                        self.fd.fd,
+                        chunk.as_ptr().add(offset) as *const libc::c_void,
+                        (chunk.len() - offset) as libc::size_t,
+                    )
+                } == -1
+                {
+                    return Some(Err(io::Error::last_os_error()));
                 }
             }
             Some(Ok(()))
@@ -328,18 +319,18 @@ impl RawSender for RawSenderImpl {
             )
         };
         if ret == -1 {
-            return Some(Err(io::Error::last_os_error()));
+            Some(Err(io::Error::last_os_error()))
         } else if ret == 0 {
-            return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
+            Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")))
         } else {
             match unsafe {
                 libc::write(
                     self.fd.fd,
-                    packet.as_ptr().offset(offset as isize) as *const libc::c_void,
+                    packet.as_ptr().add(offset) as *const libc::c_void,
                     (packet.len() - offset) as libc::size_t,
                 )
             } {
-                len if len == -1 => Some(Err(io::Error::last_os_error())),
+                -1 => Some(Err(io::Error::last_os_error())),
                 _ => Some(Ok(())),
             }
         }
@@ -424,7 +415,7 @@ impl RawReceiver for RawReceiverImpl {
             start -= padding;
         }
         // Zero out part that will become fake ethernet header if on loopback.
-        for i in (&mut self.read_buffer[start..start + self.buffer_offset]).iter_mut() {
+        for i in self.read_buffer[start..start + self.buffer_offset].iter_mut() {
             *i = 0;
         }
         Ok(&self.read_buffer[start..start + len])

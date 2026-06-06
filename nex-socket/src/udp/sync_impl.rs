@@ -1,3 +1,5 @@
+#![allow(clippy::useless_conversion)]
+
 use crate::udp::UdpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
@@ -188,50 +190,44 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta {
-                        if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                            if let Some(src) = meta.source_addr {
-                                if !src.is_ipv4() {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "source_addr family does not match target",
-                                    ));
-                                }
-                            }
-                            let mut pktinfo: libc::in_pktinfo = unsafe { std::mem::zeroed() };
-                            if let Some(src) = meta.source_addr.and_then(|ip| match ip {
-                                IpAddr::V4(v4) => Some(v4),
-                                IpAddr::V6(_) => None,
-                            }) {
-                                pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
-                            }
-                            if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "interface_index is out of range for this platform",
-                                    )
-                                })?;
-                            }
-                            let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
-                            return sendmsg(
-                                raw_fd,
-                                &iov,
-                                &cmsgs,
-                                MsgFlags::empty(),
-                                Some(&sockaddr),
-                            )
-                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
+                    if let Some(meta) = meta
+                        && (meta.source_addr.is_some() || meta.interface_index.is_some())
+                    {
+                        if let Some(src) = meta.source_addr
+                            && !src.is_ipv4()
+                        {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "source_addr family does not match target",
+                            ));
                         }
+                        let mut pktinfo: libc::in_pktinfo = unsafe { std::mem::zeroed() };
+                        if let Some(src) = meta.source_addr.and_then(|ip| match ip {
+                            IpAddr::V4(v4) => Some(v4),
+                            IpAddr::V6(_) => None,
+                        }) {
+                            pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
+                        }
+                        if let Some(ifindex) = meta.interface_index {
+                            pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "interface_index is out of range for this platform",
+                                )
+                            })?;
+                        }
+                        let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
+                        return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
+                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta {
-                    if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this platform",
-                        ));
-                    }
+                if let Some(meta) = meta
+                    && (meta.source_addr.is_some() || meta.interface_index.is_some())
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "send_msg packet-info metadata is not supported on this platform",
+                    ));
                 }
                 sendmsg(raw_fd, &iov, &[], MsgFlags::empty(), Some(&sockaddr))
                     .map_err(|e| io::Error::from_raw_os_error(e as i32))
@@ -246,50 +242,44 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta {
-                        if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                            if let Some(src) = meta.source_addr {
-                                if !src.is_ipv6() {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "source_addr family does not match target",
-                                    ));
-                                }
-                            }
-                            let mut pktinfo: libc::in6_pktinfo = unsafe { std::mem::zeroed() };
-                            if let Some(src) = meta.source_addr.and_then(|ip| match ip {
-                                IpAddr::V4(_) => None,
-                                IpAddr::V6(v6) => Some(v6),
-                            }) {
-                                pktinfo.ipi6_addr.s6_addr = src.octets();
-                            }
-                            if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi6_ifindex = ifindex.try_into().map_err(|_| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "interface_index is out of range for this platform",
-                                    )
-                                })?;
-                            }
-                            let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
-                            return sendmsg(
-                                raw_fd,
-                                &iov,
-                                &cmsgs,
-                                MsgFlags::empty(),
-                                Some(&sockaddr),
-                            )
-                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
+                    if let Some(meta) = meta
+                        && (meta.source_addr.is_some() || meta.interface_index.is_some())
+                    {
+                        if let Some(src) = meta.source_addr
+                            && !src.is_ipv6()
+                        {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "source_addr family does not match target",
+                            ));
                         }
+                        let mut pktinfo: libc::in6_pktinfo = unsafe { std::mem::zeroed() };
+                        if let Some(src) = meta.source_addr.and_then(|ip| match ip {
+                            IpAddr::V4(_) => None,
+                            IpAddr::V6(v6) => Some(v6),
+                        }) {
+                            pktinfo.ipi6_addr.s6_addr = src.octets();
+                        }
+                        if let Some(ifindex) = meta.interface_index {
+                            pktinfo.ipi6_ifindex = ifindex.try_into().map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "interface_index is out of range for this platform",
+                                )
+                            })?;
+                        }
+                        let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
+                        return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
+                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta {
-                    if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this platform",
-                        ));
-                    }
+                if let Some(meta) = meta
+                    && (meta.source_addr.is_some() || meta.interface_index.is_some())
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "send_msg packet-info metadata is not supported on this platform",
+                    ));
                 }
                 sendmsg(raw_fd, &iov, &[], MsgFlags::empty(), Some(&sockaddr))
                     .map_err(|e| io::Error::from_raw_os_error(e as i32))
@@ -629,7 +619,7 @@ impl UdpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Convert into a raw `std::net::UdpSocket`.
@@ -672,7 +662,9 @@ mod tests {
     #[test]
     fn create_v4_socket() {
         let sock = UdpSocket::v4_dgram().expect("create socket");
-        sock.socket.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into()).expect("bind");
+        sock.socket
+            .bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
         let addr = sock.local_addr().expect("addr");
         assert!(addr.is_ipv4());
     }

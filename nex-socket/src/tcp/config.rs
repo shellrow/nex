@@ -24,7 +24,7 @@ impl TcpSocketType {
     }
 
     /// Converts the TCP socket type to a `socket2::Type`.
-    pub(crate) fn to_sock_type(&self) -> SockType {
+    pub(crate) fn to_sock_type(self) -> SockType {
         match self {
             TcpSocketType::Stream => SockType::STREAM,
             TcpSocketType::Raw => SockType::RAW,

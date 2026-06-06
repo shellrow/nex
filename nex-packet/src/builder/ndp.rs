@@ -7,7 +7,7 @@ use std::net::Ipv6Addr;
 
 /// Length rounded up to an 8-byte multiple (for option length)
 fn octets_len(len: usize) -> u8 {
-    ((len + 7) / 8) as u8
+    len.div_ceil(8) as u8
 }
 
 /// Builder for ICMPv6 Neighbor Solicitation packets

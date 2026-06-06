@@ -81,7 +81,7 @@ fn main() {
     match dst_ip {
         IpAddr::V4(_) => {
             // For IPv4, use the first IPv4 address of the interface
-            match interface.ipv4.get(0) {
+            match interface.ipv4.first() {
                 Some(ipv4) => src_ip = IpAddr::V4(ipv4.addr()),
                 None => {
                     println!("No IPv4 address on the interface");
@@ -165,7 +165,7 @@ fn main() {
         .source(if use_tun {
             MacAddr::zero()
         } else {
-            interface.mac_addr.clone().unwrap()
+            interface.mac_addr.unwrap()
         })
         .destination(if use_tun {
             MacAddr::zero()
@@ -201,51 +201,50 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = payload_offset;
                 }
-                let frame: Frame = Frame::from_buf(&packet, parse_option).unwrap();
+                let frame: Frame = Frame::from_buf(packet, parse_option).unwrap();
                 // Check each layer. If the packet is TCP SYN+ACK or RST+ACK, print it out
-                if let Some(ip_layer) = &frame.ip {
-                    if let Some(transport_layer) = &frame.transport {
-                        if let Some(tcp_packet) = &transport_layer.tcp {
-                            if tcp_packet.flags == TcpFlags::SYN | TcpFlags::ACK {
-                                if let Some(ipv4) = &ip_layer.ipv4 {
-                                    println!(
-                                        "Received TCP SYN+ACK packet from {}:{}",
-                                        ipv4.source, tcp_packet.source
-                                    );
-                                } else if let Some(ipv6) = &ip_layer.ipv6 {
-                                    println!(
-                                        "Received TCP SYN+ACK packet from {}:{}",
-                                        ipv6.source, tcp_packet.source
-                                    );
-                                }
-                                println!(
-                                    "---- Interface: {}, Total Length: {} bytes ----",
-                                    interface.name,
-                                    packet.len()
-                                );
-                                println!("Packet Frame: {:?}", frame);
-                                break;
-                            } else if tcp_packet.flags == TcpFlags::RST | TcpFlags::ACK {
-                                if let Some(ipv4) = &ip_layer.ipv4 {
-                                    println!(
-                                        "Received TCP RST+ACK packet from {}:{}",
-                                        ipv4.source, tcp_packet.source
-                                    );
-                                } else if let Some(ipv6) = &ip_layer.ipv6 {
-                                    println!(
-                                        "Received TCP RST+ACK packet from {}:{}",
-                                        ipv6.source, tcp_packet.source
-                                    );
-                                }
-                                println!(
-                                    "---- Interface: {}, Total Length: {} bytes ----",
-                                    interface.name,
-                                    packet.len()
-                                );
-                                println!("Packet Frame: {:?}", frame);
-                                break;
-                            }
+                if let Some(ip_layer) = &frame.ip
+                    && let Some(transport_layer) = &frame.transport
+                    && let Some(tcp_packet) = &transport_layer.tcp
+                {
+                    if tcp_packet.flags == TcpFlags::SYN | TcpFlags::ACK {
+                        if let Some(ipv4) = &ip_layer.ipv4 {
+                            println!(
+                                "Received TCP SYN+ACK packet from {}:{}",
+                                ipv4.source, tcp_packet.source
+                            );
+                        } else if let Some(ipv6) = &ip_layer.ipv6 {
+                            println!(
+                                "Received TCP SYN+ACK packet from {}:{}",
+                                ipv6.source, tcp_packet.source
+                            );
                         }
+                        println!(
+                            "---- Interface: {}, Total Length: {} bytes ----",
+                            interface.name,
+                            packet.len()
+                        );
+                        println!("Packet Frame: {:?}", frame);
+                        break;
+                    } else if tcp_packet.flags == TcpFlags::RST | TcpFlags::ACK {
+                        if let Some(ipv4) = &ip_layer.ipv4 {
+                            println!(
+                                "Received TCP RST+ACK packet from {}:{}",
+                                ipv4.source, tcp_packet.source
+                            );
+                        } else if let Some(ipv6) = &ip_layer.ipv6 {
+                            println!(
+                                "Received TCP RST+ACK packet from {}:{}",
+                                ipv6.source, tcp_packet.source
+                            );
+                        }
+                        println!(
+                            "---- Interface: {}, Total Length: {} bytes ----",
+                            interface.name,
+                            packet.len()
+                        );
+                        println!("Packet Frame: {:?}", frame);
+                        break;
                     }
                 }
             }

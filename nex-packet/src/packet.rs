@@ -33,6 +33,7 @@ pub trait Packet: Sized {
         self.total_len() == 0
     }
     /// Convert the packet to a mutable byte buffer.
+    #[allow(clippy::wrong_self_convention)]
     fn to_bytes_mut(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(self.total_len());
         buf.extend_from_slice(&self.to_bytes());
@@ -127,7 +128,7 @@ impl<'a, P: Packet> MutablePacket<'a> for GenericMutablePacket<'a, P> {
 
     fn header_mut(&mut self) -> &mut [u8] {
         let (header_len, _) = self.lengths();
-        let (header, _) = (&mut *self.buffer).split_at_mut(header_len);
+        let (header, _) = self.buffer.split_at_mut(header_len);
         header
     }
 
@@ -138,7 +139,7 @@ impl<'a, P: Packet> MutablePacket<'a> for GenericMutablePacket<'a, P> {
 
     fn payload_mut(&mut self) -> &mut [u8] {
         let (header_len, payload_len) = self.lengths();
-        let (_, payload) = (&mut *self.buffer).split_at_mut(header_len);
+        let (_, payload) = self.buffer.split_at_mut(header_len);
         &mut payload[..payload_len]
     }
 }

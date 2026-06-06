@@ -55,16 +55,11 @@ fn main() {
                     || (cfg!(any(target_os = "macos", target_os = "ios"))
                         && interface.is_loopback())
                 {
-                    let payload_offset;
-                    if interface.is_loopback() {
-                        payload_offset = 14;
-                    } else {
-                        payload_offset = 0;
-                    }
+                    let payload_offset = if interface.is_loopback() { 14 } else { 0 };
                     parse_option.from_ip_packet = true;
                     parse_option.offset = payload_offset;
                 }
-                match Frame::from_buf(&packet, parse_option) {
+                match Frame::from_buf(packet, parse_option) {
                     Some(frame) => {
                         display_frame(&frame);
                     }

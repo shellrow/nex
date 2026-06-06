@@ -481,7 +481,7 @@ impl<'a> MutablePacket<'a> for MutableArpPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ARP_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ARP_HEADER_LEN);
         header
     }
 
@@ -490,7 +490,7 @@ impl<'a> MutablePacket<'a> for MutableArpPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ARP_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ARP_HEADER_LEN);
         payload
     }
 }

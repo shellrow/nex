@@ -242,7 +242,7 @@ impl Packet for IcmpPacket {
 impl IcmpPacket {
     pub fn with_computed_checksum(&self) -> Self {
         let mut pkt = self.clone();
-        pkt.header.checksum = checksum(&pkt).into();
+        pkt.header.checksum = checksum(&pkt);
         pkt
     }
 }
@@ -277,7 +277,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ICMP_COMMON_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ICMP_COMMON_HEADER_LEN);
         header
     }
 
@@ -286,7 +286,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ICMP_COMMON_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ICMP_COMMON_HEADER_LEN);
         payload
     }
 }
@@ -541,8 +541,8 @@ pub mod echo_reply {
 
             Ok(Self {
                 header: pkt.header,
-                identifier: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]).into(),
-                sequence_number: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]).into(),
+                identifier: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]),
+                sequence_number: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -615,8 +615,8 @@ pub mod destination_unreachable {
 
             Ok(Self {
                 header: pkt.header,
-                unused: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]).into(),
-                next_hop_mtu: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]).into(),
+                unused: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]),
+                next_hop_mtu: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -664,8 +664,7 @@ pub mod time_exceeded {
                     pkt.payload[1],
                     pkt.payload[2],
                     pkt.payload[3],
-                ])
-                .into(),
+                ]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -802,7 +801,7 @@ mod tests {
         assert_eq!(packet.get_checksum(), updated);
 
         let frozen = packet.freeze().expect("freeze");
-        let expected: u16 = checksum(&frozen).into();
+        let expected: u16 = checksum(&frozen);
         assert_eq!(packet.get_checksum(), expected);
     }
 
@@ -822,7 +821,7 @@ mod tests {
         assert!(!packet.is_checksum_dirty());
 
         let frozen = packet.freeze().expect("freeze");
-        let expected: u16 = checksum(&frozen).into();
+        let expected: u16 = checksum(&frozen);
         assert_ne!(baseline, expected);
         assert_eq!(packet.get_checksum(), expected);
     }

@@ -32,19 +32,19 @@ impl UdpPacketBuilder {
 
     /// Set the source port
     pub fn source(mut self, port: u16) -> Self {
-        self.packet.header.source = port.into();
+        self.packet.header.source = port;
         self
     }
 
     /// Set the destination port
     pub fn destination(mut self, port: u16) -> Self {
-        self.packet.header.destination = port.into();
+        self.packet.header.destination = port;
         self
     }
 
     /// Set the checksum (optional)
     pub fn checksum(mut self, checksum: u16) -> Self {
-        self.packet.header.checksum = checksum.into();
+        self.packet.header.checksum = checksum;
         self
     }
 
@@ -66,7 +66,7 @@ impl UdpPacketBuilder {
     pub fn build(mut self) -> UdpPacket {
         // Automatically compute the length
         let total_len = UDP_HEADER_LEN + self.packet.payload.len();
-        self.packet.header.length = (total_len as u16).into();
+        self.packet.header.length = total_len as u16;
         // Calculate the checksum
         self.packet.header.checksum =
             crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);

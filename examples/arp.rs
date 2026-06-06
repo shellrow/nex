@@ -47,11 +47,8 @@ fn main() {
         None => Interface::default().expect("Failed to get default interface"),
     };
 
-    let src_mac = interface
-        .mac_addr
-        .clone()
-        .expect("No MAC address on interface");
-    let src_ip = interface.ipv4.get(0).expect("No IPv4 address").addr();
+    let src_mac = interface.mac_addr.expect("No MAC address on interface");
+    let src_ip = interface.ipv4.first().expect("No IPv4 address").addr();
 
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
@@ -80,23 +77,22 @@ fn main() {
     loop {
         match rx.next() {
             Ok(packet) => {
-                let frame = Frame::from_buf(&packet, ParseOption::default()).unwrap();
+                let frame = Frame::from_buf(packet, ParseOption::default()).unwrap();
                 match &frame.datalink {
                     Some(dlink) => {
-                        if let Some(arp) = &dlink.arp {
-                            if arp.operation == ArpOperation::Reply
-                                && arp.sender_proto_addr == target_ip
-                            {
-                                println!("Received ARP Reply from {}", arp.sender_proto_addr);
-                                println!("MAC address: {}", arp.sender_hw_addr);
-                                println!(
-                                    "---- Interface: {}, Total Length: {} bytes ----",
-                                    interface.name,
-                                    packet.len()
-                                );
-                                println!("Frame: {:?}", frame);
-                                break;
-                            }
+                        if let Some(arp) = &dlink.arp
+                            && arp.operation == ArpOperation::Reply
+                            && arp.sender_proto_addr == target_ip
+                        {
+                            println!("Received ARP Reply from {}", arp.sender_proto_addr);
+                            println!("MAC address: {}", arp.sender_hw_addr);
+                            println!(
+                                "---- Interface: {}, Total Length: {} bytes ----",
+                                interface.name,
+                                packet.len()
+                            );
+                            println!("Frame: {:?}", frame);
+                            break;
                         }
                     }
                     None => continue, // No datalink layer

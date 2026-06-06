@@ -55,18 +55,18 @@ pub fn async_channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
 ) -> io::Result<AsyncChannel> {
-    #[cfg(all(any(target_os = "linux", target_os = "android")))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         linux::channel(network_interface, configuration)
     }
-    #[cfg(all(any(
+    #[cfg(any(
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "illumos",
         target_os = "solaris",
         target_os = "macos",
         target_os = "ios",
-    )))]
+    ))]
     {
         bpf::channel(network_interface, configuration)
     }

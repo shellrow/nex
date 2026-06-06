@@ -136,7 +136,7 @@ impl Stream for AsyncBpfSocketReceiver {
                 let padding = ETHERNET_HEADER_SIZE - me.inner.buffer_offset;
                 start -= padding;
             }
-            for i in (&mut me.read_buffer[start..start + me.inner.buffer_offset]).iter_mut() {
+            for i in me.read_buffer[start..start + me.inner.buffer_offset].iter_mut() {
                 *i = 0;
             }
             let pkt = me.read_buffer[start..start + len].to_vec();

@@ -327,7 +327,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpv6Packet<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ICMPV6_COMMON_HEADER_LEN);
         header
     }
 
@@ -336,7 +336,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpv6Packet<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ICMPV6_COMMON_HEADER_LEN);
         payload
     }
 }
@@ -817,11 +817,9 @@ pub mod ndp {
         pub fn option_payload_length(&self) -> usize {
             //let len = option.get_length();
             let len = self.payload.len();
-            if len > 0 { ((len * 8) - 2) as usize } else { 0 }
+            if len > 0 { (len * 8) - 2 } else { 0 }
         }
     }
-
-    /// Calculate a length of a `NdpOption`'s payload.
 
     /// Router Solicitation Message [RFC 4861 Section 4.1]
     ///
@@ -1334,7 +1332,7 @@ pub mod ndp {
             bytes.push(self.header.icmpv6_code.value());
             bytes.extend_from_slice(&self.header.checksum.to_be_bytes());
             bytes.extend_from_slice(&self.reserved.to_be_bytes());
-            for (_, segment) in self.target_addr.segments().iter().enumerate() {
+            for segment in self.target_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
             for option in &self.options {
@@ -1784,10 +1782,10 @@ pub mod ndp {
             bytes.push(self.header.icmpv6_code.value());
             bytes.extend_from_slice(&self.header.checksum.to_be_bytes());
             bytes.extend_from_slice(&self.reserved.to_be_bytes());
-            for (_, segment) in self.target_addr.segments().iter().enumerate() {
+            for segment in self.target_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
-            for (_, segment) in self.dest_addr.segments().iter().enumerate() {
+            for segment in self.dest_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
             for option in &self.options {

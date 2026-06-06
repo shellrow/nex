@@ -24,8 +24,8 @@ impl TcpPacketBuilder {
                     destination: 0,
                     sequence: 0,
                     acknowledgement: 0,
-                    data_offset: 5.into(), // default: header 20 bytes (5 * 4)
-                    reserved: 0.into(),
+                    data_offset: 5, // default: header 20 bytes (5 * 4)
+                    reserved: 0,
                     flags: 0,
                     window: 0xffff,
                     checksum: 0,
@@ -38,22 +38,22 @@ impl TcpPacketBuilder {
     }
 
     pub fn source(mut self, port: u16) -> Self {
-        self.packet.header.source = port.into();
+        self.packet.header.source = port;
         self
     }
 
     pub fn destination(mut self, port: u16) -> Self {
-        self.packet.header.destination = port.into();
+        self.packet.header.destination = port;
         self
     }
 
     pub fn sequence(mut self, seq: u32) -> Self {
-        self.packet.header.sequence = seq.into();
+        self.packet.header.sequence = seq;
         self
     }
 
     pub fn acknowledgement(mut self, ack: u32) -> Self {
-        self.packet.header.acknowledgement = ack.into();
+        self.packet.header.acknowledgement = ack;
         self
     }
 
@@ -63,12 +63,12 @@ impl TcpPacketBuilder {
     }
 
     pub fn window(mut self, size: u16) -> Self {
-        self.packet.header.window = size.into();
+        self.packet.header.window = size;
         self
     }
 
     pub fn urgent_ptr(mut self, ptr: u16) -> Self {
-        self.packet.header.urgent_ptr = ptr.into();
+        self.packet.header.urgent_ptr = ptr;
         self
     }
 
@@ -84,7 +84,7 @@ impl TcpPacketBuilder {
             .map(|opt| opt.length() as usize)
             .sum();
         let total = base_len + opt_len;
-        self.packet.header.data_offset = ((total + 3) / 4) as u8; // round up
+        self.packet.header.data_offset = total.div_ceil(4) as u8; // round up
         self
     }
 

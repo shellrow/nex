@@ -42,12 +42,7 @@ fn main() -> std::io::Result<()> {
             if interface.is_tun()
                 || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback())
             {
-                let payload_offset: usize;
-                if interface.is_loopback() {
-                    payload_offset = 14;
-                } else {
-                    payload_offset = 0;
-                }
+                let payload_offset: usize = if interface.is_loopback() { 14 } else { 0 };
                 let payload = Bytes::copy_from_slice(&packet[payload_offset..]);
                 if packet.len() > payload_offset {
                     let version = Ipv4Packet::from_buf(&packet).unwrap().header.version;

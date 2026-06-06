@@ -13,6 +13,12 @@ pub struct Ipv4PacketBuilder {
     packet: Ipv4Packet,
 }
 
+impl Default for Ipv4PacketBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ipv4PacketBuilder {
     /// Create a new builder.
     pub fn new() -> Self {
@@ -76,7 +82,7 @@ impl Ipv4PacketBuilder {
 
     pub fn options(mut self, options: Vec<Ipv4OptionPacket>) -> Self {
         self.packet.header.options = options;
-        self.packet.header.header_length = ((20
+        self.packet.header.header_length = (20
             + self
                 .packet
                 .header
@@ -86,9 +92,8 @@ impl Ipv4PacketBuilder {
                     Ipv4OptionType::EOL | Ipv4OptionType::NOP => 1,
                     _ => 2 + opt.data.len(),
                 })
-                .sum::<usize>()
-            + 3)
-            / 4) as u4; // includes padding
+                .sum::<usize>())
+        .div_ceil(4) as u4; // includes padding
         self
     }
 

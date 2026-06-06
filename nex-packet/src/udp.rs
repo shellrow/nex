@@ -35,8 +35,8 @@ pub struct UdpPacket {
 
 impl Packet for UdpPacket {
     type Header = UdpHeader;
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(&mut bytes).ok()
+    fn from_buf(bytes: &[u8]) -> Option<Self> {
+        Self::try_from_buf(bytes).ok()
     }
     fn from_bytes(mut bytes: Bytes) -> Option<Self> {
         Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
@@ -126,7 +126,7 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(UDP_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(UDP_HEADER_LEN);
         header
     }
 
@@ -137,7 +137,7 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
 
     fn payload_mut(&mut self) -> &mut [u8] {
         let total_len = self.total_len();
-        let (_, payload) = (&mut *self.buffer).split_at_mut(UDP_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(UDP_HEADER_LEN);
         &mut payload[..total_len.saturating_sub(UDP_HEADER_LEN)]
     }
 }

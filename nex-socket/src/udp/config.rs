@@ -23,7 +23,7 @@ impl UdpSocketType {
     }
 
     /// Converts the UDP socket type to a `socket2::Type`.
-    pub(crate) fn to_sock_type(&self) -> SockType {
+    pub(crate) fn to_sock_type(self) -> SockType {
         match self {
             UdpSocketType::Dgram => SockType::DGRAM,
             UdpSocketType::Raw => SockType::RAW,

@@ -352,7 +352,7 @@ impl<'a> MutablePacket<'a> for MutableEthernetPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ETHERNET_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ETHERNET_HEADER_LEN);
         header
     }
 
@@ -361,7 +361,7 @@ impl<'a> MutablePacket<'a> for MutableEthernetPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ETHERNET_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ETHERNET_HEADER_LEN);
         payload
     }
 }
@@ -517,7 +517,7 @@ mod tests {
             assert_eq!(packet_view[34], 0xaa);
         }
 
-        drop(ethernet);
+        let _ = ethernet;
         assert_eq!(raw[22], 99);
         assert_eq!(&raw[26..30], &[10, 0, 0, 1]);
         assert_eq!(raw[34], 0xaa);

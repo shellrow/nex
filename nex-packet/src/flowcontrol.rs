@@ -69,7 +69,7 @@ impl Packet for FlowControlPacket {
 
         Some(Self {
             command,
-            quanta: quanta.into(),
+            quanta,
             payload,
         })
     }
@@ -82,7 +82,7 @@ impl Packet for FlowControlPacket {
         let mut buf = bytes::BytesMut::with_capacity(4 + self.payload.len());
 
         buf.put_u16(self.command.value());
-        buf.put_u16(self.quanta.into());
+        buf.put_u16(self.quanta);
         buf.put_slice(&self.payload);
 
         buf.freeze()
@@ -91,7 +91,7 @@ impl Packet for FlowControlPacket {
         let mut buf = bytes::BytesMut::with_capacity(4);
 
         buf.put_u16(self.command.value());
-        buf.put_u16(self.quanta.into());
+        buf.put_u16(self.quanta);
 
         buf.freeze()
     }

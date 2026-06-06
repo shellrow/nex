@@ -3,8 +3,6 @@
 use crate::ip::IpNextProtocol;
 use nex_core::bitfield::u16be;
 
-use core::u8;
-use core::u16;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Convert a value to a byte array.
@@ -65,7 +63,7 @@ impl Octets for u8 {
 /// Calculates a checksum. Used by ipv4 and icmp. The two bytes starting at `skipword * 2` will be
 /// ignored. Supposed to be the checksum field, which is regarded as zero during calculation.
 pub fn checksum(data: &[u8], skipword: usize) -> u16be {
-    if data.len() == 0 {
+    if data.is_empty() {
         return 0;
     }
     let sum = sum_be_words(data, skipword);
@@ -143,11 +141,11 @@ fn ipv6_word_sum(ip: &Ipv6Addr) -> u32 {
 /// Sum all words (16 bit chunks) in the given data. The word at word offset
 /// `skipword` will be skipped. Each word is treated as big endian.
 fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
-    if data.len() == 0 {
+    if data.is_empty() {
         return 0;
     }
     let len = data.len();
-    let mut cur_data = &data[..];
+    let mut cur_data = data;
     let mut sum = 0u32;
     let mut i = 0;
     while cur_data.len() >= 2 {
@@ -209,15 +207,15 @@ mod tests {
         };
         unsafe {
             let slice_data = slice::from_raw_parts_mut(ptr, 12);
-            for i in 0..11 {
-                slice_data[i] = i as u8;
+            for (i, byte) in slice_data.iter_mut().enumerate().take(11) {
+                *byte = i as u8;
             }
-            assert_eq!(7190, sum_be_words(&slice_data, 1));
-            assert_eq!(6676, sum_be_words(&slice_data, 2));
+            assert_eq!(7190, sum_be_words(slice_data, 1));
+            assert_eq!(6676, sum_be_words(slice_data, 2));
             // Assert having the skipword outside the range gives correct and equal
             // results
-            assert_eq!(7705, sum_be_words(&slice_data, 99));
-            assert_eq!(7705, sum_be_words(&slice_data, 101));
+            assert_eq!(7705, sum_be_words(slice_data, 99));
+            assert_eq!(7705, sum_be_words(slice_data, 101));
         }
     }
 }

@@ -288,7 +288,7 @@ impl TcpOptionHeader {
             their.copy_from_slice(&self.data[4..8]);
             (u32::from_be_bytes(my), u32::from_be_bytes(their))
         } else {
-            return (0, 0);
+            (0, 0)
         }
     }
     /// Get the MSS of the TCP option
@@ -303,7 +303,7 @@ impl TcpOptionHeader {
     }
     /// Get the WSCALE of the TCP option
     pub fn get_wscale(&self) -> u8 {
-        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+        if self.kind == TcpOptionKind::WSCALE && !self.data.is_empty() {
             self.data[0]
         } else {
             0
@@ -400,12 +400,7 @@ impl TcpOptionPacket {
     }
     /// Get length of the TCP option.
     pub fn length(&self) -> u8 {
-        if let Some(len) = self.length {
-            len
-        } else {
-            // If length is None, it means the option has no length (like NOP).
-            0
-        }
+        self.length.unwrap_or_default()
     }
     /// Get the timestamp of the TCP option
     pub fn get_timestamp(&self) -> (u32, u32) {
@@ -416,7 +411,7 @@ impl TcpOptionPacket {
             their.copy_from_slice(&self.data[4..8]);
             (u32::from_be_bytes(my), u32::from_be_bytes(their))
         } else {
-            return (0, 0);
+            (0, 0)
         }
     }
     /// Get the MSS of the TCP option
@@ -431,7 +426,7 @@ impl TcpOptionPacket {
     }
     /// Get the WSCALE of the TCP option
     pub fn get_wscale(&self) -> u8 {
-        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+        if self.kind == TcpOptionKind::WSCALE && !self.data.is_empty() {
             self.data[0]
         } else {
             0
@@ -466,8 +461,8 @@ pub struct TcpPacket {
 impl Packet for TcpPacket {
     type Header = TcpHeader;
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(&mut bytes).ok()
+    fn from_buf(bytes: &[u8]) -> Option<Self> {
+        Self::try_from_buf(bytes).ok()
     }
     fn from_bytes(mut bytes: Bytes) -> Option<Self> {
         Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
@@ -846,7 +841,7 @@ impl<'a> MutablePacket<'a> for MutableTcpPacket<'a> {
 
     fn header_mut(&mut self) -> &mut [u8] {
         let len = self.header_len();
-        let (header, _) = (&mut *self.buffer).split_at_mut(len);
+        let (header, _) = self.buffer.split_at_mut(len);
         header
     }
 
@@ -857,7 +852,7 @@ impl<'a> MutablePacket<'a> for MutableTcpPacket<'a> {
 
     fn payload_mut(&mut self) -> &mut [u8] {
         let len = self.header_len();
-        let (_, payload) = (&mut *self.buffer).split_at_mut(len);
+        let (_, payload) = self.buffer.split_at_mut(len);
         payload
     }
 }
@@ -1227,8 +1222,8 @@ mod tests {
                 destination: 0x2328,
                 sequence: 0x9037d2b8,
                 acknowledgement: 0x944bb276,
-                data_offset: 8.into(), // 8 * 4 = 32 bytes
-                reserved: 0.into(),
+                data_offset: 8, // 8 * 4 = 32 bytes
+                reserved: 0,
                 flags: 0x18, // PSH + ACK
                 window: 0x0faf,
                 checksum: 0xc031,
@@ -1304,7 +1299,7 @@ mod tests {
 
         let frozen = packet.freeze().expect("freeze");
         let expected = ipv4_checksum(&frozen, &src, &dst);
-        assert_eq!(updated, expected as u16);
+        assert_eq!(updated, expected);
     }
 
     #[test]
