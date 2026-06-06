@@ -1,7 +1,7 @@
 //! Asynchronous data link layer I/O operations.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod linux;
+mod linux;
 
 #[cfg(any(
     target_os = "freebsd",
@@ -11,10 +11,10 @@ pub mod linux;
     target_os = "macos",
     target_os = "ios",
 ))]
-pub mod bpf;
+mod bpf;
 
 #[cfg(windows)]
-pub mod wpcap;
+mod wpcap;
 
 use std::io;
 use std::task::{Context, Poll};

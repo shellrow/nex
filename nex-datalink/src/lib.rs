@@ -11,13 +11,13 @@ mod bindings;
 pub mod async_io;
 
 #[cfg(windows)]
-pub mod wpcap;
+mod wpcap;
 
 #[cfg(windows)]
 use wpcap as backend;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod linux;
+mod linux;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use linux as backend;
@@ -31,7 +31,7 @@ use linux as backend;
     target_os = "macos",
     target_os = "ios"
 ))]
-pub mod bpf;
+mod bpf;
 
 #[cfg(any(
     target_os = "freebsd",
