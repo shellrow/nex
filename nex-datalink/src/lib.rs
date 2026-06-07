@@ -69,22 +69,61 @@ pub enum Channel {
 /// Socket fanout type (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FanoutType {
-    HASH,
-    LB,
-    CPU,
-    ROLLOVER,
-    RND,
-    QM,
-    CBPF,
-    EBPF,
+    /// Fan out packets by hashing packet fields.
+    Hash,
+    /// Round-robin load balancing.
+    LoadBalance,
+    /// Fan out packets to the CPU that received them.
+    Cpu,
+    /// Roll over to the next socket when one socket's queue is full.
+    Rollover,
+    /// Random fanout.
+    Random,
+    /// Queue-mapping fanout.
+    QueueMapping,
+    /// Classic BPF fanout.
+    ClassicBpf,
+    /// Extended BPF fanout.
+    ExtendedBpf,
+}
+
+impl FanoutType {
+    /// Compatibility alias for [`FanoutType::Hash`].
+    #[deprecated(note = "use FanoutType::Hash")]
+    pub const HASH: Self = Self::Hash;
+    /// Compatibility alias for [`FanoutType::LoadBalance`].
+    #[deprecated(note = "use FanoutType::LoadBalance")]
+    pub const LB: Self = Self::LoadBalance;
+    /// Compatibility alias for [`FanoutType::Cpu`].
+    #[deprecated(note = "use FanoutType::Cpu")]
+    pub const CPU: Self = Self::Cpu;
+    /// Compatibility alias for [`FanoutType::Rollover`].
+    #[deprecated(note = "use FanoutType::Rollover")]
+    pub const ROLLOVER: Self = Self::Rollover;
+    /// Compatibility alias for [`FanoutType::Random`].
+    #[deprecated(note = "use FanoutType::Random")]
+    pub const RND: Self = Self::Random;
+    /// Compatibility alias for [`FanoutType::QueueMapping`].
+    #[deprecated(note = "use FanoutType::QueueMapping")]
+    pub const QM: Self = Self::QueueMapping;
+    /// Compatibility alias for [`FanoutType::ClassicBpf`].
+    #[deprecated(note = "use FanoutType::ClassicBpf")]
+    pub const CBPF: Self = Self::ClassicBpf;
+    /// Compatibility alias for [`FanoutType::ExtendedBpf`].
+    #[deprecated(note = "use FanoutType::ExtendedBpf")]
+    pub const EBPF: Self = Self::ExtendedBpf;
 }
 
 /// Fanout settings (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FanoutOption {
+    /// Fanout group identifier.
     pub group_id: u16,
+    /// Fanout distribution strategy.
     pub fanout_type: FanoutType,
+    /// Whether fragmented packets should be defragmented before fanout.
     pub defrag: bool,
+    /// Whether queue rollover should be enabled.
     pub rollover: bool,
 }
 

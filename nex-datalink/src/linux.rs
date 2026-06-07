@@ -149,14 +149,14 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     if let Some(fanout) = config.fanout {
         use super::FanoutType;
         let mut typ = match fanout.fanout_type {
-            FanoutType::HASH => linux::PACKET_FANOUT_HASH,
-            FanoutType::LB => linux::PACKET_FANOUT_LB,
-            FanoutType::CPU => linux::PACKET_FANOUT_CPU,
-            FanoutType::ROLLOVER => linux::PACKET_FANOUT_ROLLOVER,
-            FanoutType::RND => linux::PACKET_FANOUT_RND,
-            FanoutType::QM => linux::PACKET_FANOUT_QM,
-            FanoutType::CBPF => linux::PACKET_FANOUT_CBPF,
-            FanoutType::EBPF => linux::PACKET_FANOUT_EBPF,
+            FanoutType::Hash => linux::PACKET_FANOUT_HASH,
+            FanoutType::LoadBalance => linux::PACKET_FANOUT_LB,
+            FanoutType::Cpu => linux::PACKET_FANOUT_CPU,
+            FanoutType::Rollover => linux::PACKET_FANOUT_ROLLOVER,
+            FanoutType::Random => linux::PACKET_FANOUT_RND,
+            FanoutType::QueueMapping => linux::PACKET_FANOUT_QM,
+            FanoutType::ClassicBpf => linux::PACKET_FANOUT_CBPF,
+            FanoutType::ExtendedBpf => linux::PACKET_FANOUT_EBPF,
         } as u32;
         // set defrag flag
         if fanout.defrag {
