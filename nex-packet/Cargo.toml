@@ -14,9 +14,9 @@ license = "MIT"
 bytes = { workspace = true }
 nex-core = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-rand = { workspace = true }
 
 [features]
+default = []
 serde = ["dep:serde", "nex-core/serde", "bytes/serde"]
 
 [dev-dependencies]

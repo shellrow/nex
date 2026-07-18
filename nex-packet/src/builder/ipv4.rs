@@ -30,7 +30,7 @@ impl Ipv4PacketBuilder {
                     dscp: 0,
                     ecn: 0,
                     total_length: 0, // automatically set during build
-                    identification: rand::random::<u16>(),
+                    identification: 0,
                     flags: 0,
                     fragment_offset: 0,
                     ttl: 64,
@@ -135,5 +135,14 @@ mod tests {
             (pkt.header_len() + payload.len()) as u16
         );
         assert_eq!(pkt.payload, payload);
+    }
+
+    #[test]
+    fn ipv4_builder_identification_is_caller_controlled() {
+        let default_packet = Ipv4PacketBuilder::new().build();
+        assert_eq!(default_packet.header.identification, 0);
+
+        let packet = Ipv4PacketBuilder::new().identification(0x1234).build();
+        assert_eq!(packet.header.identification, 0x1234);
     }
 }
