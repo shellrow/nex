@@ -41,17 +41,17 @@ Actions:
 - [ ] Define ONE canonical parsing contract and document it in `parse.rs`:
   - [ ] `try_from_bytes(Bytes) -> Result<Self, ParseError>` — owned, zero-copy view.
   - [ ] `try_from_buf(&[u8]) -> Result<Self, ParseError>` — borrowed.
-  - [ ] A single explicit "strict payload-length" opt-in (e.g. a `Strictness`/
+  - [x] A single explicit "strict payload-length" opt-in (e.g. a `Strictness`/
         `ParseOption` arg) instead of `*_strict` name-doubling every method.
-- [ ] Remove `EthernetHeader::from_bytes -> Result<_, String>`; replace with the
+- [x] Remove `EthernetHeader::from_bytes -> Result<_, String>`; replace with the
       canonical `ParseError` form (`nex-packet/src/ethernet.rs:165`).
-- [ ] Fold `DnsName::from_bytes -> Result<_, Utf8Error>` into `ParseError::InvalidUtf8`
+- [x] Fold `DnsName::from_bytes -> Result<_, Utf8Error>` into `ParseError::InvalidUtf8`
       so DNS matches every other module (`nex-packet/src/dns.rs:1216`).
-- [ ] Decide the fate of `from_* -> Option` on the `Packet` trait
+- [x] Decide the fate of `from_* -> Option` on the `Packet` trait
       (`nex-packet/src/packet.rs:9-12`): either make the trait `try_from_*`-based
       with `ParseError`, or keep `Option` only as a thin infallible-intent shim.
-- [ ] Provide `#[deprecated]` aliases for one release wherever a public name changes.
-- [ ] Write a doc table mapping every old parsing fn → its v1.0 replacement.
+- [x] Provide `#[deprecated]` aliases for one release wherever a public name changes.
+- [x] Write a doc table mapping every old parsing fn → its v1.0 replacement.
 
 Acceptance: every protocol module exposes the *same* small set of parse fns with
 the *same* signatures and error type; `grep -r "Result<.*String>"` returns nothing
@@ -102,7 +102,7 @@ tracked; no accidental `pub` internals.
 
 ### P0.4 A real error model (kill `String` errors)
 
-- [ ] `nex-core::interface`: replace `Result<_, String>` with a typed error
+- [x] `nex-core::interface`: replace `Result<_, String>` with a typed error
       (`nex-core/src/interface.rs:359,592,597` — `default`, `get_default_interface`,
       `get_default_gateway`).
 - [ ] Add `nex-packet::BuildError` for builders (P0.2).
@@ -119,20 +119,20 @@ Acceptance: no `-> Result<_, String>` in any public API; a documented error taxo
 
 ### P0.5 Feature flags & dependency diet
 
-- [ ] `nex-socket`: gate async behind an `async` (tokio) feature. Sync users must
+- [x] `nex-socket`: gate async behind an `async` (tokio) feature. Sync users must
       not pull `tokio` (`nex-socket/Cargo.toml` currently hard-depends on tokio
       with `time,sync,net,rt`). Split sync/async cleanly.
-- [ ] `nex-packet`: `rand` is a full dependency used in exactly one place
+- [x] `nex-packet`: `rand` is a full dependency used in exactly one place
       (`builder/ipv4.rs:33`, random IP identification). Either feature-gate it,
       replace with a lightweight PRNG, or let the caller supply the id. Do not force
       `rand` on every packet-parsing consumer.
-- [ ] `nex-datalink`: consider gating `async_io` + `futures-core` behind an `async`
+- [x] `nex-datalink`: consider gating `async_io` + `futures-core` behind an `async`
       feature; sniffers that only send/recv synchronously shouldn't compile it.
-- [ ] Define default features intentionally and document each (`nex-core` defaults
+- [x] Define default features intentionally and document each (`nex-core` defaults
       to `gateway` — confirm that's the right default).
-- [ ] Wire facade features through: `nex` exposes `pcap`, `serde`; add `async` and
+- [x] Wire facade features through: `nex` exposes `pcap`, `serde`; add `async` and
       any new sub-crate features so the facade stays a faithful superset.
-- [ ] Verify all feature combos build: default, `--no-default-features`, `serde`,
+- [x] Verify all feature combos build: default, `--no-default-features`, `serde`,
       `pcap`, `async`, `--all-features` (enforce in CI, P0.6).
 
 Acceptance: `cargo tree` for a sync-only `nex-socket` user contains no `tokio`;
@@ -142,20 +142,20 @@ Acceptance: `cargo tree` for a sync-only `nex-socket` user contains no `tokio`;
 
 Current `.github/workflows/rust.yml` runs only `cargo build` on Linux/macOS/Windows.
 
-- [ ] Replace with a matrix that runs, per OS:
-  - [ ] `cargo test --workspace --lib`
-  - [ ] `cargo test --workspace --doc`
-  - [ ] `cargo build --workspace --all-targets` (examples included)
-- [ ] Lint job: `cargo fmt --all -- --check` +
+- [x] Replace with a matrix that runs, per OS:
+  - [x] `cargo test --workspace --lib`
+  - [x] `cargo test --workspace --doc`
+  - [x] `cargo build --workspace --all-targets` (examples included)
+- [x] Lint job: `cargo fmt --all -- --check` +
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
-- [ ] Feature-combo job: default / `--no-default-features` / `serde` / `pcap` /
+- [x] Feature-combo job: default / `--no-default-features` / `serde` / `pcap` /
       `async` / `--all-features`.
 - [ ] MSRV job: pin and verify an MSRV (edition 2024 ⇒ MSRV ≥ 1.85; declare
       `rust-version` in every `Cargo.toml` and test it).
 - [ ] Supply chain: `cargo deny check` (licenses, advisories, bans, sources) +
       add `deny.toml`.
 - [ ] Public API snapshot diff job (P0.3).
-- [ ] Remove `#![deny(warnings)]` from `nex-datalink/src/lib.rs` (line 3): it makes
+- [x] Remove `#![deny(warnings)]` from `nex-datalink/src/lib.rs` (line 3): it makes
       builds break on future compilers/new lints. Enforce warnings in CI via
       `RUSTFLAGS=-Dwarnings`, not in source.
 - [ ] A documented, manual privileged-test matrix for raw sockets / datalink I/O
