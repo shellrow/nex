@@ -4,7 +4,8 @@ use bytes::Bytes;
 use nex_core::mac::MacAddr;
 
 use crate::{
-    dhcp::{DhcpHardwareType, DhcpHeader, DhcpOperation, DhcpPacket},
+    builder::BuildError,
+    dhcp::{DHCP_MIN_PACKET_SIZE, DhcpHardwareType, DhcpHeader, DhcpOperation, DhcpPacket},
     packet::Packet,
 };
 
@@ -53,18 +54,72 @@ impl DhcpPacketBuilder {
         &mut self.packet.header
     }
 
-    /// Build and return a `DhcpPacket`
-    pub fn build(self) -> DhcpPacket {
-        self.packet
+    /// Validate fixed fields and build the DHCP packet.
+    pub fn build(self) -> Result<DhcpPacket, BuildError> {
+        for (context, expected, actual) in [
+            (
+                "DHCP client hardware address padding",
+                10,
+                self.packet.header.chaddr_pad.len(),
+            ),
+            ("DHCP server name", 64, self.packet.header.sname.len()),
+            ("DHCP boot file", 128, self.packet.header.file.len()),
+        ] {
+            if actual != expected {
+                return Err(BuildError::InvalidFieldLength {
+                    context,
+                    expected,
+                    actual,
+                });
+            }
+        }
+
+        let packet_length = DHCP_MIN_PACKET_SIZE
+            .checked_add(self.packet.payload.len())
+            .ok_or(BuildError::LengthOverflow {
+                context: "DHCP packet",
+                maximum: u16::MAX as usize - 8,
+                actual: usize::MAX,
+            })?;
+        let maximum = u16::MAX as usize - 8;
+        if packet_length > maximum {
+            return Err(BuildError::LengthOverflow {
+                context: "DHCP packet",
+                maximum,
+                actual: packet_length,
+            });
+        }
+
+        Ok(self.packet)
     }
 
     /// Build and return the packet bytes
-    pub fn to_bytes(self) -> Bytes {
-        self.packet.to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Get a reference to the packet
     pub fn packet(&self) -> &DhcpPacket {
         &self.packet
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dhcp_builder_rejects_invalid_fixed_field_length() {
+        let mut builder = DhcpPacketBuilder::new_discover(1, MacAddr::zero());
+        builder.header_mut().sname.clear();
+
+        let error = builder.build().expect_err("invalid DHCP server name");
+        assert!(matches!(
+            error,
+            BuildError::InvalidFieldLength {
+                context: "DHCP server name",
+                ..
+            }
+        ));
     }
 }

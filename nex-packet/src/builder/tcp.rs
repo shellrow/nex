@@ -1,7 +1,8 @@
 use std::net::IpAddr;
 
+use crate::builder::BuildError;
 use crate::packet::Packet;
-use crate::tcp::{TcpHeader, TcpOptionPacket, TcpPacket};
+use crate::tcp::{TCP_HEADER_LEN, TcpHeader, TcpOptionPacket, TcpPacket};
 use bytes::Bytes;
 
 /// Builder for constructing TCP packets
@@ -74,17 +75,6 @@ impl TcpPacketBuilder {
 
     pub fn options(mut self, options: Vec<TcpOptionPacket>) -> Self {
         self.packet.header.options = options;
-        // Recalculate data offset (header length is in 4-byte units)
-        let base_len = 20; // base header
-        let opt_len: usize = self
-            .packet
-            .header
-            .options
-            .iter()
-            .map(|opt| opt.length() as usize)
-            .sum();
-        let total = base_len + opt_len;
-        self.packet.header.data_offset = total.div_ceil(4) as u8; // round up
         self
     }
 
@@ -100,14 +90,76 @@ impl TcpPacketBuilder {
         self
     }
     /// Build the packet with checksum computed
-    pub fn build(mut self) -> TcpPacket {
+    pub fn build(mut self) -> Result<TcpPacket, BuildError> {
+        let maximum_segment_length = match (self.src_ip, self.dst_ip) {
+            (IpAddr::V4(_), IpAddr::V4(_)) => u16::MAX as usize - 20,
+            (IpAddr::V6(_), IpAddr::V6(_)) => u16::MAX as usize,
+            _ => {
+                return Err(BuildError::AddressFamilyMismatch { context: "TCP" });
+            }
+        };
+
+        let mut options_length = 0usize;
+        for option in &self.packet.header.options {
+            let encoded_length = option.encoded_len();
+            if encoded_length > u8::MAX as usize {
+                return Err(BuildError::LengthOverflow {
+                    context: "TCP option",
+                    maximum: u8::MAX as usize,
+                    actual: encoded_length,
+                });
+            }
+            if encoded_length > 1 && option.declared_len().map(usize::from) != Some(encoded_length)
+            {
+                return Err(BuildError::InvalidFieldLength {
+                    context: "TCP option length",
+                    expected: encoded_length,
+                    actual: option.declared_len().map(usize::from).unwrap_or(0),
+                });
+            }
+            options_length =
+                options_length
+                    .checked_add(encoded_length)
+                    .ok_or(BuildError::LengthOverflow {
+                        context: "TCP options",
+                        maximum: 40,
+                        actual: usize::MAX,
+                    })?;
+        }
+
+        let padded_options_length = options_length.div_ceil(4) * 4;
+        if padded_options_length > 40 {
+            return Err(BuildError::LengthOverflow {
+                context: "TCP options",
+                maximum: 40,
+                actual: padded_options_length,
+            });
+        }
+
+        let segment_length = TCP_HEADER_LEN
+            .checked_add(padded_options_length)
+            .and_then(|header_length| header_length.checked_add(self.packet.payload.len()))
+            .ok_or(BuildError::LengthOverflow {
+                context: "TCP segment",
+                maximum: maximum_segment_length,
+                actual: usize::MAX,
+            })?;
+        if segment_length > maximum_segment_length {
+            return Err(BuildError::LengthOverflow {
+                context: "TCP segment",
+                maximum: maximum_segment_length,
+                actual: segment_length,
+            });
+        }
+
+        self.packet.header.data_offset = ((TCP_HEADER_LEN + padded_options_length) / 4) as u8;
         self.packet.header.checksum =
             crate::tcp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
-        self.packet
+        Ok(self.packet)
     }
     /// Serialize the packet into bytes with checksum computed
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 }
 
@@ -133,12 +185,45 @@ mod tests {
         .window(1024)
         .urgent_ptr(0)
         .payload(Bytes::from_static(b"abc"))
-        .build();
+        .build()
+        .expect("valid TCP packet");
         assert_eq!(pkt.header.source, 1234);
         assert_eq!(pkt.header.destination, 80);
         assert_eq!(pkt.header.sequence, 1);
         assert_eq!(pkt.header.acknowledgement, 2);
         assert_eq!(pkt.header.flags, TcpFlags::SYN);
         assert_eq!(pkt.payload, Bytes::from_static(b"abc"));
+    }
+
+    #[test]
+    fn tcp_builder_rejects_address_family_mismatch() {
+        let error = TcpPacketBuilder::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+        )
+        .build()
+        .expect_err("mismatched checksum context");
+
+        assert_eq!(error, BuildError::AddressFamilyMismatch { context: "TCP" });
+    }
+
+    #[test]
+    fn tcp_builder_rejects_oversized_options() {
+        let options = vec![TcpOptionPacket::timestamp(0, 0); 5];
+        let error = TcpPacketBuilder::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+        )
+        .options(options)
+        .build()
+        .expect_err("TCP data offset overflow");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "TCP options",
+                ..
+            }
+        ));
     }
 }

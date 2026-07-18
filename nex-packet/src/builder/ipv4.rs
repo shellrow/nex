@@ -1,6 +1,7 @@
 use crate::{
+    builder::BuildError,
     ip::IpNextProtocol,
-    ipv4::{Ipv4Header, Ipv4OptionPacket, Ipv4OptionType, Ipv4Packet},
+    ipv4::{IPV4_HEADER_LEN, Ipv4Header, Ipv4OptionPacket, Ipv4OptionType, Ipv4Packet},
     packet::Packet,
 };
 use bytes::Bytes;
@@ -82,18 +83,6 @@ impl Ipv4PacketBuilder {
 
     pub fn options(mut self, options: Vec<Ipv4OptionPacket>) -> Self {
         self.packet.header.options = options;
-        self.packet.header.header_length = (20
-            + self
-                .packet
-                .header
-                .options
-                .iter()
-                .map(|opt| match opt.header.number {
-                    Ipv4OptionType::EOL | Ipv4OptionType::NOP => 1,
-                    _ => 2 + opt.data.len(),
-                })
-                .sum::<usize>())
-        .div_ceil(4) as u4; // includes padding
         self
     }
 
@@ -102,15 +91,81 @@ impl Ipv4PacketBuilder {
         self
     }
 
-    pub fn build(mut self) -> Ipv4Packet {
-        let total_length = self.packet.header_len() + self.packet.payload_len();
+    pub fn build(mut self) -> Result<Ipv4Packet, BuildError> {
+        let mut options_length = 0usize;
+        for option in &self.packet.header.options {
+            let encoded_length = match option.header.number {
+                Ipv4OptionType::EOL | Ipv4OptionType::NOP => 1,
+                _ => {
+                    let encoded_length = 2usize.checked_add(option.data.len()).ok_or(
+                        BuildError::LengthOverflow {
+                            context: "IPv4 option",
+                            maximum: u8::MAX as usize,
+                            actual: usize::MAX,
+                        },
+                    )?;
+                    if encoded_length > u8::MAX as usize {
+                        return Err(BuildError::LengthOverflow {
+                            context: "IPv4 option",
+                            maximum: u8::MAX as usize,
+                            actual: encoded_length,
+                        });
+                    }
+                    if let Some(declared) = option.header.length
+                        && declared as usize != encoded_length
+                    {
+                        return Err(BuildError::InvalidFieldLength {
+                            context: "IPv4 option length",
+                            expected: encoded_length,
+                            actual: declared as usize,
+                        });
+                    }
+                    encoded_length
+                }
+            };
+            options_length =
+                options_length
+                    .checked_add(encoded_length)
+                    .ok_or(BuildError::LengthOverflow {
+                        context: "IPv4 options",
+                        maximum: 40,
+                        actual: usize::MAX,
+                    })?;
+        }
+
+        let padded_options_length = options_length.div_ceil(4) * 4;
+        if padded_options_length > 40 {
+            return Err(BuildError::LengthOverflow {
+                context: "IPv4 options",
+                maximum: 40,
+                actual: padded_options_length,
+            });
+        }
+
+        let header_length = IPV4_HEADER_LEN + padded_options_length;
+        let total_length = header_length.checked_add(self.packet.payload_len()).ok_or(
+            BuildError::LengthOverflow {
+                context: "IPv4 total length",
+                maximum: u16::MAX as usize,
+                actual: usize::MAX,
+            },
+        )?;
+        if total_length > u16::MAX as usize {
+            return Err(BuildError::LengthOverflow {
+                context: "IPv4 total length",
+                maximum: u16::MAX as usize,
+                actual: total_length,
+            });
+        }
+
+        self.packet.header.header_length = (header_length / 4) as u4;
         self.packet.header.total_length = total_length as u16be;
         self.packet.header.checksum = crate::ipv4::checksum(&self.packet);
-        self.packet
+        Ok(self.packet)
     }
 
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 }
 
@@ -118,6 +173,7 @@ impl Ipv4PacketBuilder {
 mod tests {
     use super::*;
     use crate::ip::IpNextProtocol;
+    use crate::ipv4::Ipv4OptionHeader;
     use bytes::Bytes;
     use std::net::Ipv4Addr;
 
@@ -129,7 +185,8 @@ mod tests {
             .destination(Ipv4Addr::new(2, 2, 2, 2))
             .protocol(IpNextProtocol::Udp)
             .payload(payload.clone())
-            .build();
+            .build()
+            .expect("valid IPv4 packet");
         assert_eq!(
             pkt.header.total_length,
             (pkt.header_len() + payload.len()) as u16
@@ -139,10 +196,55 @@ mod tests {
 
     #[test]
     fn ipv4_builder_identification_is_caller_controlled() {
-        let default_packet = Ipv4PacketBuilder::new().build();
+        let default_packet = Ipv4PacketBuilder::new().build().expect("valid IPv4 packet");
         assert_eq!(default_packet.header.identification, 0);
 
-        let packet = Ipv4PacketBuilder::new().identification(0x1234).build();
+        let packet = Ipv4PacketBuilder::new()
+            .identification(0x1234)
+            .build()
+            .expect("valid IPv4 packet");
         assert_eq!(packet.header.identification, 0x1234);
+    }
+
+    #[test]
+    fn ipv4_builder_rejects_oversized_payload() {
+        let payload = Bytes::from(vec![0; u16::MAX as usize]);
+        let error = Ipv4PacketBuilder::new()
+            .payload(payload)
+            .build()
+            .expect_err("oversized IPv4 packet");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "IPv4 total length",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn ipv4_builder_rejects_options_beyond_ihl_capacity() {
+        let option = Ipv4OptionPacket {
+            header: Ipv4OptionHeader {
+                copied: 0,
+                class: 0,
+                number: Ipv4OptionType::NOP,
+                length: None,
+            },
+            data: Bytes::new(),
+        };
+        let error = Ipv4PacketBuilder::new()
+            .options(vec![option; 41])
+            .build()
+            .expect_err("IPv4 IHL overflow");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "IPv4 options",
+                ..
+            }
+        ));
     }
 }

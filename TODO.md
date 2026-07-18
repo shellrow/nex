@@ -62,14 +62,14 @@ in `nex-packet`.
 Every builder currently returns infallibly (`nex-packet/src/builder/*.rs`):
 `build(self) -> Packet` and `to_bytes(self) -> Bytes`, with no bounds checks.
 
-- [ ] Change builder finalizers to `build(self) -> Result<Packet, BuildError>`
+- [x] Change builder finalizers to `build(self) -> Result<Packet, BuildError>`
       (or a `try_build`) wherever a field can exceed protocol limits:
-  - [ ] IPv4/IPv6 total length, IHL/options length, payload length.
-  - [ ] TCP data offset / options length; UDP length; ICMP/ICMPv6 sizing.
-  - [ ] DHCP options length; NDP option length; ARP fixed sizing.
-- [ ] Validate checksum prerequisites (pseudo-header context present) before emit.
-- [ ] Introduce a typed `BuildError` (see P0.4) with actionable variants.
-- [ ] Keep an infallible fast path only where inputs are provably in-range (e.g.
+  - [x] IPv4/IPv6 total length, IHL/options length, payload length.
+  - [x] TCP data offset / options length; UDP length; ICMP/ICMPv6 sizing.
+  - [x] DHCP options length; NDP option length; ARP fixed sizing.
+- [x] Validate checksum prerequisites (pseudo-header context present) before emit.
+- [x] Introduce a typed `BuildError` (see P0.4) with actionable variants.
+- [x] Keep an infallible fast path only where inputs are provably in-range (e.g.
       fixed-size headers), and document why.
 
 Acceptance: constructing an over-length packet returns `Err`, never wrong bytes;
@@ -105,7 +105,7 @@ tracked; no accidental `pub` internals.
 - [x] `nex-core::interface`: replace `Result<_, String>` with a typed error
       (`nex-core/src/interface.rs:359,592,597` — `default`, `get_default_interface`,
       `get_default_gateway`).
-- [ ] Add `nex-packet::BuildError` for builders (P0.2).
+- [x] Add `nex-packet::BuildError` for builders (P0.2).
 - [ ] Keep `io::Error` only at raw syscall/socket boundaries; convert to typed
       errors where the library adds semantic meaning (datalink/socket config).
 - [ ] Ensure `ParseError` carries enough context for fuzz triage and diagnostics

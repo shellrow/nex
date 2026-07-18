@@ -1,5 +1,6 @@
 pub mod arp;
 pub mod dhcp;
+mod error;
 pub mod ethernet;
 pub mod icmp;
 pub mod icmpv6;
@@ -8,3 +9,5 @@ pub mod ipv6;
 pub mod ndp;
 pub mod tcp;
 pub mod udp;
+
+pub use error::BuildError;

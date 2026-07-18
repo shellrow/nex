@@ -63,7 +63,8 @@ fn main() {
 
     let arp_builder = ArpPacketBuilder::new(src_mac, src_ip, target_ip);
 
-    let packet = eth_builder.payload(arp_builder.build().to_bytes()).build();
+    let arp_packet = arp_builder.build().expect("valid ARP packet");
+    let packet = eth_builder.payload(arp_packet.to_bytes()).build();
 
     match tx.send(&packet.to_bytes()) {
         Some(_) => println!("ARP Request sent to {}", target_ip),

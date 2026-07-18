@@ -118,7 +118,8 @@ fn main() {
             TcpOptionPacket::nop(),
             TcpOptionPacket::wscale(7),
         ])
-        .build();
+        .build()
+        .expect("valid TCP packet");
 
     let ip_packet: Bytes;
     match dst_ip {
@@ -132,7 +133,8 @@ fn main() {
                         .protocol(IpNextProtocol::Tcp)
                         .flags(Ipv4Flags::DontFragment)
                         .payload(tcp_packet.to_bytes())
-                        .build();
+                        .build()
+                        .expect("valid IPv4 packet");
                     ip_packet = ipv4_packet.to_bytes();
                 }
                 IpAddr::V6(_) => {
@@ -154,7 +156,8 @@ fn main() {
                         .destination(dst_ipv6)
                         .next_header(IpNextProtocol::Tcp)
                         .payload(tcp_packet.to_bytes())
-                        .build();
+                        .build()
+                        .expect("valid IPv6 packet");
                     ip_packet = ipv6_packet.to_bytes();
                 }
             }

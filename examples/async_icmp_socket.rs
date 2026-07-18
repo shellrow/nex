@@ -93,7 +93,8 @@ async fn main() -> std::io::Result<()> {
                 .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
                 .echo_fields(id, seq)
                 .payload(Bytes::from_static(b"ping"))
-                .to_bytes();
+                .to_bytes()
+                .expect("valid ICMP packet");
             let target = SocketAddr::new(IpAddr::V4(addr), 0);
             let _ = socket.send_to(&pkt, target).await;
             {

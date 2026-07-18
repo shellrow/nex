@@ -1,4 +1,5 @@
 use crate::{
+    builder::BuildError,
     ip::IpNextProtocol,
     ipv6::{Ipv6ExtensionHeader, Ipv6Header, Ipv6Packet},
     packet::Packet,
@@ -85,15 +86,69 @@ impl Ipv6PacketBuilder {
     }
 
     /// Build the packet and return it
-    pub fn build(mut self) -> Ipv6Packet {
-        let ext_len: usize = self.packet.extensions.iter().map(|e| e.len()).sum();
-        self.packet.header.payload_length = (ext_len + self.packet.payload.len()) as u16;
-        self.packet
+    pub fn build(mut self) -> Result<Ipv6Packet, BuildError> {
+        let mut extensions_length = 0usize;
+        for extension in &self.packet.extensions {
+            let extension_length = extension.len();
+            match extension {
+                Ipv6ExtensionHeader::HopByHop { .. }
+                | Ipv6ExtensionHeader::Destination { .. }
+                | Ipv6ExtensionHeader::Routing { .. }
+                    if extension_length > 2048 =>
+                {
+                    return Err(BuildError::LengthOverflow {
+                        context: "IPv6 extension header",
+                        maximum: 2048,
+                        actual: extension_length,
+                    });
+                }
+                Ipv6ExtensionHeader::Fragment { offset, .. } if *offset > 0x1fff => {
+                    return Err(BuildError::ValueOutOfRange {
+                        context: "IPv6 fragment offset",
+                        maximum: 0x1fff,
+                        actual: *offset as usize,
+                    });
+                }
+                Ipv6ExtensionHeader::Raw { raw, .. } if raw.is_empty() => {
+                    return Err(BuildError::LengthTooShort {
+                        context: "raw IPv6 extension header",
+                        minimum: 1,
+                        actual: 0,
+                    });
+                }
+                _ => {}
+            }
+            extensions_length = extensions_length.checked_add(extension_length).ok_or(
+                BuildError::LengthOverflow {
+                    context: "IPv6 payload length",
+                    maximum: u16::MAX as usize,
+                    actual: usize::MAX,
+                },
+            )?;
+        }
+
+        let payload_length = extensions_length
+            .checked_add(self.packet.payload.len())
+            .ok_or(BuildError::LengthOverflow {
+                context: "IPv6 payload length",
+                maximum: u16::MAX as usize,
+                actual: usize::MAX,
+            })?;
+        if payload_length > u16::MAX as usize {
+            return Err(BuildError::LengthOverflow {
+                context: "IPv6 payload length",
+                maximum: u16::MAX as usize,
+                actual: payload_length,
+            });
+        }
+
+        self.packet.header.payload_length = payload_length as u16;
+        Ok(self.packet)
     }
 
     /// Serialize the packet into bytes
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Get only the header bytes
@@ -117,8 +172,26 @@ mod tests {
             .destination(Ipv6Addr::LOCALHOST)
             .next_header(IpNextProtocol::Tcp)
             .payload(payload.clone())
-            .build();
+            .build()
+            .expect("valid IPv6 packet");
         assert_eq!(pkt.header.payload_length, payload.len() as u16);
         assert_eq!(pkt.payload, payload);
+    }
+
+    #[test]
+    fn ipv6_builder_rejects_oversized_payload() {
+        let payload = Bytes::from(vec![0; u16::MAX as usize + 1]);
+        let error = Ipv6PacketBuilder::new()
+            .payload(payload)
+            .build()
+            .expect_err("oversized IPv6 payload");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "IPv6 payload length",
+                ..
+            }
+        ));
     }
 }

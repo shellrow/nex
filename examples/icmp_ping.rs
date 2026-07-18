@@ -70,15 +70,15 @@ fn main() {
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid ICMP packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
             .icmpv6_type(Icmpv6Type::EchoRequest)
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid ICMPv6 packet"),
         _ => panic!("Source and destination IP version mismatch"),
     };
 
@@ -89,15 +89,15 @@ fn main() {
             .protocol(IpNextProtocol::Icmp)
             .flags(Ipv4Flags::DontFragment)
             .payload(icmp_packet)
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv4 packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
             .destination(dst)
             .next_header(IpNextProtocol::Icmpv6)
             .payload(icmp_packet)
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv6 packet"),
         _ => unreachable!(),
     };
 

@@ -1,6 +1,7 @@
 use std::net::Ipv6Addr;
 
 use crate::{
+    builder::BuildError,
     icmpv6::{self, Icmpv6Code, Icmpv6Header, Icmpv6Packet, Icmpv6Type},
     packet::Packet,
 };
@@ -66,19 +67,55 @@ impl Icmpv6PacketBuilder {
     }
 
     /// Return an `Icmpv6Packet` with checksum computed
-    pub fn build(mut self) -> Icmpv6Packet {
+    pub fn build(mut self) -> Result<Icmpv6Packet, BuildError> {
+        let packet_length =
+            4usize
+                .checked_add(self.packet.payload.len())
+                .ok_or(BuildError::LengthOverflow {
+                    context: "ICMPv6 packet",
+                    maximum: u16::MAX as usize,
+                    actual: usize::MAX,
+                })?;
+        if packet_length > u16::MAX as usize {
+            return Err(BuildError::LengthOverflow {
+                context: "ICMPv6 packet",
+                maximum: u16::MAX as usize,
+                actual: packet_length,
+            });
+        }
         self.packet.header.checksum =
             icmpv6::checksum(&self.packet, &self.source, &self.destination);
-        self.packet
+        Ok(self.packet)
     }
 
     /// Return the packet bytes with checksum computed
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Access the intermediate `Icmpv6Packet` if needed
     pub fn packet(&self) -> &Icmpv6Packet {
         &self.packet
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icmpv6_builder_rejects_oversized_packet() {
+        let error = Icmpv6PacketBuilder::new(Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST)
+            .payload(Bytes::from(vec![0; u16::MAX as usize]))
+            .build()
+            .expect_err("oversized ICMPv6 packet");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "ICMPv6 packet",
+                ..
+            }
+        ));
     }
 }

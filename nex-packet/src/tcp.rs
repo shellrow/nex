@@ -321,6 +321,17 @@ pub struct TcpOptionPacket {
 }
 
 impl TcpOptionPacket {
+    pub(crate) fn encoded_len(&self) -> usize {
+        match self.kind {
+            TcpOptionKind::EOL | TcpOptionKind::NOP => 1,
+            _ => 2 + self.data.len(),
+        }
+    }
+
+    pub(crate) fn declared_len(&self) -> Option<u8> {
+        self.length
+    }
+
     /// NOP: This may be used to align option fields on 32-bit boundaries for better performance.
     pub fn nop() -> Self {
         TcpOptionPacket {

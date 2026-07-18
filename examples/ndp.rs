@@ -79,12 +79,17 @@ fn main() {
         .hop_limit(255);
 
     let ndp = NdpPacketBuilder::new(src_mac, src_ip, target_ip);
+    let ndp_packet = ndp.build().expect("valid NDP packet");
+    let ipv6_packet = ipv6
+        .payload(ndp_packet.to_bytes())
+        .build()
+        .expect("valid IPv6 packet");
 
     let ethernet = EthernetPacketBuilder::new()
         .source(src_mac)
         .destination(dst_mac)
         .ethertype(EtherType::Ipv6)
-        .payload(ipv6.payload(ndp.build().to_bytes()).build().to_bytes());
+        .payload(ipv6_packet.to_bytes());
 
     // Send NDP Neighbor Solicitation
     let packet = ethernet.build().to_bytes();

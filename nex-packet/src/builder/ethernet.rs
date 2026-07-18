@@ -57,6 +57,9 @@ impl EthernetPacketBuilder {
     }
 
     /// Consume the builder and produce an `EthernetPacket`.
+    ///
+    /// This finalizer is infallible because Ethernet II uses a fixed-size
+    /// header and does not encode the payload length in the frame.
     pub fn build(self) -> EthernetPacket {
         self.packet
     }

@@ -21,3 +21,5 @@ pub mod udp;
 pub mod util;
 pub mod vlan;
 pub mod vxlan;
+
+pub use builder::BuildError;

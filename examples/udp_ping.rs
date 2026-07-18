@@ -68,7 +68,8 @@ fn main() {
     let udp_packet = UdpPacketBuilder::new(src_ip, target_ip)
         .source(SRC_PORT)
         .destination(DST_PORT)
-        .build();
+        .build()
+        .expect("valid UDP packet");
 
     let ip_packet: Bytes = match (src_ip, target_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
@@ -77,15 +78,15 @@ fn main() {
             .protocol(IpNextProtocol::Udp)
             .flags(Ipv4Flags::DontFragment)
             .payload(udp_packet.to_bytes())
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv4 packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
             .destination(dst)
             .next_header(IpNextProtocol::Udp)
             .payload(udp_packet.to_bytes())
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv6 packet"),
         _ => panic!("Source and destination IP version mismatch"),
     };
 
