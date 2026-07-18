@@ -202,7 +202,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         return Err(err);
     }
 
-    let fd = Arc::new(nex_sys::FileDesc { fd });
+    // SAFETY: `fd` is an open BPF descriptor created above, and ownership is
+    // transferred exclusively to `FileDesc`.
+    let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(fd) });
     let mut sender = Box::new(RawSenderImpl {
         fd: fd.clone(),
         fd_set: unsafe { mem::zeroed() },
@@ -212,7 +214,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     });
     unsafe {
         libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
-        libc::FD_SET(fd.fd, &mut sender.fd_set as *mut libc::fd_set);
+        libc::FD_SET(fd.as_raw(), &mut sender.fd_set as *mut libc::fd_set);
     }
     let mut receiver = Box::new(RawReceiverImpl {
         fd: fd.clone(),
@@ -226,7 +228,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     });
     unsafe {
         libc::FD_ZERO(&mut receiver.fd_set as *mut libc::fd_set);
-        libc::FD_SET(fd.fd, &mut receiver.fd_set as *mut libc::fd_set);
+        libc::FD_SET(fd.as_raw(), &mut receiver.fd_set as *mut libc::fd_set);
     }
 
     Ok(super::Channel::Ethernet(sender, receiver))
@@ -262,9 +264,9 @@ impl RawSender for RawSenderImpl {
             for chunk in self.write_buffer[..len].chunks_mut(packet_size) {
                 func(chunk);
                 let ret = unsafe {
-                    libc::FD_SET(self.fd.fd, &mut self.fd_set as *mut libc::fd_set);
+                    libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
                     libc::pselect(
-                        self.fd.fd + 1,
+                        self.fd.as_raw() + 1,
                         ptr::null_mut(),
                         &mut self.fd_set as *mut libc::fd_set,
                         ptr::null_mut(),
@@ -282,7 +284,7 @@ impl RawSender for RawSenderImpl {
                     return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
                 } else if unsafe {
                     libc::write(
-                        self.fd.fd,
+                        self.fd.as_raw(),
                         chunk.as_ptr().add(offset) as *const libc::c_void,
                         (chunk.len() - offset) as libc::size_t,
                     )
@@ -305,9 +307,9 @@ impl RawSender for RawSenderImpl {
             0
         };
         let ret = unsafe {
-            libc::FD_SET(self.fd.fd, &mut self.fd_set as *mut libc::fd_set);
+            libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
             libc::pselect(
-                self.fd.fd + 1,
+                self.fd.as_raw() + 1,
                 ptr::null_mut(),
                 &mut self.fd_set as *mut libc::fd_set,
                 ptr::null_mut(),
@@ -325,7 +327,7 @@ impl RawSender for RawSenderImpl {
         } else {
             match unsafe {
                 libc::write(
-                    self.fd.fd,
+                    self.fd.as_raw(),
                     packet.as_ptr().add(offset) as *const libc::c_void,
                     (packet.len() - offset) as libc::size_t,
                 )
@@ -357,9 +359,9 @@ impl RawReceiver for RawReceiverImpl {
         if self.packets.is_empty() {
             let buffer = &mut self.read_buffer[self.buffer_offset..];
             let ret = unsafe {
-                libc::FD_SET(self.fd.fd, &mut self.fd_set as *mut libc::fd_set);
+                libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
                 libc::pselect(
-                    self.fd.fd + 1,
+                    self.fd.as_raw() + 1,
                     &mut self.fd_set as *mut libc::fd_set,
                     ptr::null_mut(),
                     ptr::null_mut(),
@@ -377,7 +379,7 @@ impl RawReceiver for RawReceiverImpl {
             } else {
                 let buflen = match unsafe {
                     libc::read(
-                        self.fd.fd,
+                        self.fd.as_raw(),
                         buffer.as_ptr() as *mut libc::c_void,
                         buffer.len() as libc::size_t,
                     )

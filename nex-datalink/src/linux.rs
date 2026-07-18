@@ -198,7 +198,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         return Err(err);
     }
 
-    let fd = Arc::new(nex_sys::FileDesc { fd: socket });
+    // SAFETY: `socket` is an open descriptor created above, and ownership is
+    // transferred exclusively to `FileDesc`.
+    let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(socket) });
     let sender = Box::new(RawSenderImpl {
         socket: fd.clone(),
         write_buffer: vec![0; config.write_buffer_size],
@@ -241,7 +243,7 @@ impl RawSender for RawSenderImpl {
             let mut_slice = &mut self.write_buffer;
 
             let mut pollfd = libc::pollfd {
-                fd: self.socket.fd,
+                fd: self.socket.as_raw(),
                 events: libc::POLLOUT,
                 revents: 0,
             };
@@ -268,12 +270,17 @@ impl RawSender for RawSenderImpl {
                 } else if ret == 0 {
                     return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
                 } else if pollfd.revents & libc::POLLOUT != 0 {
-                    if let Err(e) = nex_sys::send_to(
-                        self.socket.fd,
-                        chunk,
-                        send_addr,
-                        self.send_addr_len as libc::socklen_t,
-                    ) {
+                    // SAFETY: `send_addr` points to `self.send_addr`, which
+                    // remains alive and has the supplied `sockaddr_ll` length.
+                    let send_result = unsafe {
+                        nex_sys::send_to(
+                            self.socket.as_raw(),
+                            chunk,
+                            send_addr,
+                            self.send_addr_len as libc::socklen_t,
+                        )
+                    };
+                    if let Err(e) = send_result {
                         return Some(Err(e));
                     }
                 } else {
@@ -293,7 +300,7 @@ impl RawSender for RawSenderImpl {
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         let mut pollfd = libc::pollfd {
-            fd: self.socket.fd,
+            fd: self.socket.as_raw(),
             events: libc::POLLOUT,
             revents: 0,
         };
@@ -316,12 +323,17 @@ impl RawSender for RawSenderImpl {
             Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")))
         } else if pollfd.revents & libc::POLLOUT != 0 {
             // Socket is ready for writing
-            match nex_sys::send_to(
-                self.socket.fd,
-                packet,
-                (&self.send_addr as *const libc::sockaddr_ll) as *const _,
-                self.send_addr_len as libc::socklen_t,
-            ) {
+            let send_addr = (&self.send_addr as *const libc::sockaddr_ll).cast();
+            // SAFETY: `send_addr` points to `self.send_addr`, which remains
+            // alive and has the supplied `sockaddr_ll` length.
+            match unsafe {
+                nex_sys::send_to(
+                    self.socket.as_raw(),
+                    packet,
+                    send_addr,
+                    self.send_addr_len as libc::socklen_t,
+                )
+            } {
                 Err(e) => Some(Err(e)),
                 Ok(_) => Some(Ok(())),
             }
@@ -344,7 +356,7 @@ impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         let mut caddr: libc::sockaddr_storage = unsafe { mem::zeroed() };
         let mut pollfd = libc::pollfd {
-            fd: self.socket.fd,
+            fd: self.socket.as_raw(),
             events: libc::POLLIN,
             revents: 0,
         };
@@ -367,7 +379,11 @@ impl RawReceiver for RawReceiverImpl {
             Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"))
         } else if pollfd.revents & libc::POLLIN != 0 {
             // Socket is ready for reading
-            let res = nex_sys::recv_from(self.socket.fd, &mut self.read_buffer, &mut caddr);
+            // SAFETY: `caddr` is writable `sockaddr_storage` for the duration
+            // of the call.
+            let res = unsafe {
+                nex_sys::recv_from(self.socket.as_raw(), &mut self.read_buffer, &mut caddr)
+            };
             match res {
                 Ok(len) => Ok(&self.read_buffer[0..len]),
                 Err(e) => Err(e),

@@ -81,7 +81,7 @@ property tests (P1.5) confirm build→parse round-trips for valid inputs only.
 - [ ] `nex-core::bitfield` (`pub type u1 = u8 …`): make private or move behind a
       documented `#[doc(hidden)]` implementation-detail boundary — these aliases
       should not be part of the stable contract.
-- [ ] Decide `nex-sys`'s status: it is a low-level internal crate — either mark it
+- [x] Decide `nex-sys`'s status: it is a low-level internal crate — either mark it
       clearly "internal, no semver guarantees" in its docs or make its surface
       `pub(crate)`-equivalent via `#[doc(hidden)]`.
 - [ ] Normalize accessor naming: replace `get_*` (73 occurrences in `nex-packet`)
@@ -166,15 +166,18 @@ MSRV, and supply chain across all three OSes.
 
 ### P0.7 Unsafe & OS-resource safety hardening
 
-- [ ] Add a `# Safety` comment to every `unsafe` block and every `unsafe impl` in
-      `nex-datalink` (~141 sites) and `nex-sys`, justifying the invariant.
+- [ ] Add a `# Safety` comment to every `unsafe` block and every `unsafe impl`:
+  - [x] Complete the `nex-sys` audit, including public `unsafe fn` contracts.
+  - [ ] Complete the `nex-datalink` audit (~141 sites).
 - [ ] Justify or remove the 9 `unsafe impl Send/Sync` in `nex-datalink`
       (`wpcap.rs`, `async_io/wpcap.rs`): document what makes the raw Npcap handles
       actually thread-safe, or wrap them so the impl is sound.
 - [ ] Ensure every OS handle (fd, BPF device, Npcap adapter, packet buffer) is
       owned by an RAII type that closes on *all* error paths.
-  - `nex-sys::FileDesc` already drops the fd — audit that every fd flows through it
-    and that no early-return leaks a half-opened resource.
+  - [x] Make `nex-sys::FileDesc` an explicit owned descriptor with a private raw
+        field, an unsafe ownership-transfer constructor, and a drop test.
+  - [ ] Audit that every fd flows through an owning wrapper and that no early-return
+        leaks a half-opened resource.
 - [ ] Prefer typed wrappers over raw integer/pointer handles at module boundaries.
 - [ ] Add error-path tests that open then fail to confirm no leak/double-close.
 - [ ] Run Miri on pure `nex-packet`/`nex-core` parsing/building where feasible.
