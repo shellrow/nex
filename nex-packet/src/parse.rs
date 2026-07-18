@@ -1,6 +1,45 @@
-//! Structured parse errors for diagnosable packet parsing APIs.
+//! Shared contracts for diagnosable packet parsing APIs.
+//!
+//! Packet types expose `try_from_buf(&[u8])` for borrowed input and
+//! `try_from_bytes(bytes::Bytes)` for owned input. Both return [`ParseError`].
+//! Parsers that support alternate validation behavior accept [`ParseMode`]
+//! through a `*_with_mode` method instead of adding more method-name suffixes.
+//!
+//! # Parsing API migration
+//!
+//! | Previous API | v1 API |
+//! | --- | --- |
+//! | `Packet::from_buf(input)` | `Type::try_from_buf(input)` |
+//! | `Packet::from_bytes(input)` | `Type::try_from_bytes(input)` |
+//! | `try_from_buf_strict(input)` | `try_from_buf_with_mode(input, ParseMode::Strict)` |
+//! | `try_from_bytes_strict(input)` | `try_from_bytes_with_mode(input, ParseMode::Strict)` |
+//! | `from_buf_strict(input)` | `try_from_buf_with_mode(input, ParseMode::Strict).ok()` |
+//! | `from_bytes_strict(input)` | `try_from_bytes_with_mode(input, ParseMode::Strict).ok()` |
+//! | `EthernetHeader::from_bytes(input)` | `EthernetHeader::try_from_bytes(input)` |
+//! | `DnsName::from_bytes(input)` | `DnsName::try_from_bytes(input)` |
+//! | DNS section `from_buf_mut(cursor)` helpers | `DnsPacket::try_from_buf(input)` |
+//!
+//! The `Option`-returning methods on [`crate::packet::Packet`] remain temporary
+//! compatibility shims. New code should use the inherent `try_from_*` methods so
+//! malformed input retains diagnostic context.
 
 use core::fmt;
+
+/// Controls validation behavior for parsers with length-delimited payloads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ParseMode {
+    /// Preserve captured payload bytes when a declared length is missing or incomplete.
+    #[default]
+    Lenient,
+    /// Reject input whose captured length is shorter than its declared length.
+    Strict,
+}
+
+impl ParseMode {
+    pub(crate) const fn is_strict(self) -> bool {
+        matches!(self, Self::Strict)
+    }
+}
 
 /// Structured error returned by `try_from_*` parsing APIs.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -2,12 +2,38 @@ use crate::ip::{is_global_ip, is_global_ipv4, is_global_ipv6};
 use crate::mac::MacAddr;
 pub use ipnet::{self, Ipv4Net, Ipv6Net};
 use std::convert::TryFrom;
+use std::fmt;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::SystemTime;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+/// Errors returned when discovering system network interfaces or gateways.
+#[derive(Clone, Eq, PartialEq, Debug)]
+#[non_exhaustive]
+pub enum InterfaceError {
+    /// The operating system did not provide a default network interface.
+    DefaultInterfaceUnavailable { message: String },
+    /// The operating system did not provide a default gateway.
+    DefaultGatewayUnavailable { message: String },
+}
+
+impl fmt::Display for InterfaceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DefaultInterfaceUnavailable { message } => {
+                write!(f, "default interface is unavailable: {message}")
+            }
+            Self::DefaultGatewayUnavailable { message } => {
+                write!(f, "default gateway is unavailable: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for InterfaceError {}
 
 #[cfg(unix)]
 pub const IFF_UP: u32 = nex_sys::IFF_UP as u32;
@@ -356,7 +382,7 @@ pub struct Interface {
 impl Interface {
     #[cfg(feature = "gateway")]
     #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Result<Interface, String> {
+    pub fn default() -> Result<Interface, InterfaceError> {
         get_default_interface()
     }
 
@@ -589,17 +615,45 @@ pub fn get_interfaces() -> Vec<Interface> {
 }
 
 #[cfg(feature = "gateway")]
-pub fn get_default_interface() -> Result<Interface, String> {
-    netdev::get_default_interface().map(Into::into)
+pub fn get_default_interface() -> Result<Interface, InterfaceError> {
+    netdev::get_default_interface()
+        .map(Into::into)
+        .map_err(|message| InterfaceError::DefaultInterfaceUnavailable { message })
 }
 
 #[cfg(feature = "gateway")]
-pub fn get_default_gateway() -> Result<NetworkDevice, String> {
-    netdev::get_default_gateway().map(Into::into)
+pub fn get_default_gateway() -> Result<NetworkDevice, InterfaceError> {
+    netdev::get_default_gateway()
+        .map(Into::into)
+        .map_err(|message| InterfaceError::DefaultGatewayUnavailable { message })
 }
 
 fn lookup_interface(name: &str, index: u32) -> Option<netdev::Interface> {
     netdev::get_interfaces()
         .into_iter()
         .find(|iface| iface.index == index || iface.name == name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InterfaceError;
+
+    fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
+
+    #[test]
+    fn interface_error_implements_public_error_contract() {
+        assert_error_contract::<InterfaceError>();
+    }
+
+    #[test]
+    fn interface_error_includes_operation_context() {
+        let error = InterfaceError::DefaultGatewayUnavailable {
+            message: "route table is empty".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "default gateway is unavailable: route table is empty"
+        );
+    }
 }

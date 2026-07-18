@@ -4,7 +4,7 @@ use crate::{
     checksum::{ChecksumMode, ChecksumState},
     ip::IpNextProtocol,
     packet::{MutablePacket, Packet},
-    parse::ParseError,
+    parse::{ParseError, ParseMode},
     util,
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -306,32 +306,46 @@ impl Packet for Ipv4Packet {
 impl Ipv4Packet {
     /// Parse an IPv4 packet and return a structured error on failure.
     pub fn try_from_buf(bytes: &[u8]) -> Result<Self, ParseError> {
-        parse_ipv4_from_slice(bytes, false)
+        Self::try_from_buf_with_mode(bytes, ParseMode::Lenient)
     }
 
     /// Parse an IPv4 packet from owned bytes while preserving payload slices when possible.
     pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
-        parse_ipv4_from_bytes(bytes, false)
+        Self::try_from_bytes_with_mode(bytes, ParseMode::Lenient)
+    }
+
+    /// Parse an IPv4 packet using the requested validation mode.
+    pub fn try_from_buf_with_mode(bytes: &[u8], mode: ParseMode) -> Result<Self, ParseError> {
+        parse_ipv4_from_slice(bytes, mode.is_strict())
+    }
+
+    /// Parse an owned IPv4 packet using the requested validation mode.
+    pub fn try_from_bytes_with_mode(bytes: Bytes, mode: ParseMode) -> Result<Self, ParseError> {
+        parse_ipv4_from_bytes(bytes, mode.is_strict())
     }
 
     /// Parse an IPv4 packet using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv4Packet::try_from_buf_with_mode with ParseMode::Strict")]
     pub fn try_from_buf_strict(bytes: &[u8]) -> Result<Self, ParseError> {
-        parse_ipv4_from_slice(bytes, true)
+        Self::try_from_buf_with_mode(bytes, ParseMode::Strict)
     }
 
     /// Parse an IPv4 packet from owned bytes using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv4Packet::try_from_bytes_with_mode with ParseMode::Strict")]
     pub fn try_from_bytes_strict(bytes: Bytes) -> Result<Self, ParseError> {
-        parse_ipv4_from_bytes(bytes, true)
+        Self::try_from_bytes_with_mode(bytes, ParseMode::Strict)
     }
 
     /// Parse an IPv4 packet using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv4Packet::try_from_buf_with_mode with ParseMode::Strict")]
     pub fn from_buf_strict(bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf_strict(bytes).ok()
+        Self::try_from_buf_with_mode(bytes, ParseMode::Strict).ok()
     }
 
     /// Parse an IPv4 packet from owned bytes using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv4Packet::try_from_bytes_with_mode with ParseMode::Strict")]
     pub fn from_bytes_strict(bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes_strict(bytes).ok()
+        Self::try_from_bytes_with_mode(bytes, ParseMode::Strict).ok()
     }
 
     pub fn with_computed_checksum(mut self) -> Self {
@@ -1089,7 +1103,8 @@ mod tests {
             1, 1, 2, 3, 4,
         ];
 
-        let err = Ipv4Packet::try_from_buf_strict(&raw).expect_err("strict parse should fail");
+        let err = Ipv4Packet::try_from_buf_with_mode(&raw, ParseMode::Strict)
+            .expect_err("strict parse should fail");
         assert!(matches!(err, ParseError::Truncated { .. }));
         assert!(Ipv4Packet::from_buf(&raw).is_some());
     }

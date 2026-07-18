@@ -161,20 +161,17 @@ pub struct EthernetHeader {
 }
 
 impl EthernetHeader {
-    /// Construct an Ethernet header from a byte slice.
-    pub fn from_bytes(packet: Bytes) -> Result<EthernetHeader, String> {
-        if packet.len() < ETHERNET_HEADER_LEN {
-            return Err("Packet is too small for Ethernet header".to_string());
-        }
-        match EthernetPacket::from_bytes(packet) {
-            Some(ethernet_packet) => Ok(EthernetHeader {
-                destination: ethernet_packet.get_destination(),
-                source: ethernet_packet.get_source(),
-                ethertype: ethernet_packet.get_ethertype(),
-            }),
-            None => Err("Failed to parse Ethernet packet".to_string()),
-        }
+    /// Parse an Ethernet header from owned bytes.
+    pub fn try_from_bytes(packet: Bytes) -> Result<Self, ParseError> {
+        EthernetPacket::try_from_bytes(packet).map(|packet| packet.header)
     }
+
+    /// Parse an Ethernet header from owned bytes.
+    #[deprecated(note = "use EthernetHeader::try_from_bytes")]
+    pub fn from_bytes(packet: Bytes) -> Result<Self, ParseError> {
+        Self::try_from_bytes(packet)
+    }
+
     pub fn to_bytes(&self) -> Bytes {
         let mut buf = Vec::with_capacity(ETHERNET_HEADER_LEN);
         buf.extend_from_slice(&self.destination.octets());
@@ -459,10 +456,24 @@ mod tests {
             ethertype: EtherType::Ipv6,
         };
         let bytes = header.to_bytes();
-        let parsed = EthernetHeader::from_bytes(bytes.clone()).unwrap();
+        let parsed = EthernetHeader::try_from_bytes(bytes.clone()).unwrap();
 
         assert_eq!(header, parsed);
         assert_eq!(bytes.len(), ETHERNET_HEADER_LEN);
+    }
+
+    #[test]
+    fn test_ethernet_header_parse_too_short_returns_parse_error() {
+        let error = EthernetHeader::try_from_bytes(Bytes::from_static(&[0; 4])).unwrap_err();
+
+        assert_eq!(
+            error,
+            ParseError::BufferTooShort {
+                context: "Ethernet packet",
+                minimum: ETHERNET_HEADER_LEN,
+                actual: 4,
+            }
+        );
     }
 
     #[test]

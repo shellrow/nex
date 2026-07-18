@@ -1,6 +1,6 @@
 use crate::ip::IpNextProtocol;
 use crate::packet::{MutablePacket, Packet};
-use crate::parse::ParseError;
+use crate::parse::{ParseError, ParseMode};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::net::Ipv6Addr;
 
@@ -151,22 +151,34 @@ impl Packet for Ipv6Packet {
 impl Ipv6Packet {
     /// Parse an IPv6 packet and return a structured error on failure.
     pub fn try_from_buf(bytes: &[u8]) -> Result<Self, ParseError> {
-        parse_ipv6_from_slice(bytes, false)
+        Self::try_from_buf_with_mode(bytes, ParseMode::Lenient)
     }
 
     /// Parse an IPv6 packet from owned bytes while preserving payload slices when possible.
     pub fn try_from_bytes(bytes: Bytes) -> Result<Self, ParseError> {
-        parse_ipv6_from_bytes(bytes, false)
+        Self::try_from_bytes_with_mode(bytes, ParseMode::Lenient)
+    }
+
+    /// Parse an IPv6 packet using the requested validation mode.
+    pub fn try_from_buf_with_mode(bytes: &[u8], mode: ParseMode) -> Result<Self, ParseError> {
+        parse_ipv6_from_slice(bytes, mode.is_strict())
+    }
+
+    /// Parse an owned IPv6 packet using the requested validation mode.
+    pub fn try_from_bytes_with_mode(bytes: Bytes, mode: ParseMode) -> Result<Self, ParseError> {
+        parse_ipv6_from_bytes(bytes, mode.is_strict())
     }
 
     /// Parse an IPv6 packet using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv6Packet::try_from_buf_with_mode with ParseMode::Strict")]
     pub fn try_from_buf_strict(bytes: &[u8]) -> Result<Self, ParseError> {
-        parse_ipv6_from_slice(bytes, true)
+        Self::try_from_buf_with_mode(bytes, ParseMode::Strict)
     }
 
     /// Parse an IPv6 packet from owned bytes using validation-oriented strict checks.
+    #[deprecated(note = "use Ipv6Packet::try_from_bytes_with_mode with ParseMode::Strict")]
     pub fn try_from_bytes_strict(bytes: Bytes) -> Result<Self, ParseError> {
-        parse_ipv6_from_bytes(bytes, true)
+        Self::try_from_bytes_with_mode(bytes, ParseMode::Strict)
     }
 
     pub fn total_len(&self) -> usize {
@@ -829,7 +841,8 @@ mod tests {
             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4,
         ]);
 
-        let err = Ipv6Packet::try_from_buf_strict(&raw).expect_err("strict parse should fail");
+        let err = Ipv6Packet::try_from_buf_with_mode(&raw, ParseMode::Strict)
+            .expect_err("strict parse should fail");
         assert!(matches!(err, ParseError::Truncated { .. }));
         assert!(Ipv6Packet::from_buf(&raw).is_some());
     }

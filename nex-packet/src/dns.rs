@@ -954,7 +954,7 @@ impl DnsResponsePacket {
     /// Returns the DNS name if the record type is CNAME, NS, or PTR.
     pub fn get_name(&self) -> Option<DnsName> {
         match self.rtype {
-            DnsType::CNAME | DnsType::NS | DnsType::PTR => DnsName::from_bytes(&self.data).ok(),
+            DnsType::CNAME | DnsType::NS | DnsType::PTR => DnsName::try_from_bytes(&self.data).ok(),
             _ => None,
         }
     }
@@ -1212,26 +1212,10 @@ impl DnsPacket {
 pub struct DnsName(String);
 
 impl DnsName {
-    /// Creates a new `DnsName` string from bytes.
-    pub fn from_bytes(buf: &[u8]) -> Result<Self, Utf8Error> {
-        let mut pos = 0;
-        let mut labels = Vec::new();
-
-        while pos < buf.len() {
-            let len = buf[pos] as usize;
-            if len == 0 {
-                break;
-            }
-            pos += 1;
-            if pos + len > buf.len() {
-                break;
-            }
-            let label = std::str::from_utf8(&buf[pos..pos + len])?;
-            labels.push(label);
-            pos += len;
-        }
-
-        Ok(DnsName(labels.join(".")))
+    /// Parse a DNS name from bytes.
+    #[deprecated(note = "use DnsName::try_from_bytes")]
+    pub fn from_bytes(buf: &[u8]) -> Result<Self, ParseError> {
+        Self::try_from_bytes(buf)
     }
 
     /// Returns the DNS name as a string slice.

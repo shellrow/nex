@@ -10,7 +10,7 @@ use crate::{
     ipv4::{Ipv4Header, Ipv4Packet},
     ipv6::{Ipv6Header, Ipv6Packet},
     packet::Packet,
-    parse::ParseError,
+    parse::{ParseError, ParseMode},
     tcp::{TcpHeader, TcpPacket},
     udp::{UdpHeader, UdpPacket},
 };
@@ -70,27 +70,48 @@ impl Frame {
 
     /// Parse a frame and return a structured error on failure.
     pub fn try_from_buf(packet: &[u8], option: ParseOption) -> Result<Self, ParseError> {
-        parse_frame_from_bytes(Bytes::copy_from_slice(packet), option, false)
+        Self::try_from_buf_with_mode(packet, option, ParseMode::Lenient)
     }
 
     /// Parse a frame from owned bytes while preserving payload slices when possible.
     pub fn try_from_bytes(packet: Bytes, option: ParseOption) -> Result<Self, ParseError> {
-        parse_frame_from_bytes(packet, option, false)
+        Self::try_from_bytes_with_mode(packet, option, ParseMode::Lenient)
+    }
+
+    /// Parse a frame using the requested validation mode.
+    pub fn try_from_buf_with_mode(
+        packet: &[u8],
+        option: ParseOption,
+        mode: ParseMode,
+    ) -> Result<Self, ParseError> {
+        parse_frame_from_bytes(Bytes::copy_from_slice(packet), option, mode.is_strict())
+    }
+
+    /// Parse an owned frame using the requested validation mode.
+    pub fn try_from_bytes_with_mode(
+        packet: Bytes,
+        option: ParseOption,
+        mode: ParseMode,
+    ) -> Result<Self, ParseError> {
+        parse_frame_from_bytes(packet, option, mode.is_strict())
     }
 
     /// Parse a frame using validation-oriented strict IP parsing.
+    #[deprecated(note = "use Frame::try_from_buf_with_mode with ParseMode::Strict")]
     pub fn try_from_buf_strict(packet: &[u8], option: ParseOption) -> Result<Self, ParseError> {
-        parse_frame_from_bytes(Bytes::copy_from_slice(packet), option, true)
+        Self::try_from_buf_with_mode(packet, option, ParseMode::Strict)
     }
 
     /// Parse a frame from owned bytes using validation-oriented strict IP parsing.
+    #[deprecated(note = "use Frame::try_from_bytes_with_mode with ParseMode::Strict")]
     pub fn try_from_bytes_strict(packet: Bytes, option: ParseOption) -> Result<Self, ParseError> {
-        parse_frame_from_bytes(packet, option, true)
+        Self::try_from_bytes_with_mode(packet, option, ParseMode::Strict)
     }
 
     /// Parse a frame using validation-oriented strict IP parsing.
+    #[deprecated(note = "use Frame::try_from_buf_with_mode with ParseMode::Strict")]
     pub fn from_buf_strict(packet: &[u8], option: ParseOption) -> Option<Self> {
-        Self::try_from_buf_strict(packet, option).ok()
+        Self::try_from_buf_with_mode(packet, option, ParseMode::Strict).ok()
     }
 }
 
@@ -187,7 +208,7 @@ fn parse_arp_packet(packet: Bytes, frame: &mut Frame) {
 
 fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(), ParseError> {
     let parsed = if strict {
-        Ipv4Packet::try_from_bytes_strict(packet)
+        Ipv4Packet::try_from_bytes_with_mode(packet, ParseMode::Strict)
     } else {
         Ipv4Packet::try_from_bytes(packet)
     };
@@ -232,7 +253,7 @@ fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
 
 fn parse_ipv6_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(), ParseError> {
     let parsed = if strict {
-        Ipv6Packet::try_from_bytes_strict(packet)
+        Ipv6Packet::try_from_bytes_with_mode(packet, ParseMode::Strict)
     } else {
         Ipv6Packet::try_from_bytes(packet)
     };
