@@ -70,12 +70,12 @@ impl Packet for Ipv6Packet {
             match ext {
                 Ipv6ExtensionHeader::HopByHop { next, data }
                 | Ipv6ExtensionHeader::Destination { next, data } => {
-                    let hdr_ext_len = ((data.len() + 6) / 8) as u8 - 1;
+                    let total_length = (2 + data.len()).div_ceil(8) * 8;
+                    let hdr_ext_len = (total_length / 8 - 1) as u8;
                     buf.put_u8(next.value());
                     buf.put_u8(hdr_ext_len);
                     buf.extend_from_slice(data);
-                    // Padding (8 byte alignment)
-                    while (2 + data.len()) % 8 != 0 {
+                    for _ in 0..total_length - (2 + data.len()) {
                         buf.put_u8(0);
                     }
                 }
@@ -86,13 +86,14 @@ impl Packet for Ipv6Packet {
                     segments_left,
                     data,
                 } => {
-                    let hdr_ext_len = ((data.len() + 4 + 6) / 8) as u8 - 1;
+                    let total_length = (4 + data.len()).div_ceil(8) * 8;
+                    let hdr_ext_len = (total_length / 8 - 1) as u8;
                     buf.put_u8(next.value());
                     buf.put_u8(hdr_ext_len);
                     buf.put_u8(*routing_type);
                     buf.put_u8(*segments_left);
                     buf.extend_from_slice(data);
-                    while (4 + data.len()) % 8 != 0 {
+                    for _ in 0..total_length - (4 + data.len()) {
                         buf.put_u8(0);
                     }
                 }
@@ -681,6 +682,31 @@ mod tests {
         assert_eq!(&parsed.payload[..], b"Hello!!\n");
         assert_eq!(parsed.extensions.len(), 0);
         assert_eq!(parsed.to_bytes(), raw_bytes);
+    }
+
+    #[test]
+    fn empty_hop_by_hop_header_is_padded_to_eight_bytes() {
+        let packet = Ipv6Packet {
+            header: Ipv6Header {
+                version: 6,
+                traffic_class: 0,
+                flow_label: 0,
+                payload_length: 8,
+                next_header: IpNextProtocol::Udp,
+                hop_limit: 64,
+                source: Ipv6Addr::LOCALHOST,
+                destination: Ipv6Addr::LOCALHOST,
+            },
+            extensions: vec![Ipv6ExtensionHeader::HopByHop {
+                next: IpNextProtocol::Udp,
+                data: Bytes::new(),
+            }],
+            payload: Bytes::new(),
+        };
+
+        let bytes = packet.to_bytes();
+        assert_eq!(bytes.len(), IPV6_HEADER_LEN + 8);
+        assert_eq!(&bytes[IPV6_HEADER_LEN..], &[17, 0, 0, 0, 0, 0, 0, 0]);
     }
 
     #[test]
