@@ -70,3 +70,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Check feature combination
         run: ${{ matrix.command }}
+
+  msrv:
+    name: MSRV (Rust 1.88.0)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Check workspace with MSRV
+        run: cargo check --workspace --all-features --locked
+
+  supply-chain:
+    name: Supply chain
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features

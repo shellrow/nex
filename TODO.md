@@ -150,9 +150,9 @@ Current `.github/workflows/rust.yml` runs only `cargo build` on Linux/macOS/Wind
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
 - [x] Feature-combo job: default / `--no-default-features` / `serde` / `pcap` /
       `async` / `--all-features`.
-- [ ] MSRV job: pin and verify an MSRV (edition 2024 ⇒ MSRV ≥ 1.85; declare
+- [x] MSRV job: pin and verify an MSRV (edition 2024 ⇒ MSRV ≥ 1.85; declare
       `rust-version` in every `Cargo.toml` and test it).
-- [ ] Supply chain: `cargo deny check` (licenses, advisories, bans, sources) +
+- [x] Supply chain: `cargo deny check` (licenses, advisories, bans, sources) +
       add `deny.toml`.
 - [ ] Public API snapshot diff job (P0.3).
 - [x] Remove `#![deny(warnings)]` from `nex-datalink/src/lib.rs` (line 3): it makes
