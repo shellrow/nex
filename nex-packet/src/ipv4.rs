@@ -241,10 +241,8 @@ impl Packet for Ipv4Packet {
             }
         }
 
-        // padding
-        while !tmp_buf.len().is_multiple_of(4) {
-            tmp_buf.put_u8(0);
-        }
+        let padding_len = (4 - (tmp_buf.len() % 4)) % 4;
+        tmp_buf.resize(tmp_buf.len() + padding_len, 0);
 
         let header_len = IPV4_HEADER_LEN + tmp_buf.len();
 

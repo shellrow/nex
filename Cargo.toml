@@ -12,6 +12,7 @@ members = [
 [workspace.package]
 version = "0.26.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["shellrow <shellrow@foctal.com>"]
 
 [workspace.dependencies]

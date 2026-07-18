@@ -179,6 +179,8 @@ impl UdpSocket {
 
         let iov = [IoSlice::new(buf)];
         let raw_fd = self.socket.as_raw_fd();
+        let packet_info_meta =
+            meta.filter(|meta| meta.source_addr.is_some() || meta.interface_index.is_some());
 
         match target {
             SocketAddr::V4(addr) => {
@@ -190,12 +192,8 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta
-                        && (meta.source_addr.is_some() || meta.interface_index.is_some())
-                    {
-                        if let Some(src) = meta.source_addr
-                            && !src.is_ipv4()
-                        {
+                    if let Some(meta) = packet_info_meta {
+                        if meta.source_addr.is_some_and(|src| !src.is_ipv4()) {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidInput,
                                 "source_addr family does not match target",
@@ -221,9 +219,7 @@ impl UdpSocket {
                             .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta
-                    && (meta.source_addr.is_some() || meta.interface_index.is_some())
-                {
+                if packet_info_meta.is_some() {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
                         "send_msg packet-info metadata is not supported on this platform",
@@ -242,12 +238,8 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta
-                        && (meta.source_addr.is_some() || meta.interface_index.is_some())
-                    {
-                        if let Some(src) = meta.source_addr
-                            && !src.is_ipv6()
-                        {
+                    if let Some(meta) = packet_info_meta {
+                        if meta.source_addr.is_some_and(|src| !src.is_ipv6()) {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidInput,
                                 "source_addr family does not match target",
@@ -273,9 +265,7 @@ impl UdpSocket {
                             .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta
-                    && (meta.source_addr.is_some() || meta.interface_index.is_some())
-                {
+                if packet_info_meta.is_some() {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
                         "send_msg packet-info metadata is not supported on this platform",

@@ -2,6 +2,7 @@
 name = "nex-sys"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Provides network-related system function and call support for nex. Used for low-level system interactions."
 repository = "https://github.com/shellrow/nex"

@@ -2,6 +2,7 @@
 name = "nex-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Core networking library for nex."
 repository = "https://github.com/shellrow/nex"

@@ -111,14 +111,15 @@ impl Ipv4PacketBuilder {
                             actual: encoded_length,
                         });
                     }
-                    if let Some(declared) = option.header.length
-                        && declared as usize != encoded_length
-                    {
-                        return Err(BuildError::InvalidFieldLength {
-                            context: "IPv4 option length",
-                            expected: encoded_length,
-                            actual: declared as usize,
-                        });
+                    match option.header.length {
+                        Some(declared) if declared as usize != encoded_length => {
+                            return Err(BuildError::InvalidFieldLength {
+                                context: "IPv4 option length",
+                                expected: encoded_length,
+                                actual: declared as usize,
+                            });
+                        }
+                        _ => {}
                     }
                     encoded_length
                 }

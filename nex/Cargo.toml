@@ -2,6 +2,7 @@
 name = "nex"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Cross-platform networking library in Rust"
 repository = "https://github.com/shellrow/nex"

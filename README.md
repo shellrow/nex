@@ -17,6 +17,11 @@ It includes sub-crates with responsibilities:
 
 The project aims to expose portable low-level primitives.  
 
+## Minimum Supported Rust Version
+
+`nex` requires Rust 1.88.0 or later. MSRV changes are treated as compatibility
+changes and are verified in CI.
+
 ## Usage
 
 To use `nex`, add it as a dependency in your `Cargo.toml`:

@@ -2,6 +2,7 @@
 name = "nex-packet"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Cross-platform packet parsing and building library. Provides low-level packet handling. Part of nex project."
 repository = "https://github.com/shellrow/nex"

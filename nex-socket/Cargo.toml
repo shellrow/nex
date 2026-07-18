@@ -2,6 +2,7 @@
 name = "nex-socket"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Cross-platform socket library. Part of nex project. Offers socket-related functionality."
 repository = "https://github.com/shellrow/nex"
