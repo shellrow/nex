@@ -24,6 +24,8 @@ futures = "0.3"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "signal", "macros"] }
 
 [features]
+default = []
+async = ["nex-datalink/async", "nex-socket/async"]
 pcap = ["nex-datalink/pcap"]
 serde = ["nex-core/serde", "nex-packet/serde", "nex-datalink/serde"]
 
@@ -74,22 +76,27 @@ path = "../examples/udp_socket.rs"
 [[example]]
 name = "async_icmp_socket"
 path = "../examples/async_icmp_socket.rs"
+required-features = ["async"]
 
 [[example]]
 name = "async_tcp_socket"
 path = "../examples/async_tcp_socket.rs"
+required-features = ["async"]
 
 [[example]]
 name = "async_udp_socket"
 path = "../examples/async_udp_socket.rs"
+required-features = ["async"]
 
 [[example]]
 name = "async_datalink"
 path = "../examples/async_datalink.rs"
+required-features = ["async"]
 
 [[example]]
 name = "async_dump"
 path = "../examples/async_dump.rs"
+required-features = ["async"]
 
 [[example]]
 name = "mutable_chaining"

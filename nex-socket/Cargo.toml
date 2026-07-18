@@ -14,7 +14,7 @@ license = "MIT"
 nex-core = { workspace = true }
 nex-packet = { workspace = true }
 socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1", features = ["time", "sync", "net", "rt"] }
+tokio = { version = "1", features = ["time", "sync", "net", "rt"], optional = true }
 libc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -29,3 +29,7 @@ features = [
   "Win32_System_Threading",
   "Win32_System_WindowsProgramming",
 ]
+
+[features]
+default = []
+async = ["dep:tokio"]

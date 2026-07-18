@@ -2,6 +2,7 @@
 //!
 //! Provides synchronous and asynchronous UDP APIs along with
 //! configuration utilities for common socket options.
+#[cfg(feature = "async")]
 mod async_impl;
 mod config;
 mod sync_impl;
@@ -117,6 +118,7 @@ pub(crate) fn recv_pktinfo_v6(_socket: &Socket) -> io::Result<bool> {
     ))
 }
 
+#[cfg(feature = "async")]
 pub use async_impl::*;
 pub use config::*;
 pub use sync_impl::*;

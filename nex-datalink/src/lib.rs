@@ -1,13 +1,12 @@
 //! Cross-platform datalink I/O primitives for sending and receiving raw packets.
 
-#![deny(warnings)]
-
 use std::io;
 use std::option::Option;
 use std::time::Duration;
 
 mod bindings;
 
+#[cfg(feature = "async")]
 pub mod async_io;
 
 #[cfg(windows)]
