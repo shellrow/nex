@@ -1,4 +1,8 @@
 //! Low-level packet parsing and serialization primitives for common network protocols.
+//!
+//! Packet APIs distinguish borrowed views, mutable borrowed views, owned
+//! decoded packets, and validated builders. See `docs/PACKET_MODEL.md` in the
+//! repository for ownership, allocation, and mutable-layout semantics.
 #![allow(deprecated)]
 
 pub mod arp;

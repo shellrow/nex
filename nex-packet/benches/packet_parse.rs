@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use nex_packet::{
-    frame::{Frame, FrameView, ParseOption},
+    frame::{Frame, FrameSlice, FrameView, ParseOption},
     tcp::TcpPacket,
     udp::UdpPacket,
 };
@@ -38,6 +38,9 @@ fn bench_packet_parse(c: &mut Criterion) {
     });
     group.bench_function("frame_view_from_buf_ipv4_tcp", |b| {
         b.iter(|| FrameView::try_from_buf(&ipv4_tcp, ParseOption::default()))
+    });
+    group.bench_function("frame_slice_from_buf_ipv4_tcp", |b| {
+        b.iter(|| FrameSlice::try_from_buf(&ipv4_tcp, ParseOption::default()))
     });
     group.bench_function("tcp_from_buf", |b| {
         b.iter(|| TcpPacket::try_from_buf(&tcp_segment))
