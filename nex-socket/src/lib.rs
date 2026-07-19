@@ -2,6 +2,16 @@
 //!
 //! `nex-socket` focuses on predictable, low-level behavior and platform-aware
 //! socket option control.
+//!
+//! TCP, UDP, and ICMP use an infallible configuration value followed by a
+//! fallible socket constructor. Synchronous constructors create blocking
+//! sockets unless their TCP configuration explicitly requests nonblocking
+//! operation. Asynchronous constructors always register a nonblocking socket
+//! with Tokio. Address-family mismatches are rejected by configuration
+//! validation or returned by the operating system for per-operation targets.
+//!
+//! Raw TCP and ICMP sockets normally require root/`CAP_NET_RAW` on Unix and an
+//! elevated process on Windows. Unprivileged UDP and TCP stream sockets do not.
 
 pub mod icmp;
 pub mod tcp;

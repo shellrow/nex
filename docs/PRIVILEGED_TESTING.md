@@ -4,6 +4,18 @@ Run this matrix before a release on dedicated hosts or disposable virtual
 machines. Do not run it on an untrusted shared network. Record the OS version,
 Rust version, interface name, command, and result in the release checklist.
 
+Set the dedicated interface name and run the ignored datalink integration tests:
+
+```sh
+NEX_TEST_INTERFACE=eth0 cargo test -p nex-datalink --test privileged_channel -- --ignored
+NEX_TEST_INTERFACE=eth0 cargo test -p nex-datalink --features async --test privileged_channel -- --ignored
+NEX_TEST_INTERFACE=eth0 cargo test -p nex-socket --test privileged_socket -- --ignored
+```
+
+Use the platform's actual interface name instead of `eth0`. The tests open and
+close synchronous and asynchronous channels; Linux additionally checks Layer3
+channel creation.
+
 | Platform | Prerequisites | Synchronous checks | Asynchronous checks | Expected result |
 | --- | --- | --- | --- | --- |
 | Linux | Root or `CAP_NET_RAW`; loopback plus a veth pair | `dump`, `arp`, `icmp_ping`, `tcp_ping`, `udp_ping`; Layer2 and Layer3 channels; promiscuous off/on; fanout with two receivers | `async_datalink`, `async_dump`, async ICMP/TCP/UDP socket examples | Packets transmit and receive, timeouts are honored, and all processes exit without leaked descriptors. |

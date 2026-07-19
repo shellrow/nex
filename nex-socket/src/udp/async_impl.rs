@@ -1,7 +1,7 @@
 use crate::udp::UdpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
-use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket as StdUdpSocket};
 use tokio::net::UdpSocket;
 
 /// Asynchronous UDP socket built on top of Tokio.
@@ -217,6 +217,26 @@ impl AsyncUdpSocket {
     /// Get broadcast mode.
     pub fn broadcast(&self) -> io::Result<bool> {
         self.inner.broadcast()
+    }
+
+    /// Join an IPv4 multicast group on the selected interface.
+    pub fn join_multicast_v4(&self, group: Ipv4Addr, interface: Ipv4Addr) -> io::Result<()> {
+        self.inner.join_multicast_v4(group, interface)
+    }
+
+    /// Leave an IPv4 multicast group on the selected interface.
+    pub fn leave_multicast_v4(&self, group: Ipv4Addr, interface: Ipv4Addr) -> io::Result<()> {
+        self.inner.leave_multicast_v4(group, interface)
+    }
+
+    /// Join an IPv6 multicast group on the selected interface index.
+    pub fn join_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.inner.join_multicast_v6(group, interface)
+    }
+
+    /// Leave an IPv6 multicast group on the selected interface index.
+    pub fn leave_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.inner.leave_multicast_v6(group, interface)
     }
 
     #[cfg(unix)]

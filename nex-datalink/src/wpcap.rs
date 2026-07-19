@@ -231,7 +231,7 @@ impl RawSender for RawSenderImpl {
         }
         let len = num_packets.checked_mul(packet_size)?;
         // SAFETY: The packet pointer is owned by `self` and initialized.
-        if len >= unsafe { (*self.packet.packet).Length } as usize {
+        if len > unsafe { (*self.packet.packet).Length } as usize {
             None
         } else {
             // SAFETY: The packet pointer is owned by `self` and initialized.

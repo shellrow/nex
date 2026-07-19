@@ -254,7 +254,7 @@ impl RawSender for RawSenderImpl {
             )));
         }
         let len = num_packets.checked_mul(packet_size)?;
-        if len >= self.write_buffer.len() {
+        if len > self.write_buffer.len() {
             None
         } else {
             // If we're sending on the loopback device, discard the ethernet header.

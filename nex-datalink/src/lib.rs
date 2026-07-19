@@ -134,6 +134,19 @@ pub struct FanoutOption {
 ///
 /// Each option should be treated as a hint - each backend is free to ignore any and all
 /// options which don't apply to it.
+///
+/// # Platform behavior
+///
+/// - Linux uses `AF_PACKET`. [`ChannelType::Layer2`] includes link-layer
+///   headers; [`ChannelType::Layer3`] uses datagram packet sockets for the
+///   selected EtherType. Buffer sizes configure the reusable userspace buffers,
+///   timeouts bound `poll`, and promiscuous/fanout settings are applied by the
+///   kernel.
+/// - macOS and BSD use BPF devices. `bpf_fd_attempts` bounds `/dev/bpf*`
+///   discovery, read buffering follows the BPF buffer size, and timeouts bound
+///   readiness waits.
+/// - Windows uses Npcap. Buffer sizes configure Npcap packet buffers. Timeout
+///   fields and Linux/BPF-only options are not applied.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub struct Config {
@@ -293,6 +306,11 @@ impl Config {
 /// underlying backend; some settings may be ignored or treated differently depending on the system
 /// and library capabilities.
 ///
+/// The synchronous receiver blocks until data, an error, or a configured
+/// platform-supported timeout occurs. A timeout is reported as an
+/// [`io::ErrorKind::TimedOut`] or [`io::ErrorKind::WouldBlock`] according to
+/// the operating-system backend.
+///
 /// The function returns a `Channel` object encapsulating the transmission and reception capabilities.
 #[inline]
 pub fn channel(
@@ -309,8 +327,13 @@ pub trait RawSender: Send {
     ///
     /// This will call `func` `num_packets` times. The function will be provided with a
     /// mutable packet to manipulate, which will then be sent. This allows packets to be
-    /// built in-place, avoiding the copy required for `send`. If there is not sufficient
-    /// capacity in the buffer, None will be returned.
+    /// built in-place, avoiding the copy required for `send`.
+    ///
+    /// `None` means the requested packet count or size does not fit the
+    /// sender's reusable userspace buffer and no send was attempted.
+    /// `Some(Err(_))` means capacity was available but an operating-system I/O
+    /// operation failed. `Some(Ok(()))` means every requested packet was
+    /// accepted by the backend.
     fn build_and_send(
         &mut self,
         num_packets: usize,
@@ -320,8 +343,10 @@ pub trait RawSender: Send {
 
     /// Send a packet.
     ///
-    /// This may require an additional copy compared to `build_and_send`, depending on the
-    /// operating system being used.
+    /// This may require an additional copy compared to `build_and_send`,
+    /// depending on the operating system being used. `None` means the packet
+    /// exceeds the sender's reusable capacity; `Some` contains the I/O result
+    /// when a send was attempted.
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>>;
 }
 

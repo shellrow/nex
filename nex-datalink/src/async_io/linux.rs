@@ -1,6 +1,7 @@
 //! Asynchronous raw socket support for Linux using epoll.
 
 use crate::async_io::{AsyncChannel, AsyncRawSender};
+use crate::bindings::linux;
 use crate::{ChannelType, Config};
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
@@ -154,6 +155,63 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     // SAFETY: `bind_addr` points into live initialized storage for `len` bytes.
     if unsafe { libc::bind(fd.as_raw(), bind_addr, len as libc::socklen_t) } == -1 {
         return Err(io::Error::last_os_error());
+    }
+
+    if config.promiscuous {
+        // SAFETY: A zero bit pattern is valid for a packet membership request.
+        let mut request: linux::packet_mreq = unsafe { mem::zeroed() };
+        request.mr_ifindex = network_interface.index as i32;
+        request.mr_type = linux::PACKET_MR_PROMISC as u16;
+        // SAFETY: The descriptor is open and `request` remains readable for
+        // the exact size supplied to setsockopt.
+        if unsafe {
+            libc::setsockopt(
+                fd.as_raw(),
+                linux::SOL_PACKET,
+                linux::PACKET_ADD_MEMBERSHIP,
+                (&request as *const linux::packet_mreq).cast(),
+                mem::size_of::<linux::packet_mreq>() as libc::socklen_t,
+            )
+        } == -1
+        {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    if let Some(fanout) = config.linux_fanout {
+        use crate::FanoutType;
+
+        let mut fanout_type = match fanout.fanout_type {
+            FanoutType::Hash => linux::PACKET_FANOUT_HASH,
+            FanoutType::LoadBalance => linux::PACKET_FANOUT_LB,
+            FanoutType::Cpu => linux::PACKET_FANOUT_CPU,
+            FanoutType::Rollover => linux::PACKET_FANOUT_ROLLOVER,
+            FanoutType::Random => linux::PACKET_FANOUT_RND,
+            FanoutType::QueueMapping => linux::PACKET_FANOUT_QM,
+            FanoutType::ClassicBpf => linux::PACKET_FANOUT_CBPF,
+            FanoutType::ExtendedBpf => linux::PACKET_FANOUT_EBPF,
+        } as u32;
+        if fanout.defrag {
+            fanout_type |= linux::PACKET_FANOUT_FLAG_DEFRAG;
+        }
+        if fanout.rollover {
+            fanout_type |= linux::PACKET_FANOUT_FLAG_ROLLOVER;
+        }
+        let argument: libc::c_uint = fanout.group_id as u32 | (fanout_type << 16);
+        // SAFETY: The descriptor is open and `argument` remains readable for
+        // the exact size supplied to setsockopt.
+        if unsafe {
+            libc::setsockopt(
+                fd.as_raw(),
+                linux::SOL_PACKET,
+                linux::PACKET_FANOUT,
+                (&argument as *const libc::c_uint).cast(),
+                mem::size_of::<libc::c_uint>() as libc::socklen_t,
+            )
+        } == -1
+        {
+            return Err(io::Error::last_os_error());
+        }
     }
 
     // SAFETY: `epoll_create1` receives a supported zero flag value.

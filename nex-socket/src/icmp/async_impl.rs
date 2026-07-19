@@ -16,6 +16,8 @@ pub struct AsyncIcmpSocket {
 impl AsyncIcmpSocket {
     /// Create a new asynchronous ICMP socket.
     pub async fn new(config: &IcmpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let (domain, proto) = match config.socket_family {
             SocketFamily::IPV4 => (Domain::IPV4, Some(Protocol::ICMPV4)),
             SocketFamily::IPV6 => (Domain::IPV6, Some(Protocol::ICMPV6)),

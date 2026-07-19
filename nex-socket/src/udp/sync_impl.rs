@@ -4,7 +4,7 @@ use crate::udp::UdpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
 use std::net::IpAddr;
-use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket as StdUdpSocket};
 
 /// Synchronous low level UDP socket.
 #[derive(Debug)]
@@ -513,6 +513,26 @@ impl UdpSocket {
         self.socket.broadcast()
     }
 
+    /// Join an IPv4 multicast group on the selected interface.
+    pub fn join_multicast_v4(&self, group: &Ipv4Addr, interface: &Ipv4Addr) -> io::Result<()> {
+        self.socket.join_multicast_v4(group, interface)
+    }
+
+    /// Leave an IPv4 multicast group on the selected interface.
+    pub fn leave_multicast_v4(&self, group: &Ipv4Addr, interface: &Ipv4Addr) -> io::Result<()> {
+        self.socket.leave_multicast_v4(group, interface)
+    }
+
+    /// Join an IPv6 multicast group on the selected interface index.
+    pub fn join_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.socket.join_multicast_v6(group, interface)
+    }
+
+    /// Leave an IPv6 multicast group on the selected interface index.
+    pub fn leave_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.socket.leave_multicast_v6(group, interface)
+    }
+
     pub fn set_recv_buffer_size(&self, size: usize) -> io::Result<()> {
         self.socket.set_recv_buffer_size(size)
     }
@@ -662,5 +682,46 @@ mod tests {
             .expect("bind");
         let addr = sock.local_addr().expect("addr");
         assert!(addr.is_ipv4());
+    }
+
+    #[test]
+    fn v4_socket_options_and_family_mismatch() {
+        let sock = UdpSocket::v4_dgram().expect("create socket");
+        sock.socket
+            .bind(&"127.0.0.1:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+
+        sock.set_ttl(37).expect("set ttl");
+        assert_eq!(sock.ttl().expect("ttl"), 37);
+        sock.set_broadcast(true).expect("set broadcast");
+        assert!(sock.broadcast().expect("broadcast"));
+
+        let mismatch = sock.send_to(&[], "[::1]:9".parse().unwrap());
+        assert!(mismatch.is_err(), "IPv6 target must fail on IPv4 socket");
+    }
+
+    #[test]
+    fn v4_multicast_membership_round_trip() {
+        let sock = UdpSocket::v4_dgram().expect("create socket");
+        sock.socket
+            .bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+        let group = Ipv4Addr::new(239, 255, 0, 1);
+
+        sock.join_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
+            .expect("join multicast");
+        sock.leave_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
+            .expect("leave multicast");
+    }
+
+    #[test]
+    fn v6_hop_limit_round_trip() {
+        let sock = UdpSocket::v6_dgram().expect("create socket");
+        sock.socket
+            .bind(&"[::1]:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+
+        sock.set_hoplimit(23).expect("set hop limit");
+        assert_eq!(sock.hoplimit().expect("hop limit"), 23);
     }
 }
