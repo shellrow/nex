@@ -97,8 +97,7 @@ pub fn ipv4_checksum(
     sum += len as u32;
 
     // Checksum packet header and data
-    sum += sum_be_words(data, skipword);
-    sum += sum_be_words(extra_data, extra_data.len() / 2);
+    sum += sum_be_words_joined(data, skipword, extra_data);
 
     finalize_checksum(sum)
 }
@@ -128,8 +127,7 @@ pub fn ipv6_checksum(
     sum += len as u32;
 
     // Checksum packet header and data
-    sum += sum_be_words(data, skipword);
-    sum += sum_be_words(extra_data, extra_data.len() / 2);
+    sum += sum_be_words_joined(data, skipword, extra_data);
 
     finalize_checksum(sum)
 }
@@ -164,9 +162,29 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
     sum
 }
 
+/// Sum two logically contiguous byte slices without allocating.
+///
+/// Treating each slice independently would incorrectly pad an odd final byte
+/// from `data` before consuming the first byte from `extra_data`.
+fn sum_be_words_joined(data: &[u8], skipword: usize, extra_data: &[u8]) -> u32 {
+    let mut bytes = data.iter().chain(extra_data);
+    let mut word_index = 0;
+    let mut sum = 0u32;
+
+    while let Some(high) = bytes.next() {
+        let low = bytes.next().copied().unwrap_or(0);
+        if word_index != skipword {
+            sum += ((*high as u32) << 8) | low as u32;
+        }
+        word_index += 1;
+    }
+
+    sum
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sum_be_words;
+    use super::{checksum, sum_be_words, sum_be_words_joined};
     use core::slice;
 
     #[test]
@@ -221,5 +239,24 @@ mod tests {
             assert_eq!(7705, sum_be_words(slice_data, 99));
             assert_eq!(7705, sum_be_words(slice_data, 101));
         }
+    }
+
+    #[test]
+    fn joined_word_sum_preserves_odd_slice_boundary() {
+        assert_eq!(
+            sum_be_words(&[0x01, 0x02, 0x03, 0x04], usize::MAX),
+            sum_be_words_joined(&[0x01], usize::MAX, &[0x02, 0x03, 0x04])
+        );
+        assert_eq!(
+            sum_be_words(&[0x01, 0x02, 0x03], usize::MAX),
+            sum_be_words_joined(&[0x01, 0x02], usize::MAX, &[0x03])
+        );
+    }
+
+    #[test]
+    fn checksum_folds_carries_and_pads_odd_lengths() {
+        assert_eq!(checksum(&[0xff, 0xff, 0xff, 0xff], usize::MAX), 0);
+        assert_eq!(checksum(&[0x01], usize::MAX), 0xfeff);
+        assert_eq!(checksum(&[0x01, 0x02, 0x03], usize::MAX), 0xfbfd);
     }
 }
