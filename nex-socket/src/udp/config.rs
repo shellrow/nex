@@ -6,6 +6,7 @@ use crate::SocketFamily;
 
 /// UDP socket type, either DGRAM or RAW.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum UdpSocketType {
     Dgram,
     Raw,
@@ -33,6 +34,7 @@ impl UdpSocketType {
 
 /// Configuration options for a UDP socket.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct UdpConfig {
     /// The socket family.
     pub socket_family: SocketFamily,

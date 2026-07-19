@@ -69,12 +69,16 @@ impl AsyncIcmpSocket {
 
         // Convert socket2::Socket into std::net::UdpSocket
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
 
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
 

@@ -11,6 +11,7 @@ use std::net::{IpAddr, SocketAddr};
 
 /// Represents the socket address family (IPv4 or IPv6)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SocketFamily {
     IPV4,
     IPV6,

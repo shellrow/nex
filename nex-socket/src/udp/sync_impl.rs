@@ -199,6 +199,8 @@ impl UdpSocket {
                                 "source_addr family does not match target",
                             ));
                         }
+                        // SAFETY: A zero bit pattern is a valid initial
+                        // `in_pktinfo` value.
                         let mut pktinfo: libc::in_pktinfo = unsafe { std::mem::zeroed() };
                         if let Some(src) = meta.source_addr.and_then(|ip| match ip {
                             IpAddr::V4(v4) => Some(v4),
@@ -245,6 +247,8 @@ impl UdpSocket {
                                 "source_addr family does not match target",
                             ));
                         }
+                        // SAFETY: A zero bit pattern is a valid initial
+                        // `in6_pktinfo` value.
                         let mut pktinfo: libc::in6_pktinfo = unsafe { std::mem::zeroed() };
                         if let Some(src) = meta.source_addr.and_then(|ip| match ip {
                             IpAddr::V4(_) => None,
@@ -293,7 +297,8 @@ impl UdpSocket {
 
     /// Receive data.
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` has the same layout as `u8`.
+        // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the slice
+        // preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,

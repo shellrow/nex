@@ -193,7 +193,8 @@ impl AsyncTcpSocket {
 
     /// Receive a raw TCP packet. Requires `SockType::RAW`.
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` has the same memory layout as `u8`.
+        // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the slice
+        // preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,

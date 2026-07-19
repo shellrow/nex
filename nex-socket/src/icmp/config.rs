@@ -5,6 +5,7 @@ use crate::SocketFamily;
 
 /// ICMP protocol version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum IcmpKind {
     V4,
     V6,
@@ -12,6 +13,7 @@ pub enum IcmpKind {
 
 /// ICMP socket type, either DGRAM or RAW.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum IcmpSocketType {
     Dgram,
     Raw,
@@ -51,6 +53,7 @@ impl IcmpSocketType {
 
 /// Configuration for an ICMP socket.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct IcmpConfig {
     /// The socket family.
     pub socket_family: SocketFamily,

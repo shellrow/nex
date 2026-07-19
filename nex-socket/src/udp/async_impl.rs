@@ -104,11 +104,15 @@ impl AsyncUdpSocket {
         }
 
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())
@@ -125,11 +129,15 @@ impl AsyncUdpSocket {
         socket.set_nonblocking(true)?;
 
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())

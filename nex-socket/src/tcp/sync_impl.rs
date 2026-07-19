@@ -183,7 +183,8 @@ impl TcpSocket {
 
         // Wait for the connection using poll
         use std::os::unix::io::BorrowedFd;
-        // Safety: raw_fd is valid for the lifetime of this scope
+        // SAFETY: `raw_fd` belongs to `socket` and remains valid for this scope;
+        // BorrowedFd does not take ownership.
         let mut fds = [PollFd::new(
             unsafe { BorrowedFd::borrow_raw(raw_fd) },
             PollFlags::POLLOUT,
@@ -246,6 +247,8 @@ impl TcpSocket {
         }];
 
         let timeout_ms = timeout.as_millis().clamp(0, i32::MAX as u128) as i32;
+        // SAFETY: `fds` is writable for the supplied element count and remains
+        // live throughout WSAPoll.
         let result = unsafe { WSAPoll(fds.as_mut_ptr(), fds.len() as u32, timeout_ms) };
         if result == SOCKET_ERROR {
             return Err(io::Error::last_os_error());
@@ -256,6 +259,8 @@ impl TcpSocket {
         // Check for errors via `SO_ERROR`
         let mut so_error: i32 = 0;
         let mut optlen = size_of::<i32>() as i32;
+        // SAFETY: `so_error` and `optlen` are writable for the duration of
+        // getsockopt and `sock` is open.
         let ret = unsafe {
             getsockopt(
                 sock,
@@ -284,7 +289,13 @@ impl TcpSocket {
     /// Accept an incoming connection.
     pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
         let (stream, addr) = self.socket.accept()?;
-        Ok((stream.into(), addr.as_socket().unwrap()))
+        let address = addr.as_socket().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "accepted peer did not provide an IP socket address",
+            )
+        })?;
+        Ok((stream.into(), address))
     }
 
     /// Convert the socket into a `TcpStream`.
@@ -304,7 +315,8 @@ impl TcpSocket {
 
     /// Receive a raw packet (for RAW TCP use).
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` is layout-compatible with `u8`.
+        // SAFETY: `MaybeUninit<u8>` is layout-compatible with `u8`, and the
+        // slice preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,
@@ -566,6 +578,8 @@ mod tests {
 
     #[cfg(unix)]
     fn socket_is_nonblocking(socket: &Socket) -> bool {
+        // SAFETY: The descriptor belongs to the borrowed live socket and F_GETFL
+        // neither takes ownership nor retains pointers.
         let flags = unsafe { fcntl(socket.as_raw_fd(), F_GETFL) };
         assert!(flags >= 0, "F_GETFL failed: {}", io::Error::last_os_error());
         (flags & O_NONBLOCK) != 0
