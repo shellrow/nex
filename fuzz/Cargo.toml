@@ -49,3 +49,59 @@ path = "fuzz_targets/dns_name.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "ethernet_vlan"
+path = "fuzz_targets/ethernet_vlan.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ipv4_options"
+path = "fuzz_targets/ipv4_options.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ipv6_extensions"
+path = "fuzz_targets/ipv6_extensions.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "icmpv6_ndp"
+path = "fuzz_targets/icmpv6_ndp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dns_records"
+path = "fuzz_targets/dns_records.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dhcp_options"
+path = "fuzz_targets/dhcp_options.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gre_fields"
+path = "fuzz_targets/gre_fields.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vxlan"
+path = "fuzz_targets/vxlan.rs"
+test = false
+doc = false
+bench = false

@@ -22,7 +22,12 @@ serde = ["dep:serde", "nex-core/serde", "bytes/serde"]
 
 [dev-dependencies]
 criterion = "0.5"
+proptest = "1"
 
 [[bench]]
 name = "packet_parse"
+harness = false
+
+[[bench]]
+name = "packet_operations"
 harness = false

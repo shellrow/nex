@@ -1,4 +1,8 @@
 artifacts/
-corpus/
+corpus/*
+!corpus/README.md
+!corpus/*/
+corpus/*/*
+!corpus/*/*.hex
 coverage/
 target/
