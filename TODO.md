@@ -38,9 +38,9 @@ Today the surface is inconsistent and confusing. Observed across `nex-packet`:
 
 Actions:
 
-- [ ] Define ONE canonical parsing contract and document it in `parse.rs`:
-  - [ ] `try_from_bytes(Bytes) -> Result<Self, ParseError>` — owned, zero-copy view.
-  - [ ] `try_from_buf(&[u8]) -> Result<Self, ParseError>` — borrowed.
+- [x] Define ONE canonical parsing contract and document it in `parse.rs`:
+  - [x] `try_from_bytes(Bytes) -> Result<Self, ParseError>` — owned, zero-copy view.
+  - [x] `try_from_buf(&[u8]) -> Result<Self, ParseError>` — borrowed.
   - [x] A single explicit "strict payload-length" opt-in (e.g. a `Strictness`/
         `ParseOption` arg) instead of `*_strict` name-doubling every method.
 - [x] Remove `EthernetHeader::from_bytes -> Result<_, String>`; replace with the
@@ -77,24 +77,24 @@ property tests (P1.5) confirm build→parse round-trips for valid inputs only.
 
 ### P0.3 Freeze the public API surface (semver contract)
 
-- [ ] Audit every `pub` item per crate; mark internal helpers `pub(crate)`.
-- [ ] `nex-core::bitfield` (`pub type u1 = u8 …`): make private or move behind a
+- [x] Audit every `pub` item per crate; mark internal helpers `pub(crate)`.
+- [x] `nex-core::bitfield` (`pub type u1 = u8 …`): make private or move behind a
       documented `#[doc(hidden)]` implementation-detail boundary — these aliases
       should not be part of the stable contract.
 - [x] Decide `nex-sys`'s status: it is a low-level internal crate — either mark it
       clearly "internal, no semver guarantees" in its docs or make its surface
       `pub(crate)`-equivalent via `#[doc(hidden)]`.
-- [ ] Normalize accessor naming: replace `get_*` (73 occurrences in `nex-packet`)
+- [x] Normalize accessor naming: replace `get_*` (73 occurrences in `nex-packet`)
       with idiomatic Rust names; keep `#[deprecated]` aliases for one release.
-- [ ] Audit public struct fields (e.g. `datalink::Config`, packet headers): decide
+- [x] Audit public struct fields (e.g. `datalink::Config`, packet headers): decide
       field-access vs accessor policy; document undocumented `pub` fields
       (`Config.linux_fanout`, `Config.promiscuous` lack doc comments).
-- [ ] Apply `#[non_exhaustive]` to all enums/structs expecting future variants
+- [x] Apply `#[non_exhaustive]` to all enums/structs expecting future variants
       (protocol number enums, `Channel`, error types, config structs).
-- [ ] Audit `pub const` protocol constants for naming + semver stability.
-- [ ] Document `new_unchecked` invariants (`GenericMutablePacket::new_unchecked`,
+- [x] Audit `pub const` protocol constants for naming + semver stability.
+- [x] Document `new_unchecked` invariants (`GenericMutablePacket::new_unchecked`,
       any `*_unchecked`) with `# Safety` sections.
-- [ ] Generate a machine-readable public API snapshot per crate (e.g.
+- [x] Generate a machine-readable public API snapshot per crate (e.g.
       `cargo public-api`) and diff it in CI to catch accidental breaks.
 
 Acceptance: a documented, intentional surface; `cargo public-api` diff is clean and
@@ -106,12 +106,12 @@ tracked; no accidental `pub` internals.
       (`nex-core/src/interface.rs:359,592,597` — `default`, `get_default_interface`,
       `get_default_gateway`).
 - [x] Add `nex-packet::BuildError` for builders (P0.2).
-- [ ] Keep `io::Error` only at raw syscall/socket boundaries; convert to typed
+- [x] Keep `io::Error` only at raw syscall/socket boundaries; convert to typed
       errors where the library adds semantic meaning (datalink/socket config).
-- [ ] Ensure `ParseError` carries enough context for fuzz triage and diagnostics
+- [x] Ensure `ParseError` carries enough context for fuzz triage and diagnostics
       (it already has `context`; verify every construction site sets a useful one).
-- [ ] All public error types implement `std::error::Error + Send + Sync + 'static`.
-- [ ] No `panic!`/`unreachable!`/`unwrap` reachable from public APIs on malformed
+- [x] All public error types implement `std::error::Error + Send + Sync + 'static`.
+- [x] No `panic!`/`unreachable!`/`unwrap` reachable from public APIs on malformed
       input. (Current `unreachable!`/`panic!` sites are test-only — keep it that way
       and add a CI grep guard.)
 
@@ -154,11 +154,11 @@ Current `.github/workflows/rust.yml` runs only `cargo build` on Linux/macOS/Wind
       `rust-version` in every `Cargo.toml` and test it).
 - [x] Supply chain: `cargo deny check` (licenses, advisories, bans, sources) +
       add `deny.toml`.
-- [ ] Public API snapshot diff job (P0.3).
+- [x] Public API snapshot diff job (P0.3).
 - [x] Remove `#![deny(warnings)]` from `nex-datalink/src/lib.rs` (line 3): it makes
       builds break on future compilers/new lints. Enforce warnings in CI via
       `RUSTFLAGS=-Dwarnings`, not in source.
-- [ ] A documented, manual privileged-test matrix for raw sockets / datalink I/O
+- [x] A documented, manual privileged-test matrix for raw sockets / datalink I/O
       that CI cannot run (see P1.2 / P1.3).
 
 Acceptance: a red/green CI that actually gates merges on tests, lints, features,
@@ -166,22 +166,22 @@ MSRV, and supply chain across all three OSes.
 
 ### P0.7 Unsafe & OS-resource safety hardening
 
-- [ ] Add a `# Safety` comment to every `unsafe` block and every `unsafe impl`:
+- [x] Add a `# Safety` comment to every `unsafe` block and every `unsafe impl`:
   - [x] Complete the `nex-sys` audit, including public `unsafe fn` contracts.
-  - [ ] Complete the `nex-datalink` audit (~141 sites).
-- [ ] Justify or remove the 9 `unsafe impl Send/Sync` in `nex-datalink`
+  - [x] Complete the `nex-datalink` audit (~141 sites).
+- [x] Justify or remove the 9 `unsafe impl Send/Sync` in `nex-datalink`
       (`wpcap.rs`, `async_io/wpcap.rs`): document what makes the raw Npcap handles
       actually thread-safe, or wrap them so the impl is sound.
-- [ ] Ensure every OS handle (fd, BPF device, Npcap adapter, packet buffer) is
+- [x] Ensure every OS handle (fd, BPF device, Npcap adapter, packet buffer) is
       owned by an RAII type that closes on *all* error paths.
   - [x] Make `nex-sys::FileDesc` an explicit owned descriptor with a private raw
         field, an unsafe ownership-transfer constructor, and a drop test.
-  - [ ] Audit that every fd flows through an owning wrapper and that no early-return
+  - [x] Audit that every fd flows through an owning wrapper and that no early-return
         leaks a half-opened resource.
-- [ ] Prefer typed wrappers over raw integer/pointer handles at module boundaries.
-- [ ] Add error-path tests that open then fail to confirm no leak/double-close.
-- [ ] Run Miri on pure `nex-packet`/`nex-core` parsing/building where feasible.
-- [ ] Run ASan/UBSan on Linux packet parse + datalink where feasible.
+- [x] Prefer typed wrappers over raw integer/pointer handles at module boundaries.
+- [x] Add error-path tests that open then fail to confirm no leak/double-close.
+- [x] Run Miri on pure `nex-packet`/`nex-core` parsing/building where feasible.
+- [x] Run ASan/UBSan on Linux packet parse + datalink where feasible.
 
 Acceptance: `cargo miri test` passes for pure logic crates; every unsafe site has a
 rationale; a reviewer can audit the FFI boundary from comments alone.
