@@ -17,6 +17,9 @@ fn network_addr_to_sockaddr(
     storage: *mut libc::sockaddr_storage,
     proto: libc::c_int,
 ) -> usize {
+    // SAFETY: `storage` points to writable `sockaddr_storage`, whose size and
+    // alignment are sufficient for `sockaddr_ll`; the pointer is used only
+    // during this call.
     unsafe {
         let sll: *mut libc::sockaddr_ll = mem::transmute(storage);
         (*sll).sll_family = libc::AF_PACKET as libc::sa_family_t;
@@ -32,7 +35,7 @@ fn network_addr_to_sockaddr(
 
 /// Configuration for the Linux datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Config {
+pub(crate) struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
     pub write_buffer_size: usize,
 
@@ -97,39 +100,46 @@ impl Default for Config {
 
 /// Create a data link channel using the Linux's `AF_PACKET` socket type.
 #[inline]
-pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
+pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let eth_p_all = 0x0003;
     let (typ, proto) = match config.channel_type {
         super::ChannelType::Layer2 => (libc::SOCK_RAW, eth_p_all),
         super::ChannelType::Layer3(proto) => (libc::SOCK_DGRAM, proto),
     };
-    let socket = unsafe { libc::socket(libc::AF_PACKET, typ, proto.to_be() as i32) };
-    if socket == -1 {
+    // SAFETY: `socket` receives only valid AF_PACKET domain/type/protocol
+    // integer values and retains no borrowed pointers.
+    let raw_socket = unsafe { libc::socket(libc::AF_PACKET, typ, proto.to_be() as i32) };
+    if raw_socket == -1 {
         return Err(io::Error::last_os_error());
     }
+    // SAFETY: `raw_socket` was just created and exclusive ownership is
+    // transferred exactly once to this guard.
+    let socket = unsafe { nex_sys::FileDesc::from_raw(raw_socket) };
+    // SAFETY: A zero bit pattern is a valid initial socket address storage.
     let mut addr: libc::sockaddr_storage = unsafe { mem::zeroed() };
     let len = network_addr_to_sockaddr(network_interface, &mut addr, proto as i32);
 
     let send_addr = (&addr as *const libc::sockaddr_storage) as *const libc::sockaddr;
 
     // Bind to interface
-    if unsafe { libc::bind(socket, send_addr, len as libc::socklen_t) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(socket);
-        }
-        return Err(err);
+    // SAFETY: `send_addr` points into live address storage and `len` is the
+    // initialized sockaddr_ll size.
+    if unsafe { libc::bind(socket.as_raw(), send_addr, len as libc::socklen_t) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
+    // SAFETY: A zero bit pattern is a valid initial packet membership request.
     let mut pmr: linux::packet_mreq = unsafe { mem::zeroed() };
     pmr.mr_ifindex = network_interface.index as i32;
     pmr.mr_type = linux::PACKET_MR_PROMISC as u16;
 
     // Enable promiscuous capture
     if config.promiscuous {
+        // SAFETY: The descriptor is open and `pmr` remains readable with the
+        // exact length supplied for the duration of setsockopt.
         if unsafe {
             libc::setsockopt(
-                socket,
+                socket.as_raw(),
                 linux::SOL_PACKET,
                 linux::PACKET_ADD_MEMBERSHIP,
                 (&pmr as *const linux::packet_mreq) as *const libc::c_void,
@@ -137,11 +147,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             )
         } == -1
         {
-            let err = io::Error::last_os_error();
-            unsafe {
-                nex_sys::close(socket);
-            }
-            return Err(err);
+            return Err(io::Error::last_os_error());
         }
     }
 
@@ -171,9 +177,11 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=4a69a864209e9ab436d4a58e8028ac96cc873d15
         let arg: libc::c_uint = fanout.group_id as u32 | (typ << 16);
 
+        // SAFETY: The descriptor is open and `arg` remains readable with the
+        // exact length supplied for the duration of setsockopt.
         if unsafe {
             libc::setsockopt(
-                socket,
+                socket.as_raw(),
                 linux::SOL_PACKET,
                 linux::PACKET_FANOUT,
                 (&arg as *const libc::c_uint) as *const libc::c_void,
@@ -181,29 +189,22 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             )
         } == -1
         {
-            let err = io::Error::last_os_error();
-            unsafe {
-                nex_sys::close(socket);
-            }
-            return Err(err);
+            return Err(io::Error::last_os_error());
         }
     }
 
     // Enable nonblocking
-    if unsafe { libc::fcntl(socket, libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(socket);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and F_SETFL retains no borrowed pointers.
+    if unsafe { libc::fcntl(socket.as_raw(), libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
-    // SAFETY: `socket` is an open descriptor created above, and ownership is
-    // transferred exclusively to `FileDesc`.
-    let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(socket) });
+    let fd = Arc::new(socket);
     let sender = Box::new(RawSenderImpl {
         socket: fd.clone(),
         write_buffer: vec![0; config.write_buffer_size],
+        // SAFETY: `addr` was initialized as a sockaddr_ll above and remains
+        // live while this same-sized value is copied.
         send_addr: unsafe { *(send_addr as *const libc::sockaddr_ll) },
         send_addr_len: len,
         timeout: config
@@ -237,7 +238,13 @@ impl RawSender for RawSenderImpl {
         packet_size: usize,
         func: &mut dyn FnMut(&mut [u8]),
     ) -> Option<io::Result<()>> {
-        let len = num_packets * packet_size;
+        if packet_size == 0 {
+            return Some(Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "packet_size must be greater than zero",
+            )));
+        }
+        let len = num_packets.checked_mul(packet_size)?;
         if len <= self.write_buffer.len() {
             let min = std::cmp::min(self.write_buffer.len(), len);
             let mut_slice = &mut self.write_buffer;
@@ -257,6 +264,8 @@ impl RawSender for RawSenderImpl {
                 let send_addr =
                     (&self.send_addr as *const libc::sockaddr_ll) as *const libc::sockaddr;
 
+                // SAFETY: `pollfd` points to one initialized descriptor for the
+                // duration of poll.
                 let ret = unsafe {
                     libc::poll(
                         &mut pollfd as *mut libc::pollfd,
@@ -309,6 +318,8 @@ impl RawSender for RawSenderImpl {
         // -1: wait indefinitely
         let timeout_ms = poll_timeout_ms(self.timeout);
 
+        // SAFETY: `pollfd` points to one initialized descriptor for the
+        // duration of poll.
         let ret = unsafe {
             libc::poll(
                 &mut pollfd as *mut libc::pollfd,
@@ -354,6 +365,7 @@ struct RawReceiverImpl {
 
 impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
+        // SAFETY: A zero bit pattern is valid initial socket address storage.
         let mut caddr: libc::sockaddr_storage = unsafe { mem::zeroed() };
         let mut pollfd = libc::pollfd {
             fd: self.socket.as_raw(),
@@ -365,6 +377,8 @@ impl RawReceiver for RawReceiverImpl {
         // -1: wait indefinitely
         let timeout_ms = poll_timeout_ms(self.timeout);
 
+        // SAFETY: `pollfd` points to one initialized descriptor for the
+        // duration of poll.
         let ret = unsafe {
             libc::poll(
                 &mut pollfd as *mut libc::pollfd,

@@ -17,7 +17,7 @@ static ETHERNET_NULL_HEADER_SIZE: usize = 4;
 
 /// The BPF-specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Config {
+pub(crate) struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
     pub write_buffer_size: usize,
 
@@ -66,7 +66,7 @@ impl Default for Config {
 /// Create a datalink channel using the /dev/bpf device
 // NOTE buffer must be word aligned.
 #[inline]
-pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
+pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     #[cfg(any(
         target_os = "freebsd",
         target_os = "netbsd",
@@ -76,6 +76,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     fn get_fd(_attempts: usize) -> io::Result<libc::c_int> {
         let c_file_name = CString::new(&b"/dev/bpf"[..])
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path"))?;
+        // SAFETY: `c_file_name` is a live, NUL-terminated path and the flags
+        // require no variadic mode argument.
         let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
         if fd == -1 {
             Err(io::Error::last_os_error())
@@ -91,6 +93,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             let c_file_name = CString::new(file_name.as_bytes()).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path")
             })?;
+            // SAFETY: `c_file_name` is a live, NUL-terminated path and the flags
+            // require no variadic mode argument.
             let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
             if fd != -1 {
                 return Ok(fd);
@@ -106,12 +110,10 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         target_os = "solaris"
     ))]
     fn set_feedback(fd: libc::c_int) -> io::Result<()> {
+        // SAFETY: `fd` is an open BPF descriptor and the ioctl reads the
+        // correctly typed integer argument for the duration of the call.
         if unsafe { bpf::ioctl(fd, bpf::BIOCFEEDBACK, &1) } == -1 {
-            let err = io::Error::last_os_error();
-            unsafe {
-                libc::close(fd);
-            }
-            return Err(err);
+            return Err(io::Error::last_os_error());
         }
         Ok(())
     }
@@ -121,7 +123,11 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         Ok(())
     }
 
-    let fd = get_fd(config.bpf_fd_attempts)?;
+    let raw_fd = get_fd(config.bpf_fd_attempts)?;
+    // SAFETY: `raw_fd` was just opened successfully and ownership is
+    // transferred exactly once to this guard.
+    let fd = unsafe { nex_sys::FileDesc::from_raw(raw_fd) };
+    // SAFETY: A zero bit pattern is a valid initial value for `ifreq`.
     let mut iface: bpf::ifreq = unsafe { mem::zeroed() };
     for (i, c) in network_interface.name.bytes().enumerate() {
         iface.ifr_name[i] = c as libc::c_char;
@@ -130,41 +136,32 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let buflen = config.read_buffer_size as libc::c_uint;
     // NOTE Buffer length must be set before binding to an interface
     //      otherwise this will return Invalid Argument
-    if unsafe { bpf::ioctl(fd, bpf::BIOCSBLEN, &buflen) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            libc::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and `buflen` has the exact argument type
+    // expected by BIOCSBLEN.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &buflen) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     // Set the interface to use
-    if unsafe { bpf::ioctl(fd, bpf::BIOCSETIF, &iface) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            libc::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and `iface` remains readable throughout
+    // the ioctl call.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSETIF, &iface) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     // Return from read as soon as packets are available - don't wait to fill the
     // buffer
-    if unsafe { bpf::ioctl(fd, bpf::BIOCIMMEDIATE, &1) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            libc::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and the integer argument is valid for
+    // BIOCIMMEDIATE.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCIMMEDIATE, &1) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     // Get the device type
     let mut dlt: libc::c_uint = 0;
-    if unsafe { bpf::ioctl(fd, bpf::BIOCGDLT, &mut dlt) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            libc::close(fd);
-        }
-        return Err(err);
+    // SAFETY: `dlt` is writable for the result and the descriptor is open.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCGDLT, &mut dlt) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     let mut loopback = false;
@@ -181,43 +178,41 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         allocated_read_buffer_size += buffer_offset;
 
         // Allow packets to be read back after they are written
-        set_feedback(fd)?
+        set_feedback(fd.as_raw())?
     } else {
         // Don't fill in source MAC
-        if unsafe { bpf::ioctl(fd, bpf::BIOCSHDRCMPLT, &1) } == -1 {
-            let err = io::Error::last_os_error();
-            unsafe {
-                libc::close(fd);
-            }
-            return Err(err);
+        // SAFETY: The descriptor is open and the integer argument is valid for
+        // BIOCSHDRCMPLT.
+        if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
+            return Err(io::Error::last_os_error());
         }
     }
 
     // Enable nonblocking
-    if unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and F_SETFL consumes the integer flag
+    // value without retaining any pointers.
+    if unsafe { libc::fcntl(fd.as_raw(), libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
-    // SAFETY: `fd` is an open BPF descriptor created above, and ownership is
-    // transferred exclusively to `FileDesc`.
-    let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(fd) });
+    let fd = Arc::new(fd);
     let mut sender = Box::new(RawSenderImpl {
         fd: fd.clone(),
+        // SAFETY: A zero bit pattern is a valid empty `fd_set`.
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
         loopback,
         timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
     });
+    // SAFETY: `fd_set` is initialized and `fd` is an open descriptor that fits
+    // in the platform fd-set representation.
     unsafe {
         libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
         libc::FD_SET(fd.as_raw(), &mut sender.fd_set as *mut libc::fd_set);
     }
     let mut receiver = Box::new(RawReceiverImpl {
         fd: fd.clone(),
+        // SAFETY: A zero bit pattern is a valid empty `fd_set`.
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; allocated_read_buffer_size],
         buffer_offset,
@@ -226,6 +221,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
         // Enough room for minimally sized packets without reallocating
         packets: VecDeque::with_capacity(allocated_read_buffer_size / 64),
     });
+    // SAFETY: `fd_set` is initialized and `fd` is an open descriptor that fits
+    // in the platform fd-set representation.
     unsafe {
         libc::FD_ZERO(&mut receiver.fd_set as *mut libc::fd_set);
         libc::FD_SET(fd.as_raw(), &mut receiver.fd_set as *mut libc::fd_set);
@@ -250,7 +247,13 @@ impl RawSender for RawSenderImpl {
         packet_size: usize,
         func: &mut dyn FnMut(&mut [u8]),
     ) -> Option<io::Result<()>> {
-        let len = num_packets * packet_size;
+        if packet_size == 0 {
+            return Some(Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "packet_size must be greater than zero",
+            )));
+        }
+        let len = num_packets.checked_mul(packet_size)?;
         if len >= self.write_buffer.len() {
             None
         } else {
@@ -261,8 +264,16 @@ impl RawSender for RawSenderImpl {
             } else {
                 0
             };
+            if packet_size < offset {
+                return Some(Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "loopback packets must include an Ethernet header",
+                )));
+            }
             for chunk in self.write_buffer[..len].chunks_mut(packet_size) {
                 func(chunk);
+                // SAFETY: `fd_set` and the optional timeout are initialized and
+                // remain live throughout pselect.
                 let ret = unsafe {
                     libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
                     libc::pselect(
@@ -282,6 +293,8 @@ impl RawSender for RawSenderImpl {
                     return Some(Err(io::Error::last_os_error()));
                 } else if ret == 0 {
                     return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
+                // SAFETY: `offset` is checked against `chunk.len()` above; the
+                // descriptor is open and `write` retains no buffer pointer.
                 } else if unsafe {
                     libc::write(
                         self.fd.as_raw(),
@@ -306,6 +319,14 @@ impl RawSender for RawSenderImpl {
         } else {
             0
         };
+        if packet.len() < offset {
+            return Some(Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "loopback packets must include an Ethernet header",
+            )));
+        }
+        // SAFETY: `fd_set` and the optional timeout are initialized and remain
+        // live throughout pselect.
         let ret = unsafe {
             libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
             libc::pselect(
@@ -325,6 +346,8 @@ impl RawSender for RawSenderImpl {
         } else if ret == 0 {
             Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")))
         } else {
+            // SAFETY: `offset` is checked against `packet.len()` above; the
+            // descriptor is open and `write` retains no buffer pointer.
             match unsafe {
                 libc::write(
                     self.fd.as_raw(),
@@ -358,6 +381,8 @@ impl RawReceiver for RawReceiverImpl {
         };
         if self.packets.is_empty() {
             let buffer = &mut self.read_buffer[self.buffer_offset..];
+            // SAFETY: `fd_set` and the optional timeout are initialized and
+            // remain live throughout pselect.
             let ret = unsafe {
                 libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
                 libc::pselect(
@@ -377,6 +402,8 @@ impl RawReceiver for RawReceiverImpl {
             } else if ret == 0 {
                 return Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"));
             } else {
+                // SAFETY: `buffer` is writable for its full length and the
+                // descriptor is open.
                 let buflen = match unsafe {
                     libc::read(
                         self.fd.as_raw(),
@@ -387,20 +414,51 @@ impl RawReceiver for RawReceiverImpl {
                     len if len > 0 => len,
                     _ => return Err(io::Error::last_os_error()),
                 };
-                let mut ptr = buffer.as_mut_ptr();
-                let end = unsafe { buffer.as_ptr().offset(buflen as isize) };
-                while (ptr as *const u8) < end {
-                    unsafe {
-                        let packet: *const bpf::bpf_hdr = mem::transmute(ptr);
-                        let start =
-                            ptr as isize + (*packet).bh_hdrlen as isize - buffer.as_ptr() as isize;
-                        self.packets.push_back((
-                            start as usize + header_size,
-                            (*packet).bh_caplen as usize - header_size,
+                let buflen = buflen as usize;
+                let mut cursor = 0usize;
+                while cursor < buflen {
+                    let remaining = buflen - cursor;
+                    if remaining < mem::size_of::<bpf::bpf_hdr>() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "truncated BPF record header",
                         ));
-                        let offset = (*packet).bh_hdrlen as isize + (*packet).bh_caplen as isize;
-                        ptr = ptr.offset(bpf::BPF_WORDALIGN(offset));
                     }
+                    // SAFETY: The size check proves the complete header is
+                    // in-bounds. `read_unaligned` does not require Vec<u8>'s
+                    // allocation to satisfy `bpf_hdr` alignment.
+                    let packet = unsafe {
+                        std::ptr::read_unaligned(buffer.as_ptr().add(cursor) as *const bpf::bpf_hdr)
+                    };
+                    let header_len = packet.bh_hdrlen as usize;
+                    let captured_len = packet.bh_caplen as usize;
+                    let record_len = header_len.checked_add(captured_len).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "BPF record length overflow")
+                    })?;
+                    if header_len < mem::size_of::<bpf::bpf_hdr>()
+                        || captured_len < header_size
+                        || record_len > remaining
+                    {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "invalid BPF record lengths",
+                        ));
+                    }
+                    self.packets.push_back((
+                        cursor + header_len + header_size,
+                        captured_len - header_size,
+                    ));
+                    let record_len = isize::try_from(record_len).map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "BPF record exceeds platform pointer range",
+                        )
+                    })?;
+                    cursor = cursor
+                        .checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
+                        .ok_or_else(|| {
+                            io::Error::new(io::ErrorKind::InvalidData, "BPF record offset overflow")
+                        })?;
                 }
             }
         }

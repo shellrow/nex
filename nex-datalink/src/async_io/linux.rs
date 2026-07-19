@@ -8,7 +8,6 @@ use nex_core::mac::MacAddr;
 use nex_sys;
 use std::io;
 use std::mem;
-use std::os::fd::RawFd;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -18,6 +17,8 @@ fn network_addr_to_sockaddr(
     storage: *mut libc::sockaddr_storage,
     proto: libc::c_int,
 ) -> usize {
+    // SAFETY: `storage` points to writable `sockaddr_storage`, whose size and
+    // alignment are sufficient for `sockaddr_ll`; it is used only in this call.
     unsafe {
         let sll: *mut libc::sockaddr_ll = mem::transmute(storage);
         (*sll).sll_family = libc::AF_PACKET as libc::sa_family_t;
@@ -33,18 +34,9 @@ fn network_addr_to_sockaddr(
 
 #[derive(Debug)]
 struct Inner {
-    fd: RawFd,
+    fd: nex_sys::FileDesc,
     send_addr: libc::sockaddr_ll,
-    epfd: RawFd,
-}
-
-impl Drop for Inner {
-    fn drop(&mut self) {
-        unsafe {
-            nex_sys::close(self.fd);
-            nex_sys::close(self.epfd);
-        }
-    }
+    epfd: nex_sys::FileDesc,
 }
 
 /// Sender half of an asynchronous raw socket.
@@ -55,9 +47,11 @@ pub struct AsyncRawSocketSender {
 
 impl AsyncRawSender for AsyncRawSocketSender {
     fn poll_send(&mut self, cx: &mut Context<'_>, packet: &[u8]) -> Poll<io::Result<()>> {
+        // SAFETY: The descriptor is open, `packet` remains readable, and
+        // `send_addr` remains valid throughout sendto.
         let ret = unsafe {
             libc::sendto(
-                self.inner.fd,
+                self.inner.fd.as_raw(),
                 packet.as_ptr() as *const libc::c_void,
                 packet.len(),
                 0,
@@ -70,9 +64,11 @@ impl AsyncRawSender for AsyncRawSocketSender {
         }
         let err = io::Error::last_os_error();
         if err.kind() == io::ErrorKind::WouldBlock {
+            // SAFETY: `events` provides writable storage for one epoll event
+            // and the epoll descriptor is open.
             unsafe {
                 let mut events = [mem::zeroed::<libc::epoll_event>()];
-                libc::epoll_wait(self.inner.epfd, events.as_mut_ptr(), 1, 0);
+                libc::epoll_wait(self.inner.epfd.as_raw(), events.as_mut_ptr(), 1, 0);
             }
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -94,9 +90,11 @@ impl Stream for AsyncRawSocketReceiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let me = self.get_mut();
+        // SAFETY: The descriptor is open and `read_buffer` is writable for its
+        // entire length.
         let ret = unsafe {
             libc::recv(
-                me.inner.fd,
+                me.inner.fd.as_raw(),
                 me.read_buffer.as_mut_ptr() as *mut libc::c_void,
                 me.read_buffer.len(),
                 libc::MSG_DONTWAIT,
@@ -109,9 +107,11 @@ impl Stream for AsyncRawSocketReceiver {
         }
         let err = io::Error::last_os_error();
         if err.kind() == io::ErrorKind::WouldBlock {
+            // SAFETY: `events` provides writable storage for one epoll event
+            // and the epoll descriptor is open.
             unsafe {
                 let mut events = [mem::zeroed::<libc::epoll_event>()];
-                libc::epoll_wait(me.inner.epfd, events.as_mut_ptr(), 1, 0);
+                libc::epoll_wait(me.inner.epfd.as_raw(), events.as_mut_ptr(), 1, 0);
             }
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -128,50 +128,50 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         ChannelType::Layer2 => (libc::SOCK_RAW, eth_p_all),
         ChannelType::Layer3(proto) => (libc::SOCK_DGRAM, proto as i32),
     };
-    let fd = unsafe {
+    // SAFETY: `socket` receives valid AF_PACKET arguments and retains no
+    // borrowed pointers.
+    let raw_fd = unsafe {
         libc::socket(
             libc::AF_PACKET,
             typ | libc::SOCK_NONBLOCK,
             (proto as u16).to_be() as i32,
         )
     };
-    if fd == -1 {
+    if raw_fd == -1 {
         return Err(io::Error::last_os_error());
     }
+    // SAFETY: `raw_fd` was just opened and exclusive ownership transfers to
+    // this guard exactly once.
+    let fd = unsafe { nex_sys::FileDesc::from_raw(raw_fd) };
 
+    // SAFETY: A zero bit pattern is a valid initial socket address storage.
     let mut addr: libc::sockaddr_storage = unsafe { mem::zeroed() };
     let len = network_addr_to_sockaddr(network_interface, &mut addr, proto);
+    // SAFETY: `network_addr_to_sockaddr` initialized `addr` as sockaddr_ll.
     let send_addr = unsafe { *(&addr as *const _ as *const libc::sockaddr_ll) };
     let bind_addr = (&addr as *const libc::sockaddr_storage) as *const libc::sockaddr;
 
-    if unsafe { libc::bind(fd, bind_addr, len as libc::socklen_t) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: `bind_addr` points into live initialized storage for `len` bytes.
+    if unsafe { libc::bind(fd.as_raw(), bind_addr, len as libc::socklen_t) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
-    let epfd = unsafe { libc::epoll_create1(0) };
-    if epfd == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: `epoll_create1` receives a supported zero flag value.
+    let raw_epfd = unsafe { libc::epoll_create1(0) };
+    if raw_epfd == -1 {
+        return Err(io::Error::last_os_error());
     }
+    // SAFETY: `raw_epfd` was just opened and ownership transfers exactly once.
+    let epfd = unsafe { nex_sys::FileDesc::from_raw(raw_epfd) };
 
     let mut event = libc::epoll_event {
         events: (libc::EPOLLIN | libc::EPOLLOUT) as u32,
-        u64: fd as u64,
+        u64: fd.as_raw() as u64,
     };
-    if unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, fd, &mut event) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(epfd);
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: Both descriptors are open and `event` is writable for the call.
+    if unsafe { libc::epoll_ctl(epfd.as_raw(), libc::EPOLL_CTL_ADD, fd.as_raw(), &mut event) } == -1
+    {
+        return Err(io::Error::last_os_error());
     }
 
     let inner = Arc::new(Inner {

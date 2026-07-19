@@ -1,5 +1,6 @@
 //! Cross-platform datalink I/O primitives for sending and receiving raw packets.
 
+use std::fmt;
 use std::io;
 use std::option::Option;
 use std::time::Duration;
@@ -51,6 +52,7 @@ pub type EtherType = u16;
 
 /// Type of data link channel to present (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub enum ChannelType {
     /// Send and receive layer 2 packets directly, including headers.
     Layer2,
@@ -67,6 +69,7 @@ pub enum Channel {
 
 /// Socket fanout type (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub enum FanoutType {
     /// Fan out packets by hashing packet fields.
     Hash,
@@ -115,6 +118,7 @@ impl FanoutType {
 
 /// Fanout settings (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub struct FanoutOption {
     /// Fanout group identifier.
     pub group_id: u16,
@@ -131,6 +135,7 @@ pub struct FanoutOption {
 /// Each option should be treated as a hint - each backend is free to ignore any and all
 /// options which don't apply to it.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
     pub write_buffer_size: usize,
@@ -152,9 +157,52 @@ pub struct Config {
     /// to: 1000.
     pub bpf_fd_attempts: usize,
 
+    /// Linux only: optional packet fanout group and distribution settings.
     pub linux_fanout: Option<FanoutOption>,
 
+    /// Whether the backend should request promiscuous packet capture.
     pub promiscuous: bool,
+}
+
+/// Semantic failures while validating or opening a datalink channel.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum DatalinkError {
+    /// A configuration value cannot be used by any backend.
+    InvalidConfig {
+        /// Configuration field that failed validation.
+        field: &'static str,
+        /// Required constraint.
+        requirement: &'static str,
+    },
+    /// The operating-system backend failed while creating the channel.
+    Io(io::Error),
+}
+
+impl fmt::Display for DatalinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidConfig { field, requirement } => {
+                write!(f, "invalid datalink configuration: {field} {requirement}")
+            }
+            Self::Io(error) => write!(f, "failed to open datalink channel: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for DatalinkError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::InvalidConfig { .. } => None,
+        }
+    }
+}
+
+impl From<io::Error> for DatalinkError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
 }
 
 impl Default for Config {
@@ -174,24 +222,24 @@ impl Default for Config {
 
 impl Config {
     /// Validates whether this configuration can be used safely.
-    pub fn validate(&self) -> io::Result<()> {
+    pub fn validate(&self) -> Result<(), DatalinkError> {
         if self.write_buffer_size == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "write_buffer_size must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "write_buffer_size",
+                requirement: "must be greater than zero",
+            });
         }
         if self.read_buffer_size == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "read_buffer_size must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "read_buffer_size",
+                requirement: "must be greater than zero",
+            });
         }
         if self.bpf_fd_attempts == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "bpf_fd_attempts must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "bpf_fd_attempts",
+                requirement: "must be greater than zero",
+            });
         }
         Ok(())
     }
@@ -250,9 +298,9 @@ impl Config {
 pub fn channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
-) -> io::Result<Channel> {
+) -> Result<Channel, DatalinkError> {
     configuration.validate()?;
-    backend::channel(network_interface, (&configuration).into())
+    backend::channel(network_interface, (&configuration).into()).map_err(DatalinkError::Io)
 }
 
 /// Trait to enable sending `$packet` packets.
@@ -320,5 +368,12 @@ mod tests {
         assert_eq!(cfg.channel_type, ChannelType::Layer3(0x0800));
         assert!(!cfg.promiscuous);
         assert_eq!(cfg.bpf_fd_attempts, 42);
+    }
+
+    fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
+
+    #[test]
+    fn datalink_error_implements_public_error_contract() {
+        assert_error_contract::<DatalinkError>();
     }
 }

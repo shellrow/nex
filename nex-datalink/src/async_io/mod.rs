@@ -21,7 +21,7 @@ use std::task::{Context, Poll};
 
 use futures_core::stream::Stream;
 
-use crate::Config;
+use crate::{Config, DatalinkError};
 
 /// Trait for asynchronously sending raw packets.
 pub trait AsyncRawSender: Send {
@@ -54,10 +54,11 @@ pub enum AsyncChannel {
 pub fn async_channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
-) -> io::Result<AsyncChannel> {
+) -> Result<AsyncChannel, DatalinkError> {
+    configuration.validate()?;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        linux::channel(network_interface, configuration)
+        linux::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
     #[cfg(any(
         target_os = "freebsd",
@@ -68,10 +69,10 @@ pub fn async_channel(
         target_os = "ios",
     ))]
     {
-        bpf::channel(network_interface, configuration)
+        bpf::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
     #[cfg(windows)]
     {
-        wpcap::channel(network_interface, configuration)
+        wpcap::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
 }

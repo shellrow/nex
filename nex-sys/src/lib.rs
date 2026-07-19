@@ -18,6 +18,7 @@ mod windows;
 pub use self::windows::*;
 
 /// An owned Unix file descriptor or Windows socket.
+#[derive(Debug)]
 pub struct FileDesc {
     fd: CSocket,
 }
@@ -140,6 +141,32 @@ mod tests {
         drop(owned);
 
         // SAFETY: `fcntl` only inspects the integer descriptor value.
+        assert_eq!(unsafe { libc::fcntl(pipe_fds[0], libc::F_GETFD) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EBADF)
+        );
+
+        // SAFETY: The write descriptor remains open and owned by this test.
+        assert_eq!(unsafe { libc::close(pipe_fds[1]) }, 0);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn file_desc_closes_owned_descriptor_on_early_error() {
+        fn fail_after_ownership_transfer(fd: CSocket) -> std::io::Result<()> {
+            // SAFETY: The caller transfers one live, exclusively owned
+            // descriptor to this function.
+            let _owned = unsafe { FileDesc::from_raw(fd) };
+            Err(std::io::Error::other("injected setup failure"))
+        }
+
+        let mut pipe_fds = [-1; 2];
+        // SAFETY: `pipe_fds` provides writable storage for both descriptors.
+        assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
+        assert!(fail_after_ownership_transfer(pipe_fds[0]).is_err());
+
+        // SAFETY: `fcntl` only inspects the descriptor number.
         assert_eq!(unsafe { libc::fcntl(pipe_fds[0], libc::F_GETFD) }, -1);
         assert_eq!(
             std::io::Error::last_os_error().raw_os_error(),

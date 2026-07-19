@@ -16,6 +16,7 @@ use nex_core::interface::InterfaceType;
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub struct Config {
     /// The size of buffer to use when reading packets. Must be at least
     /// 65516 with pcap.
@@ -197,27 +198,16 @@ pub fn interfaces() -> Vec<Interface> {
         devices
             .iter()
             .enumerate()
-            .map(|(i, dev)| Interface {
-                name: dev.name.clone(),
-                index: i as u32,
-                friendly_name: None,
-                description: dev.desc.clone(),
-                if_type: InterfaceType::Unknown,
-                mac_addr: None,
-                ipv4: Vec::new(),
-                ipv6: Vec::new(),
-                ipv6_scope_ids: Vec::new(),
-                flags: dev.flags.if_flags.bits(),
-                oper_state: nex_core::interface::OperState::from_if_flags(
-                    dev.flags.if_flags.bits(),
-                ),
-                transmit_speed: None,
-                receive_speed: None,
-                stats: None,
-                gateway: None,
-                dns_servers: Vec::new(),
-                mtu: None,
-                default: false,
+            .map(|(i, dev)| {
+                let mut interface = Interface::dummy();
+                interface.name = dev.name.clone();
+                interface.index = i as u32;
+                interface.description = dev.desc.clone();
+                interface.if_type = InterfaceType::Unknown;
+                interface.flags = dev.flags.if_flags.bits();
+                interface.oper_state =
+                    nex_core::interface::OperState::from_if_flags(dev.flags.if_flags.bits());
+                interface
             })
             .collect()
     } else {

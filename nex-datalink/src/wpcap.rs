@@ -4,26 +4,36 @@ use super::bindings::{bpf, windows};
 use super::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 
-use libc::c_char;
 use std::cmp;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::io;
 use std::mem;
 use std::slice;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 struct WinPcapAdapter {
     adapter: windows::LPADAPTER,
+    operation_lock: Mutex<()>,
 }
 
 impl Drop for WinPcapAdapter {
     fn drop(&mut self) {
+        // SAFETY: This is the last owning `Arc`, so no operation can still use
+        // the non-null adapter handle. Npcap requires exactly one close.
         unsafe {
             windows::PacketCloseAdapter(self.adapter);
         }
     }
 }
+
+// SAFETY: The non-null adapter handle is owned until `Drop`. All send and
+// receive operations are serialized by `operation_lock`, and Npcap configuration
+// is completed before this wrapper is shared.
+unsafe impl Send for WinPcapAdapter {}
+// SAFETY: See the `Send` rationale; shared access cannot reach the handle
+// without acquiring `operation_lock`.
+unsafe impl Sync for WinPcapAdapter {}
 
 struct WinPcapPacket {
     packet: windows::LPPACKET,
@@ -31,15 +41,21 @@ struct WinPcapPacket {
 
 impl Drop for WinPcapPacket {
     fn drop(&mut self) {
+        // SAFETY: `packet` was returned by PacketAllocatePacket, is owned by
+        // this wrapper, and is freed exactly once.
         unsafe {
             windows::PacketFreePacket(self.packet);
         }
     }
 }
 
+// SAFETY: A packet wrapper is moved into exactly one sender or receiver and all
+// access then occurs through that half's exclusive `&mut self`.
+unsafe impl Send for WinPcapPacket {}
+
 /// The Npcap / WinPcap's specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Config {
+pub(crate) struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
     pub write_buffer_size: usize,
 
@@ -70,13 +86,15 @@ impl Default for Config {
 
 /// Create a datalink channel using the Npcap / WinPcap library.
 #[inline]
-pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
+pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let mut read_buffer = Vec::new();
     read_buffer.resize(config.read_buffer_size, 0u8);
 
     let mut write_buffer = Vec::new();
     write_buffer.resize(config.write_buffer_size, 0u8);
 
+    // SAFETY: PacketOpenAdapter reads the temporary NUL-terminated interface
+    // name during the call and returns an owned adapter handle.
     let adapter = unsafe {
         let npf_if_name: String = windows::to_npf_name(&network_interface.name);
         let net_if_str = CString::new(npf_if_name.as_bytes()).map_err(|_| {
@@ -87,8 +105,12 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     if adapter.is_null() {
         return Err(io::Error::last_os_error());
     }
-    let adapter = Arc::new(WinPcapAdapter { adapter });
+    let adapter = Arc::new(WinPcapAdapter {
+        adapter,
+        operation_lock: Mutex::new(()),
+    });
 
+    // SAFETY: The adapter is open and the filter value is an Npcap constant.
     let ret = unsafe {
         windows::PacketSetHwFilter(adapter.adapter, windows::NDIS_PACKET_TYPE_PROMISCUOUS)
     };
@@ -97,6 +119,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     // Set kernel buffer size
+    // SAFETY: The adapter is open and PacketSetBuff retains no Rust pointers.
     let ret =
         unsafe { windows::PacketSetBuff(adapter.adapter, config.read_buffer_size as libc::c_int) };
     if ret == 0 {
@@ -104,53 +127,65 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     }
 
     // Immediate mode
+    // SAFETY: The adapter is open and the integer threshold is valid.
     let ret = unsafe { windows::PacketSetMinToCopy(adapter.adapter, 1) };
     if ret == 0 {
         return Err(io::Error::last_os_error());
     }
 
+    // SAFETY: PacketAllocatePacket takes no arguments and returns an owned
+    // packet pointer or null.
     let read_packet = unsafe { windows::PacketAllocatePacket() };
     if read_packet.is_null() {
         return Err(io::Error::last_os_error());
     }
 
+    let read_packet = WinPcapPacket {
+        packet: read_packet,
+    };
+    // SAFETY: The packet and backing vector are live; the vector cannot move or
+    // resize while the packet wrapper exists in the receiver.
     unsafe {
         windows::PacketInitPacket(
-            read_packet,
+            read_packet.packet,
             read_buffer.as_mut_ptr() as windows::PVOID,
             config.read_buffer_size as windows::UINT,
         )
     }
 
+    // SAFETY: PacketAllocatePacket takes no arguments and returns an owned
+    // packet pointer or null.
     let write_packet = unsafe { windows::PacketAllocatePacket() };
     if write_packet.is_null() {
-        unsafe { windows::PacketFreePacket(read_packet) };
         return Err(io::Error::last_os_error());
     }
 
+    let write_packet = WinPcapPacket {
+        packet: write_packet,
+    };
+    // SAFETY: The packet and backing vector are live; the vector cannot move or
+    // resize while the packet wrapper exists in the sender.
     unsafe {
         windows::PacketInitPacket(
-            write_packet,
+            write_packet.packet,
             write_buffer.as_mut_ptr() as windows::PVOID,
             config.write_buffer_size as windows::UINT,
         )
     }
 
+    // SAFETY: `read_packet.packet` is live and initialized above.
+    let packet_capacity = unsafe { (*read_packet.packet).Length } as usize / 64;
     let sender = Box::new(RawSenderImpl {
         adapter: adapter.clone(),
         _write_buffer: write_buffer,
-        packet: WinPcapPacket {
-            packet: write_packet,
-        },
+        packet: write_packet,
     });
     let receiver = Box::new(RawReceiverImpl {
         adapter: adapter,
         _read_buffer: read_buffer,
-        packet: WinPcapPacket {
-            packet: read_packet,
-        },
+        packet: read_packet,
         // Enough room for minimally sized packets without reallocating
-        packets: VecDeque::with_capacity(unsafe { (*read_packet).Length } as usize / 64),
+        packets: VecDeque::with_capacity(packet_capacity),
     });
     Ok(super::Channel::Ethernet(sender, receiver))
 }
@@ -188,26 +223,49 @@ impl RawSender for RawSenderImpl {
         packet_size: usize,
         func: &mut dyn FnMut(&mut [u8]),
     ) -> Option<io::Result<()>> {
-        let len = num_packets * packet_size;
+        if packet_size == 0 {
+            return Some(Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "packet_size must be greater than zero",
+            )));
+        }
+        let len = num_packets.checked_mul(packet_size)?;
+        // SAFETY: The packet pointer is owned by `self` and initialized.
         if len >= unsafe { (*self.packet.packet).Length } as usize {
             None
         } else {
+            // SAFETY: The packet pointer is owned by `self` and initialized.
             let min = unsafe { cmp::min((*self.packet.packet).Length as usize, len) };
+            // SAFETY: Npcap initialized Buffer for at least Length bytes, and
+            // `min` is capped to that length.
             let slice: &mut [u8] =
                 unsafe { slice::from_raw_parts_mut((*self.packet.packet).Buffer as *mut u8, min) };
             for chunk in slice.chunks_mut(packet_size) {
                 func(chunk);
 
                 // Make sure the right length of packet is sent
+                // SAFETY: The packet pointer is owned by `self`.
                 let old_len = unsafe { (*self.packet.packet).Length };
+                // SAFETY: `packet_size` is bounded by the packet buffer length.
                 unsafe {
                     (*self.packet.packet).Length = packet_size as u32;
                 }
 
+                let _operation = match self.adapter.operation_lock.lock() {
+                    Ok(lock) => lock,
+                    Err(_) => {
+                        return Some(Err(io::Error::other(
+                            "Npcap adapter operation mutex poisoned",
+                        )));
+                    }
+                };
+                // SAFETY: The adapter operation is serialized, and both owned
+                // handles remain live for the duration of the call.
                 let ret = unsafe {
                     windows::PacketSendPacket(self.adapter.adapter, self.packet.packet, 0)
                 };
 
+                // SAFETY: The packet is still exclusively owned by `self`.
                 unsafe {
                     (*self.packet.packet).Length = old_len;
                 }
@@ -228,8 +286,9 @@ impl RawSender for RawSenderImpl {
     }
 }
 
+// SAFETY: The raw packet is uniquely owned by this sender and adapter access is
+// serialized by `WinPcapAdapter::operation_lock`.
 unsafe impl Send for RawSenderImpl {}
-unsafe impl Sync for RawSenderImpl {}
 
 struct RawReceiverImpl {
     adapter: Arc<WinPcapAdapter>,
@@ -238,32 +297,77 @@ struct RawReceiverImpl {
     packets: VecDeque<(usize, usize)>,
 }
 
+// SAFETY: The raw packet is uniquely owned by this receiver and adapter access
+// is serialized by `WinPcapAdapter::operation_lock`.
 unsafe impl Send for RawReceiverImpl {}
-unsafe impl Sync for RawReceiverImpl {}
 
 impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         // NOTE Most of the logic here is identical to FreeBSD/OS X
         while self.packets.is_empty() {
+            let _operation = self
+                .adapter
+                .operation_lock
+                .lock()
+                .map_err(|_| io::Error::other("Npcap adapter operation mutex poisoned"))?;
+            // SAFETY: The adapter operation is serialized, and both owned
+            // handles remain live for the duration of the call.
             let ret = unsafe {
                 windows::PacketReceivePacket(self.adapter.adapter, self.packet.packet, 0)
             };
             let buflen = match ret {
                 0 => return Err(io::Error::last_os_error()),
-                _ => unsafe { (*self.packet.packet).ulBytesReceived as isize },
+                // SAFETY: A successful receive initialized the byte count.
+                _ => unsafe { (*self.packet.packet).ulBytesReceived as usize },
             };
-            let mut ptr = unsafe { (*self.packet.packet).Buffer as *mut c_char };
-            let end = unsafe { ((*self.packet.packet).Buffer as *mut c_char).offset(buflen) };
-            while ptr < end {
-                unsafe {
-                    let packet: *const bpf::bpf_hdr = mem::transmute(ptr);
-                    let start = ptr as isize + (*packet).bh_hdrlen as isize
-                        - (*self.packet.packet).Buffer as isize;
-                    self.packets
-                        .push_back((start as usize, (*packet).bh_caplen as usize));
-                    let offset = (*packet).bh_hdrlen as isize + (*packet).bh_caplen as isize;
-                    ptr = ptr.offset(bpf::BPF_WORDALIGN(offset));
+            // SAFETY: The packet remains live and was initialized with a buffer
+            // whose capacity is recorded in Length.
+            let buffer_capacity = unsafe { (*self.packet.packet).Length as usize };
+            if buflen > buffer_capacity {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Npcap reported bytes beyond the receive buffer",
+                ));
+            }
+            // SAFETY: The packet remains live and its buffer was initialized by
+            // the successful receive.
+            let base = unsafe { (*self.packet.packet).Buffer as *const u8 };
+            let mut cursor = 0usize;
+            while cursor < buflen {
+                let remaining = buflen - cursor;
+                if remaining < mem::size_of::<bpf::bpf_hdr>() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "truncated Npcap BPF record header",
+                    ));
                 }
+                // SAFETY: The complete header is in-bounds due to the size
+                // check. `read_unaligned` handles the backing Vec's alignment.
+                let packet =
+                    unsafe { std::ptr::read_unaligned(base.add(cursor) as *const bpf::bpf_hdr) };
+                let header_len = packet.bh_hdrlen as usize;
+                let captured_len = packet.bh_caplen as usize;
+                let record_len = header_len.checked_add(captured_len).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "Npcap record length overflow")
+                })?;
+                if header_len < mem::size_of::<bpf::bpf_hdr>() || record_len > remaining {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "invalid Npcap BPF record lengths",
+                    ));
+                }
+                self.packets.push_back((cursor + header_len, captured_len));
+                let record_len = isize::try_from(record_len).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Npcap record exceeds platform pointer range",
+                    )
+                })?;
+                cursor = cursor
+                    .checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "Npcap record offset overflow")
+                    })?;
             }
         }
         let (start, len) = self.packets.pop_front().ok_or_else(|| {
@@ -272,6 +376,8 @@ impl RawReceiver for RawReceiverImpl {
                 "packet queue unexpectedly empty",
             )
         })?;
+        // SAFETY: `start` and `len` came from a validated BPF record within the
+        // current packet buffer, which remains owned by `self`.
         let slice = unsafe {
             let data = (*self.packet.packet).Buffer as usize + start;
             slice::from_raw_parts(data as *const u8, len)
