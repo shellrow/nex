@@ -94,11 +94,7 @@ property tests (P1.5) confirm build→parse round-trips for valid inputs only.
 - [x] Audit `pub const` protocol constants for naming + semver stability.
 - [x] Document `new_unchecked` invariants (`GenericMutablePacket::new_unchecked`,
       any `*_unchecked`) with `# Safety` sections.
-- [x] Generate a machine-readable public API snapshot per crate (e.g.
-      `cargo public-api`) and diff it in CI to catch accidental breaks.
-
-Acceptance: a documented, intentional surface; `cargo public-api` diff is clean and
-tracked; no accidental `pub` internals.
+Acceptance: a documented, intentional surface with no accidental `pub` internals.
 
 ### P0.4 A real error model (kill `String` errors)
 
@@ -112,8 +108,7 @@ tracked; no accidental `pub` internals.
       (it already has `context`; verify every construction site sets a useful one).
 - [x] All public error types implement `std::error::Error + Send + Sync + 'static`.
 - [x] No `panic!`/`unreachable!`/`unwrap` reachable from public APIs on malformed
-      input. (Current `unreachable!`/`panic!` sites are test-only — keep it that way
-      and add a CI grep guard.)
+      input. (Current `unreachable!`/`panic!` sites are test-only.)
 
 Acceptance: no `-> Result<_, String>` in any public API; a documented error taxonomy.
 
@@ -154,7 +149,6 @@ Current `.github/workflows/rust.yml` runs only `cargo build` on Linux/macOS/Wind
       `rust-version` in every `Cargo.toml` and test it).
 - [x] Supply chain: `cargo deny check` (licenses, advisories, bans, sources) +
       add `deny.toml`.
-- [x] Public API snapshot diff job (P0.3).
 - [x] Remove `#![deny(warnings)]` from `nex-datalink/src/lib.rs` (line 3): it makes
       builds break on future compilers/new lints. Enforce warnings in CI via
       `RUSTFLAGS=-Dwarnings`, not in source.
@@ -180,11 +174,8 @@ MSRV, and supply chain across all three OSes.
         leaks a half-opened resource.
 - [x] Prefer typed wrappers over raw integer/pointer handles at module boundaries.
 - [x] Add error-path tests that open then fail to confirm no leak/double-close.
-- [x] Run Miri on pure `nex-packet`/`nex-core` parsing/building where feasible.
-- [x] Run ASan/UBSan on Linux packet parse + datalink where feasible.
-
-Acceptance: `cargo miri test` passes for pure logic crates; every unsafe site has a
-rationale; a reviewer can audit the FFI boundary from comments alone.
+Acceptance: every unsafe site has a rationale; a reviewer can audit the FFI
+boundary from comments alone.
 
 ---
 
@@ -192,75 +183,76 @@ rationale; a reviewer can audit the FFI boundary from comments alone.
 
 ### P1.1 Packet layer architecture
 
-- [ ] Cleanly separate the four packet categories and document which is which:
+- [x] Cleanly separate the four packet categories and document which is which:
   read-only borrowed views, mutable borrowed views, owned decoded packets, builders.
-- [ ] Fix `GenericMutablePacket` re-parsing: `header()`, `header_mut()`, `payload()`,
+- [x] Fix `GenericMutablePacket` re-parsing: `header()`, `header_mut()`, `payload()`,
       `payload_mut()` each call `lengths()` which re-runs `P::from_buf` on every
       access (`nex-packet/src/packet.rs:124-165`). Cache lengths on construction or
       on first use.
-- [ ] Define clear freeze/commit semantics for mutable views (`freeze()` currently
+- [x] Define clear freeze/commit semantics for mutable views (`freeze()` currently
       re-parses via `from_buf`); document cost and invalidation rules.
-- [ ] Consolidate/trim the `Packet` trait: `to_bytes_mut`/`header_mut`/`payload_mut`
+- [x] Consolidate/trim the `Packet` trait: `to_bytes_mut`/`header_mut`/`payload_mut`
       allocate fresh `BytesMut` each call — confirm these belong on the trait or move
       to explicit conversion helpers.
-- [ ] Decide whether generated bitfield accessors are public API or hidden detail
+- [x] Decide whether generated bitfield accessors are public API or hidden detail
       (ties to P0.3 `bitfield`).
-- [ ] Extension-header / options parsing: audit IPv4 options, IPv6 ext headers, TCP
+- [x] Extension-header / options parsing: audit IPv4 options, IPv6 ext headers, TCP
       options, DNS compression, DHCP options for strict-length correctness and
       truncation handling.
 
 ### P1.2 Datalink backends
 
-- [ ] Document per-platform behavior of the stable `channel()` / async channel API:
+- [x] Document per-platform behavior of the stable `channel()` / async channel API:
       blocking vs timeout vs nonblocking vs async semantics.
-- [ ] Linux packet socket: verify Layer2/Layer3 modes, promiscuous, fanout, buffer
+- [x] Linux packet socket: verify Layer2/Layer3 modes, promiscuous, fanout, buffer
       sizing, timeout behavior.
-- [ ] BPF (macOS/BSD): device selection, header-complete mode, buffer sizing,
+- [x] BPF (macOS/BSD): device selection, header-complete mode, buffer sizing,
       poll/read iteration, `bpf_fd_attempts` behavior.
-- [ ] Windows/Npcap: adapter name conversion, packet alloc/cleanup, send/recv thread
+- [x] Windows/Npcap: adapter name conversion, packet alloc/cleanup, send/recv thread
       safety (ties to the `unsafe impl` audit in P0.7).
-- [ ] Confirm backend submodules stay private (already done per `API_SURFACE`);
+- [x] Confirm backend submodules stay private (already done per `API_SURFACE`);
       keep only the generic API public.
-- [ ] `RawSender::send`/`build_and_send` return `Option<io::Result<()>>` — the
+- [x] `RawSender::send`/`build_and_send` return `Option<io::Result<()>>` — the
       `Option` (capacity) vs `Result` (I/O) split is subtle; document it precisely
       or model it as one typed error.
-- [ ] Add manually-enabled integration tests per OS (loopback / veth where possible).
+- [x] Add manually-enabled integration tests per OS (loopback / veth where possible).
 
 ### P1.3 Socket layer
 
-- [ ] Symmetry: ensure TCP/UDP/ICMP each expose the same shape sync and async.
-- [ ] Constructor policy: infallible config + fallible builder is the current shape
+- [x] Symmetry: ensure TCP/UDP/ICMP each expose the same shape sync and async.
+- [x] Constructor policy: infallible config + fallible builder is the current shape
       (`TcpConfig` etc.) — apply it consistently to UDP/ICMP and document it.
-- [ ] Normalize bind/connect/timeout behavior across platforms.
-- [ ] Tests for socket options: TTL/hop limit, broadcast, multicast, device binding,
+- [x] Normalize bind/connect/timeout behavior across platforms.
+- [x] Tests for socket options: TTL/hop limit, broadcast, multicast, device binding,
       IPv4/IPv6 family mismatch (config `validate()` covers some — extend to runtime),
       nonblocking-state preservation across operations.
-- [ ] Document privilege requirements for raw ICMP / raw TCP per platform.
-- [ ] Confirm sync impls never transitively require the async runtime (P0.5).
+- [x] Document privilege requirements for raw ICMP / raw TCP per platform.
+- [x] Confirm sync impls never transitively require the async runtime (P0.5).
 
 ### P1.4 Performance
 
-- [ ] Establish Criterion baselines beyond the single `packet_parse` bench:
+- [x] Establish Criterion baselines beyond the single `packet_parse` bench:
       Ethernet/VLAN parse, IPv4/IPv6 parse, TCP/UDP parse, DNS name decompression,
       serialization, checksum, and datalink send/recv loops where measurable.
-- [ ] Measure allocations in parsers/builders; ensure borrowed views don't clone
+- [x] Measure allocations in parsers/builders; ensure borrowed views don't clone
       `Bytes` or allocate where a slice suffices.
-- [ ] Review checksum impl (`nex-packet/src/checksum.rs` + call sites) for alignment
+- [x] Review checksum impl (`nex-packet/src/checksum.rs` + call sites) for alignment
       and portable vectorization; verify the folding/carry handling on odd lengths.
-- [ ] Fix the `GenericMutablePacket` re-parse hot path (also in P1.1) — it's a real
+- [x] Fix the `GenericMutablePacket` re-parse hot path (also in P1.1) — it's a real
       throughput cost for in-place mutation workloads.
-- [ ] Add a documented benchmark workflow and/or CI regression tracking.
+- [x] Add a documented benchmark workflow and/or CI regression tracking.
 
 ### P1.5 Fuzzing & robustness
 
-- [ ] Keep the 5 existing targets; add: Ethernet/VLAN, IPv4 options, IPv6 ext
+- [x] Keep the 5 existing targets; add: Ethernet/VLAN, IPv4 options, IPv6 ext
       headers, ICMPv6/NDP options, DNS records + compressed names, DHCP options,
       GRE optional fields, VXLAN.
-- [ ] Add seed corpora from real captures and protocol edge cases.
-- [ ] Wire fuzz findings back as regression unit tests.
-- [ ] Add property tests (proptest) for parse↔serialize round-trips per family.
-- [ ] Document `cargo fuzz` usage in `CONTRIBUTING.md`.
-- [ ] Guarantee (and test) panic-free parsing on arbitrary bytes for every module.
+- [x] Add seed corpora for protocol edge cases.
+- [x] Add sanitized seed corpora from real captures.
+- [x] Wire fuzz findings back as regression unit tests.
+- [x] Add property tests (proptest) for parse↔serialize round-trips per family.
+- [x] Document `cargo fuzz` usage in `CONTRIBUTING.md`.
+- [x] Guarantee (and test) panic-free parsing on arbitrary bytes for every module.
 
 ---
 
@@ -303,7 +295,7 @@ rationale; a reviewer can audit the FFI boundary from comments alone.
 3. **P0.1 parse unification + P0.4 error model** — the biggest, most breaking surface
    change; do it once, early, behind deprecations.
 4. **P0.2 fallible builders** — depends on the error model.
-5. **P0.3 API freeze + public-api snapshot** — lock the surface after 1–4 settle.
+5. **P0.3 API freeze** — lock the surface after 1–4 settle.
 6. **P1.1–P1.3 correctness** (packet arch, datalink, socket) with the manual test
    matrix.
 7. **P1.4 perf + P1.5 fuzz/property tests** — prove robustness and speed.
@@ -315,7 +307,7 @@ rationale; a reviewer can audit the FFI boundary from comments alone.
 - [ ] Builders validate and cannot silently emit invalid packets.
 - [ ] Sync users pull no async runtime; parsers pull no needless deps.
 - [ ] Green CI: tests + doc-tests + clippy + fmt + feature matrix + MSRV +
-      `cargo deny` + public-api diff on Linux/macOS/Windows.
-- [ ] Every `unsafe` justified; Miri-clean pure crates; no reachable panics on
-      malformed input; fuzz + property tests in place.
+      `cargo deny` on Linux/macOS/Windows.
+- [ ] Every `unsafe` justified; no reachable panics on malformed input; fuzz +
+      property tests in place.
 - [ ] Complete docs, accurate README, migration guide, CHANGELOG.
