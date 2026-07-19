@@ -32,11 +32,19 @@ pub struct Ipv6Packet {
 impl Packet for Ipv6Packet {
     type Header = Ipv6Header;
 
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(bytes).ok()
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes).ok()
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -187,8 +195,13 @@ impl Ipv6Packet {
             + self.extensions.iter().map(|ext| ext.len()).sum::<usize>()
             + self.payload.len()
     }
-    pub fn get_extension(&self, kind: ExtensionHeaderType) -> Option<&Ipv6ExtensionHeader> {
+    pub fn extension(&self, kind: ExtensionHeaderType) -> Option<&Ipv6ExtensionHeader> {
         self.extensions.iter().find(|ext| ext.kind() == kind)
+    }
+    /// Deprecated compatibility alias for extension.
+    #[deprecated(note = "use extension")]
+    pub fn get_extension(&self, kind: ExtensionHeaderType) -> Option<&Ipv6ExtensionHeader> {
+        self.extension(kind)
     }
 }
 
@@ -293,14 +306,10 @@ where
                             });
                         }
                         let data = slice_bytes(offset + 2..offset + total_len);
-                        let ext = match next_header {
-                            IpNextProtocol::Hopopt => {
-                                Ipv6ExtensionHeader::HopByHop { next: nh, data }
-                            }
-                            IpNextProtocol::Ipv6Opts => {
-                                Ipv6ExtensionHeader::Destination { next: nh, data }
-                            }
-                            _ => unreachable!(),
+                        let ext = if next_header == IpNextProtocol::Hopopt {
+                            Ipv6ExtensionHeader::HopByHop { next: nh, data }
+                        } else {
+                            Ipv6ExtensionHeader::Destination { next: nh, data }
                         };
                         extensions.push(ext);
                         next_header = nh;
@@ -360,7 +369,7 @@ where
                         next_header = nh;
                         offset += 8;
                     }
-                    _ => unreachable!(),
+                    _ => break,
                 }
             }
             _ => break,
@@ -419,6 +428,11 @@ impl<'a> MutablePacket<'a> for MutableIpv6Packet<'a> {
 
 impl<'a> MutableIpv6Packet<'a> {
     /// Create a new packet without checking length.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete IPv6 base header and all declared
+    /// extension headers. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self { buffer }
     }
@@ -435,8 +449,13 @@ impl<'a> MutableIpv6Packet<'a> {
         self.raw().len().saturating_sub(IPV6_HEADER_LEN)
     }
 
-    pub fn get_version(&self) -> u8 {
+    pub fn version(&self) -> u8 {
         self.raw()[0] >> 4
+    }
+    /// Deprecated compatibility alias for version.
+    #[deprecated(note = "use version")]
+    pub fn get_version(&self) -> u8 {
+        self.version()
     }
 
     pub fn set_version(&mut self, version: u8) {
@@ -444,8 +463,13 @@ impl<'a> MutableIpv6Packet<'a> {
         buf[0] = (buf[0] & 0x0F) | ((version & 0x0F) << 4);
     }
 
-    pub fn get_traffic_class(&self) -> u8 {
+    pub fn traffic_class(&self) -> u8 {
         ((self.raw()[0] & 0x0F) << 4) | (self.raw()[1] >> 4)
+    }
+    /// Deprecated compatibility alias for traffic_class.
+    #[deprecated(note = "use traffic_class")]
+    pub fn get_traffic_class(&self) -> u8 {
+        self.traffic_class()
     }
 
     pub fn set_traffic_class(&mut self, class: u8) {
@@ -454,12 +478,17 @@ impl<'a> MutableIpv6Packet<'a> {
         buf[1] = (buf[1] & 0x0F) | ((class & 0x0F) << 4);
     }
 
-    pub fn get_flow_label(&self) -> u32 {
+    pub fn flow_label(&self) -> u32 {
         let buf = self.raw();
         let high = (buf[1] as u32 & 0x0F) << 16;
         let mid = (buf[2] as u32) << 8;
         let low = buf[3] as u32;
         high | mid | low
+    }
+    /// Deprecated compatibility alias for flow_label.
+    #[deprecated(note = "use flow_label")]
+    pub fn get_flow_label(&self) -> u32 {
+        self.flow_label()
     }
 
     pub fn set_flow_label(&mut self, label: u32) {
@@ -469,48 +498,73 @@ impl<'a> MutableIpv6Packet<'a> {
         buf[3] = label as u8;
     }
 
-    pub fn get_payload_length(&self) -> u16 {
+    pub fn payload_length(&self) -> u16 {
         u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+    /// Deprecated compatibility alias for payload_length.
+    #[deprecated(note = "use payload_length")]
+    pub fn get_payload_length(&self) -> u16 {
+        self.payload_length()
     }
 
     pub fn set_payload_length(&mut self, length: u16) {
         self.raw_mut()[4..6].copy_from_slice(&length.to_be_bytes());
     }
 
-    pub fn get_next_header(&self) -> IpNextProtocol {
+    pub fn next_header(&self) -> IpNextProtocol {
         IpNextProtocol::new(self.raw()[6])
+    }
+    /// Deprecated compatibility alias for next_header.
+    #[deprecated(note = "use next_header")]
+    pub fn get_next_header(&self) -> IpNextProtocol {
+        self.next_header()
     }
 
     pub fn set_next_header(&mut self, proto: IpNextProtocol) {
         self.raw_mut()[6] = proto.value();
     }
 
-    pub fn get_hop_limit(&self) -> u8 {
+    pub fn hop_limit(&self) -> u8 {
         self.raw()[7]
+    }
+    /// Deprecated compatibility alias for hop_limit.
+    #[deprecated(note = "use hop_limit")]
+    pub fn get_hop_limit(&self) -> u8 {
+        self.hop_limit()
     }
 
     pub fn set_hop_limit(&mut self, value: u8) {
         self.raw_mut()[7] = value;
     }
 
-    pub fn get_source(&self) -> Ipv6Addr {
+    pub fn source(&self) -> Ipv6Addr {
         let raw = self.raw();
         Ipv6Addr::from([
             raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15], raw[16], raw[17],
             raw[18], raw[19], raw[20], raw[21], raw[22], raw[23],
         ])
     }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> Ipv6Addr {
+        self.source()
+    }
 
     pub fn set_source(&mut self, addr: Ipv6Addr) {
         self.raw_mut()[8..24].copy_from_slice(&addr.octets());
     }
 
-    pub fn get_destination(&self) -> Ipv6Addr {
+    pub fn destination(&self) -> Ipv6Addr {
         let raw = self.raw();
         Ipv6Addr::from([
             raw[24], raw[25], raw[26], raw[27], raw[28], raw[29], raw[30], raw[31], raw[32],
             raw[33], raw[34], raw[35], raw[36], raw[37], raw[38], raw[39],
         ])
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> Ipv6Addr {
+        self.destination()
     }
 
     pub fn set_destination(&mut self, addr: Ipv6Addr) {
@@ -519,6 +573,7 @@ impl<'a> MutableIpv6Packet<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ExtensionHeaderType {
     HopByHop,
     Destination,
@@ -528,6 +583,7 @@ pub enum ExtensionHeaderType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Ipv6ExtensionHeader {
     HopByHop {
         next: IpNextProtocol,

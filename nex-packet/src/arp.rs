@@ -22,6 +22,7 @@ pub const ARP_PACKET_LEN: usize = ETHERNET_HEADER_LEN + ARP_HEADER_LEN;
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum ArpOperation {
     /// ARP request
     Request = 1,
@@ -87,6 +88,7 @@ impl ArpOperation {
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum ArpHardwareType {
     /// Ethernet (10Mb)
     Ethernet = 1,
@@ -335,42 +337,49 @@ pub struct ArpPacket {
 
 impl Packet for ArpPacket {
     type Header = ArpHeader;
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < ARP_HEADER_LEN {
-            return None;
-        }
-        let hardware_type = ArpHardwareType::new(u16::from_be_bytes([bytes[0], bytes[1]]));
-        let protocol_type = EtherType::new(u16::from_be_bytes([bytes[2], bytes[3]]));
-        let hw_addr_len = bytes[4];
-        let proto_addr_len = bytes[5];
-        let operation = ArpOperation::new(u16::from_be_bytes([bytes[6], bytes[7]]));
-        let sender_hw_addr = MacAddr::from_octets([
-            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
-        ]);
-        let sender_proto_addr = Ipv4Addr::new(bytes[14], bytes[15], bytes[16], bytes[17]);
-        let target_hw_addr = MacAddr::from_octets([
-            bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
-        ]);
-        let target_proto_addr = Ipv4Addr::new(bytes[24], bytes[25], bytes[26], bytes[27]);
-        let payload = Bytes::copy_from_slice(&bytes[ARP_HEADER_LEN..]);
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < ARP_HEADER_LEN {
+                return None;
+            }
+            let hardware_type = ArpHardwareType::new(u16::from_be_bytes([bytes[0], bytes[1]]));
+            let protocol_type = EtherType::new(u16::from_be_bytes([bytes[2], bytes[3]]));
+            let hw_addr_len = bytes[4];
+            let proto_addr_len = bytes[5];
+            let operation = ArpOperation::new(u16::from_be_bytes([bytes[6], bytes[7]]));
+            let sender_hw_addr = MacAddr::from_octets([
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
+            ]);
+            let sender_proto_addr = Ipv4Addr::new(bytes[14], bytes[15], bytes[16], bytes[17]);
+            let target_hw_addr = MacAddr::from_octets([
+                bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+            ]);
+            let target_proto_addr = Ipv4Addr::new(bytes[24], bytes[25], bytes[26], bytes[27]);
+            let payload = Bytes::copy_from_slice(&bytes[ARP_HEADER_LEN..]);
 
-        Some(ArpPacket {
-            header: ArpHeader {
-                hardware_type,
-                protocol_type,
-                hw_addr_len,
-                proto_addr_len,
-                operation,
-                sender_hw_addr,
-                sender_proto_addr,
-                target_hw_addr,
-                target_proto_addr,
-            },
-            payload,
+            Some(ArpPacket {
+                header: ArpHeader {
+                    hardware_type,
+                    protocol_type,
+                    hw_addr_len,
+                    proto_addr_len,
+                    operation,
+                    sender_hw_addr,
+                    sender_proto_addr,
+                    target_hw_addr,
+                    target_proto_addr,
+                },
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -497,6 +506,11 @@ impl<'a> MutablePacket<'a> for MutableArpPacket<'a> {
 
 impl<'a> MutableArpPacket<'a> {
     /// Create a packet without performing length checks.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain at least the 28-byte Ethernet/IPv4 ARP packet
+    /// header before any field accessor is called. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self { buffer }
     }
@@ -509,56 +523,86 @@ impl<'a> MutableArpPacket<'a> {
         &mut *self.buffer
     }
 
-    pub fn get_hardware_type(&self) -> ArpHardwareType {
+    pub fn hardware_type(&self) -> ArpHardwareType {
         ArpHardwareType::new(u16::from_be_bytes([self.raw()[0], self.raw()[1]]))
+    }
+    /// Deprecated compatibility alias for hardware_type.
+    #[deprecated(note = "use hardware_type")]
+    pub fn get_hardware_type(&self) -> ArpHardwareType {
+        self.hardware_type()
     }
 
     pub fn set_hardware_type(&mut self, ty: ArpHardwareType) {
         self.raw_mut()[0..2].copy_from_slice(&ty.value().to_be_bytes());
     }
 
-    pub fn get_protocol_type(&self) -> EtherType {
+    pub fn protocol_type(&self) -> EtherType {
         EtherType::new(u16::from_be_bytes([self.raw()[2], self.raw()[3]]))
+    }
+    /// Deprecated compatibility alias for protocol_type.
+    #[deprecated(note = "use protocol_type")]
+    pub fn get_protocol_type(&self) -> EtherType {
+        self.protocol_type()
     }
 
     pub fn set_protocol_type(&mut self, ty: EtherType) {
         self.raw_mut()[2..4].copy_from_slice(&ty.value().to_be_bytes());
     }
 
-    pub fn get_hw_addr_len(&self) -> u8 {
+    pub fn hw_addr_len(&self) -> u8 {
         self.raw()[4]
+    }
+    /// Deprecated compatibility alias for hw_addr_len.
+    #[deprecated(note = "use hw_addr_len")]
+    pub fn get_hw_addr_len(&self) -> u8 {
+        self.hw_addr_len()
     }
 
     pub fn set_hw_addr_len(&mut self, len: u8) {
         self.raw_mut()[4] = len;
     }
 
-    pub fn get_proto_addr_len(&self) -> u8 {
+    pub fn proto_addr_len(&self) -> u8 {
         self.raw()[5]
+    }
+    /// Deprecated compatibility alias for proto_addr_len.
+    #[deprecated(note = "use proto_addr_len")]
+    pub fn get_proto_addr_len(&self) -> u8 {
+        self.proto_addr_len()
     }
 
     pub fn set_proto_addr_len(&mut self, len: u8) {
         self.raw_mut()[5] = len;
     }
 
-    pub fn get_operation(&self) -> ArpOperation {
+    pub fn operation(&self) -> ArpOperation {
         ArpOperation::new(u16::from_be_bytes([self.raw()[6], self.raw()[7]]))
+    }
+    /// Deprecated compatibility alias for operation.
+    #[deprecated(note = "use operation")]
+    pub fn get_operation(&self) -> ArpOperation {
+        self.operation()
     }
 
     pub fn set_operation(&mut self, op: ArpOperation) {
         self.raw_mut()[6..8].copy_from_slice(&op.value().to_be_bytes());
     }
 
-    pub fn get_sender_hw_addr(&self) -> MacAddr {
+    pub fn sender_hw_addr(&self) -> MacAddr {
         let raw = self.raw();
         MacAddr::from_octets([raw[8], raw[9], raw[10], raw[11], raw[12], raw[13]])
+    }
+    /// Deprecated compatibility alias for sender_hw_addr.
+    #[deprecated(note = "use sender_hw_addr")]
+    pub fn get_sender_hw_addr(&self) -> MacAddr {
+        self.sender_hw_addr()
     }
 
     pub fn set_sender_hw_addr(&mut self, addr: MacAddr) {
         self.raw_mut()[8..14].copy_from_slice(&addr.octets());
     }
 
-    pub fn get_sender_proto_addr(&self) -> Ipv4Addr {
+    pub fn sender_proto_addr(&self) -> Ipv4Addr {
         Ipv4Addr::new(
             self.raw()[14],
             self.raw()[15],
@@ -566,27 +610,42 @@ impl<'a> MutableArpPacket<'a> {
             self.raw()[17],
         )
     }
+    /// Deprecated compatibility alias for sender_proto_addr.
+    #[deprecated(note = "use sender_proto_addr")]
+    pub fn get_sender_proto_addr(&self) -> Ipv4Addr {
+        self.sender_proto_addr()
+    }
 
     pub fn set_sender_proto_addr(&mut self, addr: Ipv4Addr) {
         self.raw_mut()[14..18].copy_from_slice(&addr.octets());
     }
 
-    pub fn get_target_hw_addr(&self) -> MacAddr {
+    pub fn target_hw_addr(&self) -> MacAddr {
         let raw = self.raw();
         MacAddr::from_octets([raw[18], raw[19], raw[20], raw[21], raw[22], raw[23]])
+    }
+    /// Deprecated compatibility alias for target_hw_addr.
+    #[deprecated(note = "use target_hw_addr")]
+    pub fn get_target_hw_addr(&self) -> MacAddr {
+        self.target_hw_addr()
     }
 
     pub fn set_target_hw_addr(&mut self, addr: MacAddr) {
         self.raw_mut()[18..24].copy_from_slice(&addr.octets());
     }
 
-    pub fn get_target_proto_addr(&self) -> Ipv4Addr {
+    pub fn target_proto_addr(&self) -> Ipv4Addr {
         Ipv4Addr::new(
             self.raw()[24],
             self.raw()[25],
             self.raw()[26],
             self.raw()[27],
         )
+    }
+    /// Deprecated compatibility alias for target_proto_addr.
+    #[deprecated(note = "use target_proto_addr")]
+    pub fn get_target_proto_addr(&self) -> Ipv4Addr {
+        self.target_proto_addr()
     }
 
     pub fn set_target_proto_addr(&mut self, addr: Ipv4Addr) {
@@ -680,14 +739,14 @@ mod tests {
         ];
 
         let packet = ArpPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
-        match packet.header.hardware_type {
-            ArpHardwareType::Unknown(v) => assert_eq!(v, 0x9999),
-            _ => panic!("Expected unknown hardware type"),
-        }
-        match packet.header.operation {
-            ArpOperation::Unknown(v) => assert_eq!(v, 0x9999),
-            _ => panic!("Expected unknown operation"),
-        }
+        assert!(matches!(
+            packet.header.hardware_type,
+            ArpHardwareType::Unknown(0x9999)
+        ));
+        assert!(matches!(
+            packet.header.operation,
+            ArpOperation::Unknown(0x9999)
+        ));
     }
 
     #[test]

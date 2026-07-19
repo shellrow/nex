@@ -1,4 +1,5 @@
 //! Low-level packet parsing and serialization primitives for common network protocols.
+#![allow(deprecated)]
 
 pub mod arp;
 pub mod builder;

@@ -54,10 +54,10 @@ async fn main() -> std::io::Result<()> {
         loop {
             if let Ok((n, from)) = socket_clone.recv_from(&mut buf).await {
                 println!("Received {} bytes from {}", n, from.ip());
-                if let Some(ipv4_packet) = Ipv4Packet::from_buf(&buf[..n])
+                if let Ok(ipv4_packet) = Ipv4Packet::try_from_buf(&buf[..n])
                     && ipv4_packet.header.next_level_protocol
                         == nex_packet::ip::IpNextProtocol::Icmp
-                    && let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload())
+                    && let Ok(icmp_packet) = IcmpPacket::try_from_bytes(ipv4_packet.payload())
                 {
                     println!(
                         "\t{:?} from: {:?} to {:?}, TTL: {}",

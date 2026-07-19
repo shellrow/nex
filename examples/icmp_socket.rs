@@ -78,9 +78,9 @@ fn main() -> std::io::Result<()> {
     match kind {
         IcmpKind::V4 => {
             // Parse IPv4 + ICMP
-            if let Some(ipv4_packet) = Ipv4Packet::from_buf(packet)
+            if let Ok(ipv4_packet) = Ipv4Packet::try_from_buf(packet)
                 && ipv4_packet.header.next_level_protocol == nex_packet::ip::IpNextProtocol::Icmp
-                && let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload())
+                && let Ok(icmp_packet) = IcmpPacket::try_from_bytes(ipv4_packet.payload())
             {
                 println!(
                     "\t{:?} from: {:?} to {:?}, TTL: {}",
@@ -102,22 +102,23 @@ fn main() -> std::io::Result<()> {
         IcmpKind::V6 => {
             // Parse ICMPv6
             // The IPv6 header is automatically cropped off when recvfrom() is used.
-            if let Some(icmpv6_packet) = Icmpv6Packet::from_buf(packet) {
+            if let Ok(icmpv6_packet) = Icmpv6Packet::try_from_buf(packet) {
                 println!(
                     "\t{:?} from: {:?}",
                     icmpv6_packet.header.icmpv6_type,
                     from.ip()
                 );
-                match icmpv6::echo_reply::EchoReplyPacket::from_buf(packet) {
-                    Some(reply) => {
+                match icmpv6::echo_reply::EchoReplyPacket::try_from_buf(packet) {
+                    Ok(reply) => {
                         println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
                     }
-                    None => {
+                    Err(_) => {
                         println!("\tReceived non-echo-reply ICMPv6 packet");
                     }
                 }
             }
         }
+        _ => {}
     }
     Ok(())
 }

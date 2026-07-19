@@ -35,11 +35,19 @@ pub struct UdpPacket {
 
 impl Packet for UdpPacket {
     type Header = UdpHeader;
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(bytes).ok()
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
+    fn try_from_bytes(mut bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes.split_to(bytes.len()))
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
     fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::with_capacity(UDP_HEADER_LEN + self.payload.len());
@@ -230,6 +238,11 @@ impl UdpPacket {
 
 impl<'a> MutableUdpPacket<'a> {
     /// Create a new packet without validating length fields.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete UDP header and its declared length must
+    /// fit in the slice. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -370,8 +383,13 @@ impl<'a> MutableUdpPacket<'a> {
         self.total_len().saturating_sub(UDP_HEADER_LEN)
     }
 
-    pub fn get_source(&self) -> u16 {
+    pub fn source(&self) -> u16 {
         u16::from_be_bytes([self.raw()[0], self.raw()[1]])
+    }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> u16 {
+        self.source()
     }
 
     pub fn set_source(&mut self, port: u16) {
@@ -379,8 +397,13 @@ impl<'a> MutableUdpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_destination(&self) -> u16 {
+    pub fn destination(&self) -> u16 {
         u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> u16 {
+        self.destination()
     }
 
     pub fn set_destination(&mut self, port: u16) {
@@ -388,8 +411,13 @@ impl<'a> MutableUdpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_length(&self) -> u16 {
+    pub fn length(&self) -> u16 {
         u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+    /// Deprecated compatibility alias for length.
+    #[deprecated(note = "use length")]
+    pub fn get_length(&self) -> u16 {
+        self.length()
     }
 
     pub fn set_length(&mut self, length: u16) {
@@ -397,8 +425,13 @@ impl<'a> MutableUdpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.raw()[6], self.raw()[7]])
+    }
+    /// Deprecated compatibility alias for checksum.
+    #[deprecated(note = "use checksum")]
+    pub fn get_checksum(&self) -> u16 {
+        self.checksum()
     }
 
     pub fn set_checksum(&mut self, checksum: u16) {

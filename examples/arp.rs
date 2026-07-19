@@ -78,7 +78,7 @@ fn main() {
     loop {
         match rx.next() {
             Ok(packet) => {
-                let frame = Frame::from_buf(packet, ParseOption::default()).unwrap();
+                let frame = Frame::try_from_buf(packet, ParseOption::default()).unwrap();
                 match &frame.datalink {
                     Some(dlink) => {
                         if let Some(arp) = &dlink.arp

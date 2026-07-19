@@ -2,7 +2,6 @@ use bytes::Bytes;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use nex_packet::{
     frame::{Frame, FrameView, ParseOption},
-    packet::Packet,
     tcp::TcpPacket,
     udp::UdpPacket,
 };
@@ -32,32 +31,32 @@ fn bench_packet_parse(c: &mut Criterion) {
     let udp_datagram = ipv6_udp.slice(14 + 40..);
 
     group.bench_function("frame_from_buf_ipv4_tcp", |b| {
-        b.iter(|| Frame::from_buf(&ipv4_tcp, ParseOption::default()))
+        b.iter(|| Frame::try_from_buf(&ipv4_tcp, ParseOption::default()))
     });
     group.bench_function("frame_try_from_bytes_ipv4_tcp", |b| {
         b.iter(|| Frame::try_from_bytes(ipv4_tcp.clone(), ParseOption::default()))
     });
     group.bench_function("frame_view_from_buf_ipv4_tcp", |b| {
-        b.iter(|| FrameView::from_buf(&ipv4_tcp, ParseOption::default()))
+        b.iter(|| FrameView::try_from_buf(&ipv4_tcp, ParseOption::default()))
     });
     group.bench_function("tcp_from_buf", |b| {
-        b.iter(|| TcpPacket::from_buf(&tcp_segment))
+        b.iter(|| TcpPacket::try_from_buf(&tcp_segment))
     });
     group.bench_function("tcp_from_bytes", |b| {
-        b.iter(|| TcpPacket::from_bytes(tcp_segment.clone()))
+        b.iter(|| TcpPacket::try_from_bytes(tcp_segment.clone()))
     });
     group.bench_function("udp_from_buf", |b| {
-        b.iter(|| UdpPacket::from_buf(&udp_datagram))
+        b.iter(|| UdpPacket::try_from_buf(&udp_datagram))
     });
     group.bench_function("udp_from_bytes", |b| {
-        b.iter(|| UdpPacket::from_bytes(udp_datagram.clone()))
+        b.iter(|| UdpPacket::try_from_bytes(udp_datagram.clone()))
     });
 
     for (name, packet) in [("ipv4_tcp", ipv4_tcp), ("ipv6_udp", ipv6_udp)] {
         group.bench_with_input(
             BenchmarkId::new("frame_view", name),
             &packet,
-            |b, packet| b.iter(|| FrameView::from_buf(packet, ParseOption::default())),
+            |b, packet| b.iter(|| FrameView::try_from_buf(packet, ParseOption::default())),
         );
     }
 

@@ -5,11 +5,23 @@ use std::marker::PhantomData;
 pub trait Packet: Sized {
     type Header;
 
-    /// Parse from a byte slice.
-    fn from_buf(buf: &[u8]) -> Option<Self>;
+    /// Parse from a borrowed byte slice with structured diagnostics.
+    fn try_from_buf(buf: &[u8]) -> Result<Self, crate::parse::ParseError>;
 
-    /// Parse from raw bytes. (with ownership)
-    fn from_bytes(bytes: Bytes) -> Option<Self>;
+    /// Parse from owned bytes with structured diagnostics.
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError>;
+
+    /// Parse from a byte slice, discarding structured diagnostics.
+    #[deprecated(note = "use Packet::try_from_buf or the packet type's inherent try_from_buf")]
+    fn from_buf(buf: &[u8]) -> Option<Self> {
+        Self::try_from_buf(buf).ok()
+    }
+
+    /// Parse from owned bytes, discarding structured diagnostics.
+    #[deprecated(note = "use Packet::try_from_bytes or the packet type's inherent try_from_bytes")]
+    fn from_bytes(bytes: Bytes) -> Option<Self> {
+        Self::try_from_bytes(bytes).ok()
+    }
 
     /// Serialize into raw bytes.
     fn to_bytes(&self) -> Bytes;
@@ -91,7 +103,7 @@ pub trait MutablePacket<'a>: Sized {
 
     /// Convert the mutable packet into its immutable counterpart.
     fn freeze(&self) -> Option<Self::Packet> {
-        Self::Packet::from_buf(self.packet())
+        Self::Packet::try_from_buf(self.packet()).ok()
     }
 }
 
@@ -106,7 +118,7 @@ impl<'a, P: Packet> MutablePacket<'a> for GenericMutablePacket<'a, P> {
     type Packet = P;
 
     fn new(buffer: &'a mut [u8]) -> Option<Self> {
-        P::from_buf(buffer)?;
+        P::try_from_buf(buffer).ok()?;
         Some(Self {
             buffer,
             _marker: PhantomData,
@@ -145,7 +157,14 @@ impl<'a, P: Packet> MutablePacket<'a> for GenericMutablePacket<'a, P> {
 }
 
 impl<'a, P: Packet> GenericMutablePacket<'a, P> {
-    /// Construct a mutable packet without running additional validation.
+    /// Construct a mutable packet without validating the buffer.
+    ///
+    /// # Safety
+    ///
+    /// Although this function is safe to call for compatibility, the caller
+    /// must ensure `buffer` contains a structurally valid `P` before calling
+    /// accessors. Invalid header lengths may otherwise cause accessor panics.
+    /// Prefer [`MutablePacket::new`], which validates this invariant.
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -154,8 +173,8 @@ impl<'a, P: Packet> GenericMutablePacket<'a, P> {
     }
 
     fn lengths(&self) -> (usize, usize) {
-        match P::from_buf(self.packet()) {
-            Some(packet) => {
+        match P::try_from_buf(self.packet()) {
+            Ok(packet) => {
                 let header_len = packet.header_len();
                 let payload_len = packet.payload_len();
                 (header_len, payload_len)

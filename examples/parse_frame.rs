@@ -59,11 +59,11 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = payload_offset;
                 }
-                match Frame::from_buf(packet, parse_option) {
-                    Some(frame) => {
+                match Frame::try_from_buf(packet, parse_option) {
+                    Ok(frame) => {
                         display_frame(&frame);
                     }
-                    None => {
+                    Err(_) => {
                         println!("Failed to parse packet as Frame");
                     }
                 }

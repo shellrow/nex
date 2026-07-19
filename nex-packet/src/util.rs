@@ -202,9 +202,13 @@ mod tests {
     fn sum_be_words_misaligned_ptr() {
         let mut data = vec![0; 13];
         let ptr = match data.as_ptr() as usize % 2 {
+            // SAFETY: The vector contains 13 bytes, so advancing by one still
+            // leaves the 12-byte range constructed below in bounds.
             0 => unsafe { data.as_mut_ptr().offset(1) },
             _ => data.as_mut_ptr(),
         };
+        // SAFETY: `ptr` points into `data` with at least 12 writable bytes
+        // remaining for the lifetime of this test scope.
         unsafe {
             let slice_data = slice::from_raw_parts_mut(ptr, 12);
             for (i, byte) in slice_data.iter_mut().enumerate().take(11) {

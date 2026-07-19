@@ -139,7 +139,7 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
                 }
-                let frame = Frame::from_buf(packet, parse_option).unwrap();
+                let frame = Frame::try_from_buf(packet, parse_option).unwrap();
 
                 if let Some(ip_layer) = &frame.ip {
                     if let Some(icmp) = &ip_layer.icmp

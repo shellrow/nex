@@ -20,7 +20,7 @@ use nex_packet::ethernet::EthernetHeader;
 use nex_packet::{icmp, icmpv6};
 use std::net::IpAddr;
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Choose the default interface.
     let interface = Interface::default().expect("no default interface");
     let AsyncChannel::Ethernet(_tx, mut rx) = async_channel(&interface, Config::default())? else {
@@ -45,7 +45,7 @@ fn main() -> std::io::Result<()> {
                 let payload_offset: usize = if interface.is_loopback() { 14 } else { 0 };
                 let payload = Bytes::copy_from_slice(&packet[payload_offset..]);
                 if packet.len() > payload_offset {
-                    let version = Ipv4Packet::from_buf(&packet).unwrap().header.version;
+                    let version = Ipv4Packet::try_from_buf(&packet).unwrap().header.version;
                     let fake_eth = EthernetPacket {
                         header: EthernetHeader {
                             destination: MacAddr::zero(),
@@ -61,7 +61,7 @@ fn main() -> std::io::Result<()> {
                     handle_ethernet_frame(fake_eth);
                 }
             } else {
-                handle_ethernet_frame(EthernetPacket::from_buf(&packet).unwrap());
+                handle_ethernet_frame(EthernetPacket::try_from_buf(&packet).unwrap());
             }
         }
         Ok::<(), std::io::Error>(())
@@ -91,8 +91,8 @@ fn handle_ethernet_frame(ethernet: EthernetPacket) {
 }
 
 fn handle_arp_packet(packet: Bytes) {
-    match ArpPacket::from_bytes(packet) {
-        Some(arp) => {
+    match ArpPacket::try_from_bytes(packet) {
+        Ok(arp) => {
             println!(
                 "ARP packet: {}({}) > {}({}); operation: {:?}",
                 arp.header.sender_hw_addr,
@@ -109,8 +109,8 @@ fn handle_arp_packet(packet: Bytes) {
 }
 
 fn handle_ipv4_packet(packet: Bytes) {
-    match Ipv4Packet::from_bytes(packet) {
-        Some(ipv4) => {
+    match Ipv4Packet::try_from_bytes(packet) {
+        Ok(ipv4) => {
             handle_transport_protocol(
                 IpAddr::V4(ipv4.header.source),
                 IpAddr::V4(ipv4.header.destination),
@@ -125,8 +125,8 @@ fn handle_ipv4_packet(packet: Bytes) {
 }
 
 fn handle_ipv6_packet(packet: Bytes) {
-    match Ipv6Packet::from_bytes(packet) {
-        Some(ipv6) => {
+    match Ipv6Packet::try_from_bytes(packet) {
+        Ok(ipv6) => {
             handle_transport_protocol(
                 IpAddr::V6(ipv6.header.source),
                 IpAddr::V6(ipv6.header.destination),
@@ -166,8 +166,8 @@ fn handle_transport_protocol(
 }
 
 fn handle_tcp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    match TcpPacket::from_bytes(packet) {
-        Some(tcp) => {
+    match TcpPacket::try_from_bytes(packet) {
+        Ok(tcp) => {
             println!(
                 "TCP Packet: {}:{} > {}:{}; length: {}",
                 source,
@@ -184,9 +184,9 @@ fn handle_tcp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
 }
 
 fn handle_udp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    let udp = UdpPacket::from_bytes(packet);
+    let udp = UdpPacket::try_from_bytes(packet);
 
-    if let Some(udp) = udp {
+    if let Ok(udp) = udp {
         println!(
             "UDP Packet: {}:{} > {}:{}; length: {}",
             source,
@@ -201,8 +201,8 @@ fn handle_udp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
 }
 
 fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    let icmp_packet = IcmpPacket::from_bytes(packet);
-    if let Some(icmp_packet) = icmp_packet {
+    let icmp_packet = IcmpPacket::try_from_bytes(packet);
+    if let Ok(icmp_packet) = icmp_packet {
         let total_len = icmp_packet.total_len();
         match icmp_packet.header.icmp_type {
             IcmpType::EchoRequest => {
@@ -265,8 +265,8 @@ fn handle_icmp_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
 }
 
 fn handle_icmpv6_packet(source: IpAddr, destination: IpAddr, packet: Bytes) {
-    let icmpv6_packet = Icmpv6Packet::from_bytes(packet);
-    if let Some(icmpv6_packet) = icmpv6_packet {
+    let icmpv6_packet = Icmpv6Packet::try_from_bytes(packet);
+    if let Ok(icmpv6_packet) = icmpv6_packet {
         match icmpv6_packet.header.icmpv6_type {
             nex::packet::icmpv6::Icmpv6Type::EchoRequest => {
                 let echo_request_packet =

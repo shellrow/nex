@@ -4,6 +4,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Controls how and when checksum recalculation happens for a packet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum ChecksumMode {
     /// Checksum updates are handled manually by the caller.
     #[default]
@@ -68,6 +69,7 @@ impl ChecksumState {
 
 /// Captures the pseudo-header inputs required for transport checksum calculations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TransportChecksumContext {
     /// Transport checksum associated with an IPv4 pseudo-header.
     Ipv4 {

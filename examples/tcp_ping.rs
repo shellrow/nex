@@ -204,7 +204,7 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = payload_offset;
                 }
-                let frame: Frame = Frame::from_buf(packet, parse_option).unwrap();
+                let frame: Frame = Frame::try_from_buf(packet, parse_option).unwrap();
                 // Check each layer. If the packet is TCP SYN+ACK or RST+ACK, print it out
                 if let Some(ip_layer) = &frame.ip
                     && let Some(transport_layer) = &frame.transport

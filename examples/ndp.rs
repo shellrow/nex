@@ -112,7 +112,7 @@ fn main() {
                     parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
                 }
 
-                if let Some(frame) = Frame::from_buf(packet, parse_option)
+                if let Ok(frame) = Frame::try_from_buf(packet, parse_option)
                     && let Some(ip_layer) = &frame.ip
                     && let Some(icmpv6) = &ip_layer.icmpv6
                     && icmpv6.icmpv6_type == Icmpv6Type::NeighborAdvertisement

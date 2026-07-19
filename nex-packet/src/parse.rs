@@ -17,16 +17,20 @@
 //! | `from_bytes_strict(input)` | `try_from_bytes_with_mode(input, ParseMode::Strict).ok()` |
 //! | `EthernetHeader::from_bytes(input)` | `EthernetHeader::try_from_bytes(input)` |
 //! | `DnsName::from_bytes(input)` | `DnsName::try_from_bytes(input)` |
+//! | `DnsQueryPacket::get_qname_parsed()` | `DnsQueryPacket::qname_parsed()` |
+//! | `DnsQueryPacket::try_get_qname_parsed()` | `DnsQueryPacket::qname_parsed()` |
 //! | DNS section `from_buf_mut(cursor)` helpers | `DnsPacket::try_from_buf(input)` |
 //!
-//! The `Option`-returning methods on [`crate::packet::Packet`] remain temporary
-//! compatibility shims. New code should use the inherent `try_from_*` methods so
-//! malformed input retains diagnostic context.
+//! The `Option`-returning methods on [`crate::packet::Packet`] are deprecated
+//! compatibility shims. Every `Packet` implementor also receives the canonical
+//! `try_from_buf` and `try_from_bytes` methods through the trait. Protocols with
+//! richer validation override these with more specific error contexts.
 
 use core::fmt;
 
 /// Controls validation behavior for parsers with length-delimited payloads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParseMode {
     /// Preserve captured payload bytes when a declared length is missing or incomplete.
     #[default]
@@ -129,3 +133,15 @@ impl fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
+
+#[cfg(test)]
+mod tests {
+    use super::ParseError;
+
+    fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
+
+    #[test]
+    fn parse_error_implements_public_error_contract() {
+        assert_error_contract::<ParseError>();
+    }
+}

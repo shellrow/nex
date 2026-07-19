@@ -22,6 +22,7 @@ pub const MAC_ADDR_LEN: usize = 6;
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum EtherType {
     Ipv4,
     Arp,
@@ -193,11 +194,19 @@ pub struct EthernetPacket {
 impl Packet for EthernetPacket {
     type Header = EthernetHeader;
 
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(bytes).ok()
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes).ok()
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
     fn to_bytes(&self) -> Bytes {
         let mut buf = Vec::with_capacity(ETHERNET_HEADER_LEN + self.payload.len());
@@ -233,18 +242,33 @@ impl EthernetPacket {
         EthernetPacket { header, payload }
     }
     /// Get the destination MAC address.
-    pub fn get_destination(&self) -> MacAddr {
+    pub fn destination(&self) -> MacAddr {
         self.header.destination
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> MacAddr {
+        self.destination()
     }
 
     /// Get the source MAC address.
-    pub fn get_source(&self) -> MacAddr {
+    pub fn source(&self) -> MacAddr {
         self.header.source
+    }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> MacAddr {
+        self.source()
     }
 
     /// Get the EtherType.
-    pub fn get_ethertype(&self) -> EtherType {
+    pub fn ethertype(&self) -> EtherType {
         self.header.ethertype
+    }
+    /// Deprecated compatibility alias for ethertype.
+    #[deprecated(note = "use ethertype")]
+    pub fn get_ethertype(&self) -> EtherType {
+        self.ethertype()
     }
 
     pub fn ip_packet(&self) -> Option<Bytes> {
@@ -365,14 +389,24 @@ impl<'a> MutablePacket<'a> for MutableEthernetPacket<'a> {
 
 impl<'a> MutableEthernetPacket<'a> {
     /// Create a mutable packet without performing size checks.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain at least the 14-byte Ethernet header before any
+    /// field accessor is called. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self { buffer }
     }
 
     /// Retrieve the destination MAC address.
-    pub fn get_destination(&self) -> MacAddr {
+    pub fn destination(&self) -> MacAddr {
         let h = self.header();
         MacAddr::from_octets([h[0], h[1], h[2], h[3], h[4], h[5]])
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> MacAddr {
+        self.destination()
     }
 
     /// Update the destination MAC address.
@@ -381,9 +415,14 @@ impl<'a> MutableEthernetPacket<'a> {
     }
 
     /// Retrieve the source MAC address.
-    pub fn get_source(&self) -> MacAddr {
+    pub fn source(&self) -> MacAddr {
         let h = self.header();
         MacAddr::from_octets([h[6], h[7], h[8], h[9], h[10], h[11]])
+    }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> MacAddr {
+        self.source()
     }
 
     /// Update the source MAC address.
@@ -392,8 +431,13 @@ impl<'a> MutableEthernetPacket<'a> {
     }
 
     /// Retrieve the EtherType.
-    pub fn get_ethertype(&self) -> EtherType {
+    pub fn ethertype(&self) -> EtherType {
         EtherType::new(u16::from_be_bytes([self.header()[12], self.header()[13]]))
+    }
+    /// Deprecated compatibility alias for ethertype.
+    #[deprecated(note = "use ethertype")]
+    pub fn get_ethertype(&self) -> EtherType {
+        self.ethertype()
     }
 
     /// Update the EtherType.
@@ -490,10 +534,7 @@ mod tests {
             0x00, 0x11, 0x22, 0x33,
         ];
         let packet = EthernetPacket::from_bytes(Bytes::copy_from_slice(&raw)).unwrap();
-        match packet.get_ethertype() {
-            EtherType::Unknown(val) => assert_eq!(val, 0xdead),
-            _ => panic!("Expected unknown EtherType"),
-        }
+        assert!(matches!(packet.ethertype(), EtherType::Unknown(0xdead)));
     }
 
     #[test]

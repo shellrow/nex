@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum DnsClass {
     IN = 1, // Internet
     CS = 2, // CSNET (Obsolete)
@@ -63,6 +64,7 @@ impl DnsClass {
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum DnsType {
     A = 1,
     NS = 2,
@@ -447,6 +449,7 @@ impl DnsType {
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5>
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum OpCode {
     Query,
     InverseQuery,
@@ -501,6 +504,7 @@ impl OpCode {
 /// <https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6>
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum RetCode {
     NoError,
     FormErr,
@@ -617,54 +621,61 @@ pub struct DnsQueryPacket {
 
 impl Packet for DnsQueryPacket {
     type Header = ();
-    fn from_buf(buf: &[u8]) -> Option<Self> {
-        let mut pos = 0;
-        let mut qname = Vec::new();
+    fn try_from_buf(buf: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            let mut pos = 0;
+            let mut qname = Vec::new();
 
-        // Parse the QNAME field
-        loop {
-            if pos >= buf.len() {
+            // Parse the QNAME field
+            loop {
+                if pos >= buf.len() {
+                    return None;
+                }
+
+                let len = buf[pos];
+                pos += 1;
+                qname.push(len);
+
+                if len == 0 {
+                    break;
+                }
+
+                if pos + len as usize > buf.len() {
+                    return None;
+                }
+
+                qname.extend_from_slice(&buf[pos..pos + len as usize]);
+                pos += len as usize;
+            }
+
+            // Read QTYPE and QCLASS
+            if pos + 4 > buf.len() {
                 return None;
             }
 
-            let len = buf[pos];
-            pos += 1;
-            qname.push(len);
+            let qtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+            let qclass = DnsClass::new(u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]));
+            pos += 4;
 
-            if len == 0 {
-                break;
-            }
+            // The rest is stored as payload
+            let payload = Bytes::copy_from_slice(&buf[pos..]);
 
-            if pos + len as usize > buf.len() {
-                return None;
-            }
-
-            qname.extend_from_slice(&buf[pos..pos + len as usize]);
-            pos += len as usize;
-        }
-
-        // Read QTYPE and QCLASS
-        if pos + 4 > buf.len() {
-            return None;
-        }
-
-        let qtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
-        let qclass = DnsClass::new(u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]));
-        pos += 4;
-
-        // The rest is stored as payload
-        let payload = Bytes::copy_from_slice(&buf[pos..]);
-
-        Some(Self {
-            qname,
-            qtype,
-            qclass,
-            payload,
+            Some(Self {
+                qname,
+                qtype,
+                qclass,
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -703,6 +714,13 @@ impl Packet for DnsQueryPacket {
 }
 
 impl DnsQueryPacket {
+    /// Parse the query name with compression-pointer validation.
+    pub fn qname_parsed(&self) -> Result<String, ParseError> {
+        decode_dns_name(&self.qname, 0).map(|(name, _)| name)
+    }
+
+    /// Compatibility parser that exposes the legacy UTF-8-only error.
+    #[deprecated(note = "use qname_parsed")]
     pub fn get_qname_parsed(&self) -> Result<String, Utf8Error> {
         let name = &self.qname;
         let mut qname = String::new();
@@ -724,9 +742,10 @@ impl DnsQueryPacket {
         Ok(qname)
     }
 
-    /// Parse the query name with compression-pointer validation.
+    /// Deprecated compatibility alias for [`Self::qname_parsed`].
+    #[deprecated(note = "use qname_parsed")]
     pub fn try_get_qname_parsed(&self) -> Result<String, ParseError> {
-        decode_dns_name(&self.qname, 0).map(|(name, _)| name)
+        self.qname_parsed()
     }
 
     pub fn qname_length(&self) -> usize {
@@ -788,51 +807,58 @@ pub struct DnsResponsePacket {
 
 impl Packet for DnsResponsePacket {
     type Header = ();
-    fn from_buf(buf: &[u8]) -> Option<Self> {
-        if buf.len() < 12 {
-            return None;
-        }
+    fn try_from_buf(buf: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if buf.len() < 12 {
+                return None;
+            }
 
-        let mut pos = 0;
+            let mut pos = 0;
 
-        let name_tag = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
-        pos += 2;
+            let name_tag = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+            pos += 2;
 
-        let rtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
-        pos += 2;
+            let rtype = DnsType::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+            pos += 2;
 
-        let rclass = DnsClass::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
-        pos += 2;
+            let rclass = DnsClass::new(u16::from_be_bytes([buf[pos], buf[pos + 1]]));
+            pos += 2;
 
-        let ttl = u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
-        pos += 4;
+            let ttl = u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
+            pos += 4;
 
-        let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
-        pos += 2;
+            let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+            pos += 2;
 
-        let data_len_usize = data_len as usize;
+            let data_len_usize = data_len as usize;
 
-        if buf.len() < pos + data_len_usize {
-            return None;
-        }
+            if buf.len() < pos + data_len_usize {
+                return None;
+            }
 
-        let data = buf[pos..pos + data_len_usize].to_vec();
-        pos += data_len_usize;
+            let data = buf[pos..pos + data_len_usize].to_vec();
+            pos += data_len_usize;
 
-        let payload = Bytes::copy_from_slice(&buf[pos..]);
+            let payload = Bytes::copy_from_slice(&buf[pos..]);
 
-        Some(Self {
-            name_tag,
-            rtype,
-            rclass,
-            ttl,
-            data_len,
-            data,
-            payload,
+            Some(Self {
+                name_tag,
+                rtype,
+                rclass,
+                ttl,
+                data_len,
+                data,
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -921,7 +947,7 @@ impl DnsResponsePacket {
     }
 
     /// Returns the IPv4 address if the record type is A and data length is 4 bytes.
-    pub fn get_ipv4(&self) -> Option<Ipv4Addr> {
+    pub fn ipv4(&self) -> Option<Ipv4Addr> {
         if self.rtype == DnsType::A && self.data.len() == 4 {
             Some(Ipv4Addr::new(
                 self.data[0],
@@ -933,34 +959,54 @@ impl DnsResponsePacket {
             None
         }
     }
+    /// Deprecated compatibility alias for ipv4.
+    #[deprecated(note = "use ipv4")]
+    pub fn get_ipv4(&self) -> Option<Ipv4Addr> {
+        self.ipv4()
+    }
     /// Returns the IPv6 address if the record type is AAAA and data length is 16 bytes.
-    pub fn get_ipv6(&self) -> Option<Ipv6Addr> {
+    pub fn ipv6(&self) -> Option<Ipv6Addr> {
         if self.rtype == DnsType::AAAA && self.data.len() == 16 {
             Some(Ipv6Addr::from(<[u8; 16]>::try_from(&self.data[..]).ok()?))
         } else {
             None
         }
     }
+    /// Deprecated compatibility alias for ipv6.
+    #[deprecated(note = "use ipv6")]
+    pub fn get_ipv6(&self) -> Option<Ipv6Addr> {
+        self.ipv6()
+    }
 
     /// Returns the IP address based on the record type.
-    pub fn get_ip(&self) -> Option<IpAddr> {
+    pub fn ip(&self) -> Option<IpAddr> {
         match self.rtype {
             DnsType::A => self.get_ipv4().map(IpAddr::V4),
             DnsType::AAAA => self.get_ipv6().map(IpAddr::V6),
             _ => None,
         }
     }
+    /// Deprecated compatibility alias for ip.
+    #[deprecated(note = "use ip")]
+    pub fn get_ip(&self) -> Option<IpAddr> {
+        self.ip()
+    }
 
     /// Returns the DNS name if the record type is CNAME, NS, or PTR.
-    pub fn get_name(&self) -> Option<DnsName> {
+    pub fn dns_name(&self) -> Option<DnsName> {
         match self.rtype {
             DnsType::CNAME | DnsType::NS | DnsType::PTR => DnsName::try_from_bytes(&self.data).ok(),
             _ => None,
         }
     }
+    /// Deprecated compatibility alias for dns_name.
+    #[deprecated(note = "use dns_name")]
+    pub fn get_name(&self) -> Option<DnsName> {
+        self.dns_name()
+    }
 
     /// Returns the TXT strings if the record type is TXT.
-    pub fn get_txt_strings(&self) -> Option<Vec<String>> {
+    pub fn txt_strings(&self) -> Option<Vec<String>> {
         if self.rtype != DnsType::TXT {
             return None;
         }
@@ -984,6 +1030,11 @@ impl DnsResponsePacket {
         }
 
         Some(result)
+    }
+    /// Deprecated compatibility alias for txt_strings.
+    #[deprecated(note = "use txt_strings")]
+    pub fn get_txt_strings(&self) -> Option<Vec<String>> {
+        self.txt_strings()
     }
 }
 
@@ -1021,12 +1072,20 @@ pub struct DnsPacket {
 
 impl Packet for DnsPacket {
     type Header = ();
-    fn from_buf(buf: &[u8]) -> Option<Self> {
-        Self::try_from_buf(buf).ok()
+    fn try_from_buf(buf: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(buf)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes).ok()
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
     fn to_bytes(&self) -> Bytes {

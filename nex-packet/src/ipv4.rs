@@ -35,6 +35,7 @@ pub mod Ipv4Flags {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Ipv4OptionType {
     /// End of Options List
     EOL = 0,
@@ -211,12 +212,20 @@ pub struct Ipv4Packet {
 impl Packet for Ipv4Packet {
     type Header = Ipv4Header;
 
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(bytes).ok()
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes).ok()
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -589,6 +598,11 @@ impl<'a> MutablePacket<'a> for MutableIpv4Packet<'a> {
 
 impl<'a> MutableIpv4Packet<'a> {
     /// Create a mutable packet without validating the header fields.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete IPv4 header whose IHL and total-length
+    /// fields fit in the slice. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -688,8 +702,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the version field.
-    pub fn get_version(&self) -> u8 {
+    pub fn version(&self) -> u8 {
         self.raw()[0] >> 4
+    }
+    /// Deprecated compatibility alias for version.
+    #[deprecated(note = "use version")]
+    pub fn get_version(&self) -> u8 {
+        self.version()
     }
 
     /// Update the version field.
@@ -700,8 +719,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the header length in 32-bit words.
-    pub fn get_header_length(&self) -> u8 {
+    pub fn header_length(&self) -> u8 {
         self.raw()[0] & 0x0F
+    }
+    /// Deprecated compatibility alias for header_length.
+    #[deprecated(note = "use header_length")]
+    pub fn get_header_length(&self) -> u8 {
+        self.header_length()
     }
 
     /// Update the header length in 32-bit words.
@@ -712,8 +736,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the DSCP field.
-    pub fn get_dscp(&self) -> u8 {
+    pub fn dscp(&self) -> u8 {
         self.raw()[1] >> 2
+    }
+    /// Deprecated compatibility alias for dscp.
+    #[deprecated(note = "use dscp")]
+    pub fn get_dscp(&self) -> u8 {
+        self.dscp()
     }
 
     /// Update the DSCP field.
@@ -724,8 +753,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the ECN field.
-    pub fn get_ecn(&self) -> u8 {
+    pub fn ecn(&self) -> u8 {
         self.raw()[1] & 0x03
+    }
+    /// Deprecated compatibility alias for ecn.
+    #[deprecated(note = "use ecn")]
+    pub fn get_ecn(&self) -> u8 {
+        self.ecn()
     }
 
     /// Update the ECN field.
@@ -736,8 +770,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the total length field.
-    pub fn get_total_length(&self) -> u16 {
+    pub fn total_length(&self) -> u16 {
         u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+    /// Deprecated compatibility alias for total_length.
+    #[deprecated(note = "use total_length")]
+    pub fn get_total_length(&self) -> u16 {
+        self.total_length()
     }
 
     /// Update the total length field.
@@ -747,8 +786,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the identification field.
-    pub fn get_identification(&self) -> u16 {
+    pub fn identification(&self) -> u16 {
         u16::from_be_bytes([self.raw()[4], self.raw()[5]])
+    }
+    /// Deprecated compatibility alias for identification.
+    #[deprecated(note = "use identification")]
+    pub fn get_identification(&self) -> u16 {
+        self.identification()
     }
 
     /// Update the identification field.
@@ -758,8 +802,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the flags field.
-    pub fn get_flags(&self) -> u8 {
+    pub fn flags(&self) -> u8 {
         (self.raw()[6] & 0xE0) >> 5
+    }
+    /// Deprecated compatibility alias for flags.
+    #[deprecated(note = "use flags")]
+    pub fn get_flags(&self) -> u8 {
+        self.flags()
     }
 
     /// Update the flags field.
@@ -770,8 +819,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the fragment offset field.
-    pub fn get_fragment_offset(&self) -> u16 {
+    pub fn fragment_offset(&self) -> u16 {
         u16::from_be_bytes([self.raw()[6], self.raw()[7]]) & 0x1FFF
+    }
+    /// Deprecated compatibility alias for fragment_offset.
+    #[deprecated(note = "use fragment_offset")]
+    pub fn get_fragment_offset(&self) -> u16 {
+        self.fragment_offset()
     }
 
     /// Update the fragment offset field.
@@ -783,8 +837,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the TTL field.
-    pub fn get_ttl(&self) -> u8 {
+    pub fn ttl(&self) -> u8 {
         self.raw()[8]
+    }
+    /// Deprecated compatibility alias for ttl.
+    #[deprecated(note = "use ttl")]
+    pub fn get_ttl(&self) -> u8 {
+        self.ttl()
     }
 
     /// Update the TTL field.
@@ -794,8 +853,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the next-level protocol field.
-    pub fn get_next_level_protocol(&self) -> IpNextProtocol {
+    pub fn next_level_protocol(&self) -> IpNextProtocol {
         IpNextProtocol::new(self.raw()[9])
+    }
+    /// Deprecated compatibility alias for next_level_protocol.
+    #[deprecated(note = "use next_level_protocol")]
+    pub fn get_next_level_protocol(&self) -> IpNextProtocol {
+        self.next_level_protocol()
     }
 
     /// Update the next-level protocol field.
@@ -805,8 +869,13 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the checksum field.
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.raw()[10], self.raw()[11]])
+    }
+    /// Deprecated compatibility alias for checksum.
+    #[deprecated(note = "use checksum")]
+    pub fn get_checksum(&self) -> u16 {
+        self.checksum()
     }
 
     /// Update the checksum field.
@@ -816,13 +885,18 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the source address.
-    pub fn get_source(&self) -> Ipv4Addr {
+    pub fn source(&self) -> Ipv4Addr {
         Ipv4Addr::new(
             self.raw()[12],
             self.raw()[13],
             self.raw()[14],
             self.raw()[15],
         )
+    }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> Ipv4Addr {
+        self.source()
     }
 
     /// Update the source address.
@@ -832,13 +906,18 @@ impl<'a> MutableIpv4Packet<'a> {
     }
 
     /// Retrieve the destination address.
-    pub fn get_destination(&self) -> Ipv4Addr {
+    pub fn destination(&self) -> Ipv4Addr {
         Ipv4Addr::new(
             self.raw()[16],
             self.raw()[17],
             self.raw()[18],
             self.raw()[19],
         )
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> Ipv4Addr {
+        self.destination()
     }
 
     /// Update the destination address.

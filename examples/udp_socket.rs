@@ -6,10 +6,7 @@ use nex_socket::udp::{UdpConfig, UdpSocket};
 use std::thread;
 
 fn main() -> std::io::Result<()> {
-    let server_cfg = UdpConfig {
-        bind_addr: Some("127.0.0.1:0".parse().unwrap()),
-        ..Default::default()
-    };
+    let server_cfg = UdpConfig::default().with_bind_addr("127.0.0.1:0".parse().unwrap());
     let server = UdpSocket::from_config(&server_cfg)?;
     let server_addr = server.local_addr()?;
 

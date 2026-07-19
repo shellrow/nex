@@ -15,7 +15,6 @@ use nex::packet::ipv6::Ipv6Packet;
 use nex::packet::udp::UdpPacket;
 use nex_core::mac::MacAddr;
 use nex_packet::ethernet::EthernetHeader;
-use nex_packet::packet::Packet;
 use std::env;
 use std::net::IpAddr;
 
@@ -55,7 +54,7 @@ fn main() {
                 {
                     let offset = if interface.is_loopback() { 14 } else { 0 };
                     let payload = Bytes::copy_from_slice(&packet[offset..]);
-                    let version = Ipv4Packet::from_buf(packet).unwrap().header.version;
+                    let version = Ipv4Packet::try_from_buf(packet).unwrap().header.version;
                     EthernetPacket {
                         header: EthernetHeader {
                             destination: MacAddr::zero(),
@@ -69,11 +68,11 @@ fn main() {
                         payload,
                     }
                 } else {
-                    EthernetPacket::from_buf(packet).unwrap()
+                    EthernetPacket::try_from_buf(packet).unwrap()
                 };
 
                 if let EtherType::Ipv4 = eth_packet.header.ethertype {
-                    if let Some(ipv4) = Ipv4Packet::from_bytes(eth_packet.payload.clone()) {
+                    if let Ok(ipv4) = Ipv4Packet::try_from_bytes(eth_packet.payload.clone()) {
                         handle_udp(
                             ipv4.payload,
                             IpAddr::V4(ipv4.header.source),
@@ -81,7 +80,7 @@ fn main() {
                         );
                     }
                 } else if let EtherType::Ipv6 = eth_packet.header.ethertype
-                    && let Some(ipv6) = Ipv6Packet::from_bytes(eth_packet.payload.clone())
+                    && let Ok(ipv6) = Ipv6Packet::try_from_bytes(eth_packet.payload.clone())
                 {
                     handle_udp(
                         ipv6.payload,
@@ -96,9 +95,9 @@ fn main() {
 }
 
 fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
-    if let Some(udp) = UdpPacket::from_bytes(packet.clone())
+    if let Ok(udp) = UdpPacket::try_from_bytes(packet.clone())
         && !udp.payload.is_empty()
-        && let Some(dns) = DnsPacket::from_bytes(udp.payload.clone())
+        && let Ok(dns) = DnsPacket::try_from_bytes(udp.payload.clone())
     {
         println!(
             "DNS Packet: {}:{} > {}:{}",
@@ -108,7 +107,7 @@ fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
         for query in &dns.queries {
             println!(
                 "  Query: {:?} (type: {:?}, class: {:?})",
-                query.get_qname_parsed(),
+                query.qname_parsed(),
                 query.qtype,
                 query.qclass
             );
@@ -117,7 +116,7 @@ fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
         for response in &dns.responses {
             match response.rtype {
                 DnsType::A | DnsType::AAAA => {
-                    if let Some(ip) = response.get_ip() {
+                    if let Some(ip) = response.ip() {
                         println!(
                             "  Response: {} (type: {:?}, ttl: {})",
                             ip, response.rtype, response.ttl
@@ -127,7 +126,7 @@ fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
                     }
                 }
                 DnsType::CNAME | DnsType::NS | DnsType::PTR => {
-                    if let Some(name) = response.get_name() {
+                    if let Some(name) = response.dns_name() {
                         println!(
                             "  Response: {} (type: {:?}, ttl: {})",
                             name, response.rtype, response.ttl
@@ -137,7 +136,7 @@ fn handle_udp(packet: Bytes, src: IpAddr, dst: IpAddr) {
                     }
                 }
                 DnsType::TXT => {
-                    if let Some(txts) = response.get_txt_strings() {
+                    if let Some(txts) = response.txt_strings() {
                         for txt in txts {
                             println!("  TXT: \"{}\" (ttl: {})", txt, response.ttl);
                         }
