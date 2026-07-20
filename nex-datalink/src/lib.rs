@@ -145,8 +145,15 @@ pub struct FanoutOption {
 /// - macOS and BSD use BPF devices. `bpf_fd_attempts` bounds `/dev/bpf*`
 ///   discovery, read buffering follows the BPF buffer size, and timeouts bound
 ///   readiness waits.
-/// - Windows uses Npcap. Buffer sizes configure Npcap packet buffers. Timeout
-///   fields and Linux/BPF-only options are not applied.
+/// - Windows uses Npcap. Buffer sizes configure Npcap packet buffers,
+///   `read_timeout` bounds each receive via `PacketSetReadTimeout` (an elapsed
+///   timeout surfaces as [`io::ErrorKind::TimedOut`]), and `promiscuous`
+///   selects the adapter hardware filter. `write_timeout` and Linux/BPF-only
+///   options are not applied.
+///
+///   Packet.dll is loaded lazily on the first channel open, so a missing Npcap
+///   install surfaces as [`io::ErrorKind::NotFound`] from `channel()` rather
+///   than preventing the process from starting. Building requires no Npcap SDK.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub struct Config {
@@ -156,7 +163,8 @@ pub struct Config {
     /// The size of buffer to use when reading packets. Defaults to 4096.
     pub read_buffer_size: usize,
 
-    /// Linux/BPF/Netmap only: The read timeout. Defaults to None.
+    /// Linux/BPF/Netmap/Windows only: The read timeout. Defaults to None,
+    /// meaning receives block until a packet arrives.
     pub read_timeout: Option<Duration>,
 
     /// Linux/BPF/Netmap only: The write timeout. Defaults to None.
