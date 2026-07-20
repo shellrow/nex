@@ -126,6 +126,7 @@ pub unsafe fn recv_from(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "windows"))]
     use super::*;
 
     #[cfg(not(target_os = "windows"))]

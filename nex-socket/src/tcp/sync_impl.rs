@@ -264,8 +264,8 @@ impl TcpSocket {
         let ret = unsafe {
             getsockopt(
                 sock,
-                SOL_SOCKET as i32,
-                SO_ERROR as i32,
+                SOL_SOCKET,
+                SO_ERROR,
                 &mut so_error as *mut _ as *mut _,
                 &mut optlen,
             )
