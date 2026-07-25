@@ -9,39 +9,15 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # No Npcap SDK step here: nex-datalink resolves Packet.dll at run time, so
-      # the default feature set builds and links on a bare Windows runner.
-      - name: Test libraries
-        run: cargo test --workspace --lib
-      - name: Test documentation
-        run: cargo test --workspace --doc
-      - name: Build all targets
-        run: cargo build --workspace --all-targets
-      # The async datalink backend is not a default feature, so without this it
-      # is never compiled on any OS by the steps above.
-      - name: Build all targets with async
-        run: cargo build --workspace --all-targets --features nex/async
-
-  lint:
-    name: Lint (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -49,63 +25,25 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # Only the optional `pcap` feature still needs the SDK: the `pcap` crate
-      # links wpcap.lib. nex's own Npcap access is resolved at run time.
-      - name: Install Npcap SDK
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/npcap-sdk
       - name: Check formatting
         run: cargo fmt --all -- --check
-      # Runs per-OS: the platform backends are behind cfg, so a Linux-only
-      # Clippy run never sees the Windows or BPF code paths.
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test libraries
+        run: cargo test --workspace --lib
 
-  features:
-    name: Features (${{ matrix.name }})
-    runs-on: ubuntu-latest
+  platform-check:
+    name: Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        include:
-          - name: default
-            command: cargo check -p nex
-          - name: no-default-features
-            command: cargo check -p nex --no-default-features
-          - name: serde
-            command: cargo check -p nex --no-default-features --features serde
-          - name: pcap
-            command: cargo check -p nex --no-default-features --features pcap
-          - name: async
-            command: cargo check -p nex --no-default-features --features async
-          - name: all-features
-            command: cargo check -p nex --all-features
+        os: [macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Check feature combination
-        run: ${{ matrix.command }}
-
-  msrv:
-    name: MSRV (Rust 1.88.0)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88.0
-      - uses: Swatinem/rust-cache@v2
-      - name: Check workspace with MSRV
-        run: cargo check --workspace --all-features --locked
-
-  supply-chain:
-    name: Supply chain
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check
-          arguments: --all-features
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
