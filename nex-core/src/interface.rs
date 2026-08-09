@@ -184,6 +184,7 @@ pub enum InterfaceType {
     MultiRateSymmetricDsl,
     HighPerformanceSerialBus,
     Wman,
+    Wwan,
     Wwanpp,
     Wwanpp2,
     Bridge,
@@ -222,6 +223,7 @@ impl InterfaceType {
             InterfaceType::MultiRateSymmetricDsl => String::from("Multi-Rate Symmetric DSL"),
             InterfaceType::HighPerformanceSerialBus => String::from("High Performance Serial Bus"),
             InterfaceType::Wman => String::from("WMAN"),
+            InterfaceType::Wwan => String::from("WWAN"),
             InterfaceType::Wwanpp => String::from("WWANPP"),
             InterfaceType::Wwanpp2 => String::from("WWANPP2"),
             InterfaceType::Bridge => String::from("Bridge"),
@@ -276,6 +278,7 @@ impl From<netdev::interface::types::InterfaceType> for InterfaceType {
                 InterfaceType::HighPerformanceSerialBus
             }
             netdev::interface::types::InterfaceType::Wman => InterfaceType::Wman,
+            netdev::interface::types::InterfaceType::Wwan => InterfaceType::Wwan,
             netdev::interface::types::InterfaceType::Wwanpp => InterfaceType::Wwanpp,
             netdev::interface::types::InterfaceType::Wwanpp2 => InterfaceType::Wwanpp2,
             netdev::interface::types::InterfaceType::Bridge => InterfaceType::Bridge,
@@ -665,7 +668,7 @@ fn lookup_interface(name: &str, index: u32) -> Option<netdev::Interface> {
 
 #[cfg(test)]
 mod tests {
-    use super::InterfaceError;
+    use super::{InterfaceError, InterfaceType};
 
     fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
 
@@ -684,5 +687,13 @@ mod tests {
             error.to_string(),
             "default gateway is unavailable: route table is empty"
         );
+    }
+
+    #[test]
+    fn converts_wwan_interface_type() {
+        let interface_type = InterfaceType::from(netdev::interface::types::InterfaceType::Wwan);
+
+        assert_eq!(interface_type, InterfaceType::Wwan);
+        assert_eq!(interface_type.name(), "WWAN");
     }
 }

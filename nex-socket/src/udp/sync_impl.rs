@@ -72,7 +72,7 @@ impl UdpSocket {
             socket.set_broadcast(flag)?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -90,7 +90,7 @@ impl UdpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
         #[cfg(any(
             target_os = "android",
@@ -446,11 +446,11 @@ impl UdpSocket {
     }
 
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
-        self.socket.set_ttl(ttl)
+        self.socket.set_ttl_v4(ttl)
     }
 
     pub fn ttl(&self) -> io::Result<u32> {
-        self.socket.ttl()
+        self.socket.ttl_v4()
     }
 
     pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
@@ -550,11 +550,11 @@ impl UdpSocket {
     }
 
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-        self.socket.set_tos(tos)
+        self.socket.set_tos_v4(tos)
     }
 
     pub fn tos(&self) -> io::Result<u32> {
-        self.socket.tos()
+        self.socket.tos_v4()
     }
 
     #[cfg(any(

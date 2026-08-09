@@ -46,10 +46,10 @@ impl AsyncTcpSocket {
             socket.set_reuse_port(flag)?;
         }
         if let Some(flag) = config.nodelay {
-            socket.set_nodelay(flag)?;
+            socket.set_tcp_nodelay(flag)?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -70,7 +70,7 @@ impl AsyncTcpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
         #[cfg(any(
             target_os = "android",
@@ -265,12 +265,12 @@ impl AsyncTcpSocket {
 
     /// Set no delay option for TCP.
     pub fn set_nodelay(&self, on: bool) -> io::Result<()> {
-        self.socket.set_nodelay(on)
+        self.socket.set_tcp_nodelay(on)
     }
 
     /// Get no delay option for TCP.
     pub fn nodelay(&self) -> io::Result<bool> {
-        self.socket.nodelay()
+        self.socket.tcp_nodelay()
     }
 
     /// Set linger option for the socket.
@@ -280,12 +280,12 @@ impl AsyncTcpSocket {
 
     /// Set the time-to-live for IPv4 packets.
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
-        self.socket.set_ttl(ttl)
+        self.socket.set_ttl_v4(ttl)
     }
 
     /// Get the time-to-live for IPv4 packets.
     pub fn ttl(&self) -> io::Result<u32> {
-        self.socket.ttl()
+        self.socket.ttl_v4()
     }
 
     /// Set the hop limit for IPv6 packets.
@@ -330,12 +330,12 @@ impl AsyncTcpSocket {
 
     /// Set IPv4 TOS / DSCP.
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-        self.socket.set_tos(tos)
+        self.socket.set_tos_v4(tos)
     }
 
     /// Get IPv4 TOS / DSCP.
     pub fn tos(&self) -> io::Result<u32> {
-        self.socket.tos()
+        self.socket.tos_v4()
     }
 
     /// Set IPv6 traffic class where supported.

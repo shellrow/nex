@@ -11,7 +11,7 @@ use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_packet::ipv4::Ipv4Packet;
 use nex_packet::packet::Packet;
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
-use rand::{Rng, thread_rng};
+use rand::{RngExt, rng};
 use std::collections::HashMap;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -82,7 +82,7 @@ async fn main() -> std::io::Result<()> {
     let mut handles = Vec::new();
     for i in 1u8..=254 {
         let addr = Ipv4Addr::new(parts[0], parts[1], parts[2], i);
-        let id: u16 = thread_rng().r#gen();
+        let id: u16 = rng().random();
         let seq: u16 = 1;
         let socket = socket.clone();
         let replies = replies.clone();
