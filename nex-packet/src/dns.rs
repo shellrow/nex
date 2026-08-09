@@ -733,10 +733,8 @@ impl DnsQueryPacket {
             if !qname.is_empty() {
                 qname.push('.');
             }
-            match str::from_utf8(&name[offset + 1..offset + 1 + label_len]) {
-                Ok(label) => qname.push_str(label),
-                Err(e) => return Err(e),
-            }
+            let label = str::from_utf8(&name[offset + 1..offset + 1 + label_len])?;
+            qname.push_str(label);
             offset += label_len + 1;
         }
         Ok(qname)

@@ -6,7 +6,6 @@ use crate::bindings::linux;
 use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
 use nex_core::mac::MacAddr;
-use nex_sys;
 use std::io;
 use std::mem;
 use std::sync::Arc;
@@ -64,13 +63,13 @@ pub(crate) struct Config {
 fn poll_timeout_ms(timeout: Option<libc::timespec>) -> libc::c_int {
     timeout
         .map(|to| {
-            let ms = (to.tv_sec as i64 * 1000) + (to.tv_nsec as i64 / 1_000_000);
-            ms.clamp(i64::from(libc::c_int::MIN), i64::from(libc::c_int::MAX)) as libc::c_int
+            let ms = i128::from(to.tv_sec) * 1000 + i128::from(to.tv_nsec) / 1_000_000;
+            ms.clamp(i128::from(libc::c_int::MIN), i128::from(libc::c_int::MAX)) as libc::c_int
         })
         .unwrap_or(-1)
 }
 
-impl<'a> From<&'a super::Config> for Config {
+impl From<&super::Config> for Config {
     fn from(config: &super::Config) -> Config {
         Config {
             write_buffer_size: config.write_buffer_size,
@@ -166,11 +165,11 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         } as u32;
         // set defrag flag
         if fanout.defrag {
-            typ = typ | linux::PACKET_FANOUT_FLAG_DEFRAG;
+            typ |= linux::PACKET_FANOUT_FLAG_DEFRAG;
         }
         // set rollover flag
         if fanout.rollover {
-            typ = typ | linux::PACKET_FANOUT_FLAG_ROLLOVER;
+            typ |= linux::PACKET_FANOUT_FLAG_ROLLOVER;
         }
         // set uniqueid flag -- probably not needed atm.
         // PACKET_FANOUT_FLAG_UNIQUEID
@@ -207,16 +206,12 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         // live while this same-sized value is copied.
         send_addr: unsafe { *(send_addr as *const libc::sockaddr_ll) },
         send_addr_len: len,
-        timeout: config
-            .write_timeout
-            .map(|to| nex_sys::duration_to_timespec(to)),
+        timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
     });
     let receiver = Box::new(RawReceiverImpl {
         socket: fd.clone(),
         read_buffer: vec![0; config.read_buffer_size],
-        timeout: config
-            .read_timeout
-            .map(|to| nex_sys::duration_to_timespec(to)),
+        timeout: config.read_timeout.map(nex_sys::duration_to_timespec),
     });
 
     Ok(super::Channel::Ethernet(sender, receiver))
@@ -293,10 +288,7 @@ impl RawSender for RawSenderImpl {
                         return Some(Err(e));
                     }
                 } else {
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Unexpected poll event",
-                    )));
+                    return Some(Err(io::Error::other("Unexpected poll event")));
                 }
             }
 
@@ -349,10 +341,7 @@ impl RawSender for RawSenderImpl {
                 Ok(_) => Some(Ok(())),
             }
         } else {
-            Some(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unexpected poll event",
-            )))
+            Some(Err(io::Error::other("Unexpected poll event")))
         }
     }
 }
@@ -403,10 +392,7 @@ impl RawReceiver for RawReceiverImpl {
                 Err(e) => Err(e),
             }
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unexpected poll event",
-            ))
+            Err(io::Error::other("Unexpected poll event"))
         }
     }
 }
