@@ -53,13 +53,13 @@ impl TcpSocket {
             socket.set_reuse_port(flag)?;
         }
         if let Some(flag) = config.nodelay {
-            socket.set_nodelay(flag)?;
+            socket.set_tcp_nodelay(flag)?;
         }
         if let Some(dur) = config.linger {
             socket.set_linger(Some(dur))?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -80,25 +80,9 @@ impl TcpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
-        #[cfg(any(
-            target_os = "android",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "ios",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "tvos",
-            target_os = "visionos",
-            target_os = "watchos"
-        ))]
-        if let Some(tclass) = config.tclass_v6 {
-            socket.set_tclass_v6(tclass)?;
-        }
+        crate::apply_tclass_v6(&socket, config.tclass_v6)?;
         if let Some(only_v6) = config.only_v6 {
             socket.set_only_v6(only_v6)?;
         }
@@ -183,7 +167,8 @@ impl TcpSocket {
 
         // Wait for the connection using poll
         use std::os::unix::io::BorrowedFd;
-        // Safety: raw_fd is valid for the lifetime of this scope
+        // SAFETY: `raw_fd` belongs to `socket` and remains valid for this scope;
+        // BorrowedFd does not take ownership.
         let mut fds = [PollFd::new(
             unsafe { BorrowedFd::borrow_raw(raw_fd) },
             PollFlags::POLLOUT,
@@ -246,6 +231,8 @@ impl TcpSocket {
         }];
 
         let timeout_ms = timeout.as_millis().clamp(0, i32::MAX as u128) as i32;
+        // SAFETY: `fds` is writable for the supplied element count and remains
+        // live throughout WSAPoll.
         let result = unsafe { WSAPoll(fds.as_mut_ptr(), fds.len() as u32, timeout_ms) };
         if result == SOCKET_ERROR {
             return Err(io::Error::last_os_error());
@@ -256,11 +243,13 @@ impl TcpSocket {
         // Check for errors via `SO_ERROR`
         let mut so_error: i32 = 0;
         let mut optlen = size_of::<i32>() as i32;
+        // SAFETY: `so_error` and `optlen` are writable for the duration of
+        // getsockopt and `sock` is open.
         let ret = unsafe {
             getsockopt(
                 sock,
-                SOL_SOCKET as i32,
-                SO_ERROR as i32,
+                SOL_SOCKET,
+                SO_ERROR,
                 &mut so_error as *mut _ as *mut _,
                 &mut optlen,
             )
@@ -284,7 +273,13 @@ impl TcpSocket {
     /// Accept an incoming connection.
     pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
         let (stream, addr) = self.socket.accept()?;
-        Ok((stream.into(), addr.as_socket().unwrap()))
+        let address = addr.as_socket().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "accepted peer did not provide an IP socket address",
+            )
+        })?;
+        Ok((stream.into(), address))
     }
 
     /// Convert the socket into a `TcpStream`.
@@ -304,7 +299,8 @@ impl TcpSocket {
 
     /// Receive a raw packet (for RAW TCP use).
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` is layout-compatible with `u8`.
+        // SAFETY: `MaybeUninit<u8>` is layout-compatible with `u8`, and the
+        // slice preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,
@@ -375,12 +371,12 @@ impl TcpSocket {
 
     /// Set the socket to not delay packets.
     pub fn set_nodelay(&self, on: bool) -> io::Result<()> {
-        self.socket.set_nodelay(on)
+        self.socket.set_tcp_nodelay(on)
     }
 
     /// Get the no delay option.
     pub fn nodelay(&self) -> io::Result<bool> {
-        self.socket.nodelay()
+        self.socket.tcp_nodelay()
     }
 
     /// Set the linger option for the socket.
@@ -390,12 +386,12 @@ impl TcpSocket {
 
     /// Set the time-to-live for IPv4 packets.
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
-        self.socket.set_ttl(ttl)
+        self.socket.set_ttl_v4(ttl)
     }
 
     /// Get the time-to-live for IPv4 packets.
     pub fn ttl(&self) -> io::Result<u32> {
-        self.socket.ttl()
+        self.socket.ttl_v4()
     }
 
     /// Set the hop limit for IPv6 packets.
@@ -440,12 +436,12 @@ impl TcpSocket {
 
     /// Set IPv4 TOS / DSCP.
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-        self.socket.set_tos(tos)
+        self.socket.set_tos_v4(tos)
     }
 
     /// Get IPv4 TOS / DSCP.
     pub fn tos(&self) -> io::Result<u32> {
-        self.socket.tos()
+        self.socket.tos_v4()
     }
 
     /// Set IPv6 traffic class where supported.
@@ -454,14 +450,10 @@ impl TcpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
         self.socket.set_tclass_v6(tclass)
@@ -473,14 +465,10 @@ impl TcpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn tclass_v6(&self) -> io::Result<u32> {
         self.socket.tclass_v6()
@@ -516,7 +504,7 @@ impl TcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Extract the RAW file descriptor for Unix.
@@ -566,6 +554,8 @@ mod tests {
 
     #[cfg(unix)]
     fn socket_is_nonblocking(socket: &Socket) -> bool {
+        // SAFETY: The descriptor belongs to the borrowed live socket and F_GETFL
+        // neither takes ownership nor retains pointers.
         let flags = unsafe { fcntl(socket.as_raw_fd(), F_GETFL) };
         assert!(flags >= 0, "F_GETFL failed: {}", io::Error::last_os_error());
         (flags & O_NONBLOCK) != 0

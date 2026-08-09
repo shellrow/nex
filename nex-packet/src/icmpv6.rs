@@ -27,6 +27,7 @@ pub const ICMPV6_IP_PACKET_LEN: usize = IPV6_HEADER_LEN + ICMPV6_HEADER_LEN;
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Icmpv6Type {
     DestinationUnreachable,
     PacketTooBig,
@@ -244,23 +245,30 @@ pub struct Icmpv6Packet {
 impl Packet for Icmpv6Packet {
     type Header = Icmpv6Header;
 
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < ICMPV6_HEADER_LEN {
-            return None;
-        }
-        let icmpv6_type = Icmpv6Type::new(bytes[0]);
-        let icmpv6_code = Icmpv6Code::new(bytes[1]);
-        let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-        let header = Icmpv6Header {
-            icmpv6_type,
-            icmpv6_code,
-            checksum,
-        };
-        let payload = Bytes::copy_from_slice(&bytes[ICMPV6_COMMON_HEADER_LEN..]);
-        Some(Icmpv6Packet { header, payload })
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < ICMPV6_HEADER_LEN {
+                return None;
+            }
+            let icmpv6_type = Icmpv6Type::new(bytes[0]);
+            let icmpv6_code = Icmpv6Code::new(bytes[1]);
+            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+            let header = Icmpv6Header {
+                icmpv6_type,
+                icmpv6_code,
+                checksum,
+            };
+            let payload = Bytes::copy_from_slice(&bytes[ICMPV6_COMMON_HEADER_LEN..]);
+            Some(Icmpv6Packet { header, payload })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
     fn to_bytes(&self) -> Bytes {
         let mut bytes = Vec::with_capacity(ICMPV6_COMMON_HEADER_LEN + self.payload.len());
@@ -327,7 +335,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpv6Packet<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ICMPV6_COMMON_HEADER_LEN);
         header
     }
 
@@ -336,13 +344,18 @@ impl<'a> MutablePacket<'a> for MutableIcmpv6Packet<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ICMPV6_COMMON_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ICMPV6_COMMON_HEADER_LEN);
         payload
     }
 }
 
 impl<'a> MutableIcmpv6Packet<'a> {
     /// Create a mutable ICMPv6 packet without performing validation.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete ICMPv6 header before any field accessor
+    /// is called. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -458,8 +471,13 @@ impl<'a> MutableIcmpv6Packet<'a> {
     }
 
     /// Returns the ICMPv6 type field.
-    pub fn get_type(&self) -> Icmpv6Type {
+    pub fn packet_type(&self) -> Icmpv6Type {
         Icmpv6Type::new(self.raw()[0])
+    }
+    /// Deprecated compatibility alias for packet_type.
+    #[deprecated(note = "use packet_type")]
+    pub fn get_type(&self) -> Icmpv6Type {
+        self.packet_type()
     }
 
     /// Sets the ICMPv6 type field and marks the checksum as dirty.
@@ -469,8 +487,13 @@ impl<'a> MutableIcmpv6Packet<'a> {
     }
 
     /// Returns the ICMPv6 code field.
-    pub fn get_code(&self) -> Icmpv6Code {
+    pub fn code(&self) -> Icmpv6Code {
         Icmpv6Code::new(self.raw()[1])
+    }
+    /// Deprecated compatibility alias for code.
+    #[deprecated(note = "use code")]
+    pub fn get_code(&self) -> Icmpv6Code {
+        self.code()
     }
 
     /// Sets the ICMPv6 code field and marks the checksum as dirty.
@@ -480,8 +503,13 @@ impl<'a> MutableIcmpv6Packet<'a> {
     }
 
     /// Returns the serialized checksum value.
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+    /// Deprecated compatibility alias for checksum.
+    #[deprecated(note = "use checksum")]
+    pub fn get_checksum(&self) -> u16 {
+        self.checksum()
     }
 
     /// Sets the serialized checksum value and clears the dirty flag.
@@ -753,30 +781,37 @@ pub mod ndp {
 
     impl Packet for NdpOptionPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 2 {
-                return None;
-            }
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 2 {
+                    return None;
+                }
 
-            let option_type = NdpOptionType::new(bytes[0]);
-            let length = bytes[1]; // unit: 8 bytes
+                let option_type = NdpOptionType::new(bytes[0]);
+                let length = bytes[1]; // unit: 8 bytes
 
-            let total_len = (length as usize) * 8;
-            if bytes.len() < total_len {
-                return None;
-            }
+                let total_len = (length as usize) * 8;
+                if bytes.len() < total_len {
+                    return None;
+                }
 
-            let data_len = total_len - 2;
-            let payload = Bytes::copy_from_slice(&bytes[2..2 + data_len]);
+                let data_len = total_len - 2;
+                let payload = Bytes::copy_from_slice(&bytes[2..2 + data_len]);
 
-            Some(Self {
-                option_type,
-                length,
-                payload,
+                Some(Self {
+                    option_type,
+                    length,
+                    payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -817,11 +852,9 @@ pub mod ndp {
         pub fn option_payload_length(&self) -> usize {
             //let len = option.get_length();
             let len = self.payload.len();
-            if len > 0 { ((len * 8) - 2) as usize } else { 0 }
+            if len > 0 { (len * 8) - 2 } else { 0 }
         }
     }
-
-    /// Calculate a length of a `NdpOption`'s payload.
 
     /// Router Solicitation Message [RFC 4861 Section 4.1]
     ///
@@ -885,52 +918,59 @@ pub mod ndp {
 
     impl Packet for RouterSolicitPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < NDP_SOL_PACKET_LEN {
-                return None;
-            }
-
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let header = Icmpv6Header {
-                icmpv6_type,
-                icmpv6_code,
-                checksum,
-            };
-            let reserved = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-
-            let mut options = Vec::new();
-            let mut i = 8;
-            while i + 2 <= bytes.len() {
-                let option_type = NdpOptionType::new(bytes[i]);
-                let length = bytes[i + 1];
-                let option_len = (length as usize) * 8;
-
-                if i + option_len > bytes.len() {
-                    break;
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < NDP_SOL_PACKET_LEN {
+                    return None;
                 }
 
-                let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
-                options.push(NdpOptionPacket {
-                    option_type,
-                    length,
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let header = Icmpv6Header {
+                    icmpv6_type,
+                    icmpv6_code,
+                    checksum,
+                };
+                let reserved = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+
+                let mut options = Vec::new();
+                let mut i = 8;
+                while i + 2 <= bytes.len() {
+                    let option_type = NdpOptionType::new(bytes[i]);
+                    let length = bytes[i + 1];
+                    let option_len = (length as usize) * 8;
+
+                    if i + option_len > bytes.len() {
+                        break;
+                    }
+
+                    let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
+                    options.push(NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    });
+                    i += option_len;
+                }
+
+                let payload = Bytes::copy_from_slice(&bytes[i..]);
+
+                Some(RouterSolicitPacket {
+                    header,
+                    reserved,
+                    options,
                     payload,
-                });
-                i += option_len;
-            }
-
-            let payload = Bytes::copy_from_slice(&bytes[i..]);
-
-            Some(RouterSolicitPacket {
-                header,
-                reserved,
-                options,
-                payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -1077,62 +1117,69 @@ pub mod ndp {
     }
     impl Packet for RouterAdvertPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < NDP_ADV_PACKET_LEN {
-                return None;
-            }
-
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let header = Icmpv6Header {
-                icmpv6_type,
-                icmpv6_code,
-                checksum,
-            };
-
-            let hop_limit = bytes[4];
-            let flags = bytes[5];
-            let lifetime = u16::from_be_bytes([bytes[6], bytes[7]]);
-            let reachable_time = u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-            let retrans_time = u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-
-            let mut options = Vec::new();
-            let mut i = 16;
-            while i + 2 <= bytes.len() {
-                let option_type = NdpOptionType::new(bytes[i]);
-                let length = bytes[i + 1];
-                let option_len = (length as usize) * 8;
-
-                if i + option_len > bytes.len() {
-                    break;
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < NDP_ADV_PACKET_LEN {
+                    return None;
                 }
 
-                let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
-                options.push(NdpOptionPacket {
-                    option_type,
-                    length,
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let header = Icmpv6Header {
+                    icmpv6_type,
+                    icmpv6_code,
+                    checksum,
+                };
+
+                let hop_limit = bytes[4];
+                let flags = bytes[5];
+                let lifetime = u16::from_be_bytes([bytes[6], bytes[7]]);
+                let reachable_time = u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+                let retrans_time = u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
+
+                let mut options = Vec::new();
+                let mut i = 16;
+                while i + 2 <= bytes.len() {
+                    let option_type = NdpOptionType::new(bytes[i]);
+                    let length = bytes[i + 1];
+                    let option_len = (length as usize) * 8;
+
+                    if i + option_len > bytes.len() {
+                        break;
+                    }
+
+                    let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
+                    options.push(NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    });
+                    i += option_len;
+                }
+
+                let payload = Bytes::copy_from_slice(&bytes[i..]);
+
+                Some(RouterAdvertPacket {
+                    header,
+                    hop_limit,
+                    flags,
+                    lifetime,
+                    reachable_time,
+                    retrans_time,
+                    options,
                     payload,
-                });
-                i += option_len;
-            }
-
-            let payload = Bytes::copy_from_slice(&bytes[i..]);
-
-            Some(RouterAdvertPacket {
-                header,
-                hop_limit,
-                flags,
-                lifetime,
-                reachable_time,
-                retrans_time,
-                options,
-                payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
 
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -1269,63 +1316,70 @@ pub mod ndp {
 
     impl Packet for NeighborSolicitPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 24 {
-                return None;
-            }
-
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let reserved = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-            let target_addr = Ipv6Addr::new(
-                u16::from_be_bytes([bytes[8], bytes[9]]),
-                u16::from_be_bytes([bytes[10], bytes[11]]),
-                u16::from_be_bytes([bytes[12], bytes[13]]),
-                u16::from_be_bytes([bytes[14], bytes[15]]),
-                u16::from_be_bytes([bytes[16], bytes[17]]),
-                u16::from_be_bytes([bytes[18], bytes[19]]),
-                u16::from_be_bytes([bytes[20], bytes[21]]),
-                u16::from_be_bytes([bytes[22], bytes[23]]),
-            );
-
-            let mut options = Vec::new();
-            let mut i = 24;
-            while i + 2 <= bytes.len() {
-                let option_type = NdpOptionType::new(bytes[i]);
-                let length = bytes[i + 1];
-                let option_len = (length as usize) * 8;
-
-                if option_len < 2 || i + option_len > bytes.len() {
-                    break;
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 24 {
+                    return None;
                 }
 
-                let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
-                options.push(NdpOptionPacket {
-                    option_type,
-                    length,
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let reserved = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+                let target_addr = Ipv6Addr::new(
+                    u16::from_be_bytes([bytes[8], bytes[9]]),
+                    u16::from_be_bytes([bytes[10], bytes[11]]),
+                    u16::from_be_bytes([bytes[12], bytes[13]]),
+                    u16::from_be_bytes([bytes[14], bytes[15]]),
+                    u16::from_be_bytes([bytes[16], bytes[17]]),
+                    u16::from_be_bytes([bytes[18], bytes[19]]),
+                    u16::from_be_bytes([bytes[20], bytes[21]]),
+                    u16::from_be_bytes([bytes[22], bytes[23]]),
+                );
+
+                let mut options = Vec::new();
+                let mut i = 24;
+                while i + 2 <= bytes.len() {
+                    let option_type = NdpOptionType::new(bytes[i]);
+                    let length = bytes[i + 1];
+                    let option_len = (length as usize) * 8;
+
+                    if option_len < 2 || i + option_len > bytes.len() {
+                        break;
+                    }
+
+                    let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
+                    options.push(NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    });
+
+                    i += option_len;
+                }
+
+                let payload = Bytes::copy_from_slice(&bytes[i..]);
+
+                Some(NeighborSolicitPacket {
+                    header: Icmpv6Header {
+                        icmpv6_type,
+                        icmpv6_code,
+                        checksum,
+                    },
+                    reserved,
+                    target_addr,
+                    options,
                     payload,
-                });
-
-                i += option_len;
-            }
-
-            let payload = Bytes::copy_from_slice(&bytes[i..]);
-
-            Some(NeighborSolicitPacket {
-                header: Icmpv6Header {
-                    icmpv6_type,
-                    icmpv6_code,
-                    checksum,
-                },
-                reserved,
-                target_addr,
-                options,
-                payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -1334,7 +1388,7 @@ pub mod ndp {
             bytes.push(self.header.icmpv6_code.value());
             bytes.extend_from_slice(&self.header.checksum.to_be_bytes());
             bytes.extend_from_slice(&self.reserved.to_be_bytes());
-            for (_, segment) in self.target_addr.segments().iter().enumerate() {
+            for segment in self.target_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
             for option in &self.options {
@@ -1482,68 +1536,75 @@ pub mod ndp {
 
     impl Packet for NeighborAdvertPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 24 {
-                return None;
-            }
-
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let header = Icmpv6Header {
-                icmpv6_type,
-                icmpv6_code,
-                checksum,
-            };
-
-            let flags = bytes[4];
-            let reserved = bitfield::utils::u24be_from_bytes([bytes[5], bytes[6], bytes[7]]);
-
-            let target_addr = Ipv6Addr::new(
-                u16::from_be_bytes([bytes[8], bytes[9]]),
-                u16::from_be_bytes([bytes[10], bytes[11]]),
-                u16::from_be_bytes([bytes[12], bytes[13]]),
-                u16::from_be_bytes([bytes[14], bytes[15]]),
-                u16::from_be_bytes([bytes[16], bytes[17]]),
-                u16::from_be_bytes([bytes[18], bytes[19]]),
-                u16::from_be_bytes([bytes[20], bytes[21]]),
-                u16::from_be_bytes([bytes[22], bytes[23]]),
-            );
-
-            let mut options = Vec::new();
-            let mut i = 24;
-            while i + 2 <= bytes.len() {
-                let option_type = NdpOptionType::new(bytes[i]);
-                let length = bytes[i + 1];
-                let option_len = (length as usize) * 8;
-
-                if option_len < 2 || i + option_len > bytes.len() {
-                    break;
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 24 {
+                    return None;
                 }
 
-                let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
-                options.push(NdpOptionPacket {
-                    option_type,
-                    length,
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let header = Icmpv6Header {
+                    icmpv6_type,
+                    icmpv6_code,
+                    checksum,
+                };
+
+                let flags = bytes[4];
+                let reserved = bitfield::utils::u24be_from_bytes([bytes[5], bytes[6], bytes[7]]);
+
+                let target_addr = Ipv6Addr::new(
+                    u16::from_be_bytes([bytes[8], bytes[9]]),
+                    u16::from_be_bytes([bytes[10], bytes[11]]),
+                    u16::from_be_bytes([bytes[12], bytes[13]]),
+                    u16::from_be_bytes([bytes[14], bytes[15]]),
+                    u16::from_be_bytes([bytes[16], bytes[17]]),
+                    u16::from_be_bytes([bytes[18], bytes[19]]),
+                    u16::from_be_bytes([bytes[20], bytes[21]]),
+                    u16::from_be_bytes([bytes[22], bytes[23]]),
+                );
+
+                let mut options = Vec::new();
+                let mut i = 24;
+                while i + 2 <= bytes.len() {
+                    let option_type = NdpOptionType::new(bytes[i]);
+                    let length = bytes[i + 1];
+                    let option_len = (length as usize) * 8;
+
+                    if option_len < 2 || i + option_len > bytes.len() {
+                        break;
+                    }
+
+                    let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
+                    options.push(NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    });
+
+                    i += option_len;
+                }
+
+                let payload = Bytes::copy_from_slice(&bytes[i..]);
+
+                Some(NeighborAdvertPacket {
+                    header,
+                    flags,
+                    reserved,
+                    target_addr,
+                    options,
                     payload,
-                });
-
-                i += option_len;
-            }
-
-            let payload = Bytes::copy_from_slice(&bytes[i..]);
-
-            Some(NeighborAdvertPacket {
-                header,
-                flags,
-                reserved,
-                target_addr,
-                options,
-                payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -1705,78 +1766,85 @@ pub mod ndp {
 
     impl Packet for RedirectPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 40 {
-                return None;
-            }
-
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let header = Icmpv6Header {
-                icmpv6_type,
-                icmpv6_code,
-                checksum,
-            };
-
-            let reserved = u32be::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-
-            let target_addr = Ipv6Addr::new(
-                u16::from_be_bytes([bytes[8], bytes[9]]),
-                u16::from_be_bytes([bytes[10], bytes[11]]),
-                u16::from_be_bytes([bytes[12], bytes[13]]),
-                u16::from_be_bytes([bytes[14], bytes[15]]),
-                u16::from_be_bytes([bytes[16], bytes[17]]),
-                u16::from_be_bytes([bytes[18], bytes[19]]),
-                u16::from_be_bytes([bytes[20], bytes[21]]),
-                u16::from_be_bytes([bytes[22], bytes[23]]),
-            );
-
-            let dest_addr = Ipv6Addr::new(
-                u16::from_be_bytes([bytes[24], bytes[25]]),
-                u16::from_be_bytes([bytes[26], bytes[27]]),
-                u16::from_be_bytes([bytes[28], bytes[29]]),
-                u16::from_be_bytes([bytes[30], bytes[31]]),
-                u16::from_be_bytes([bytes[32], bytes[33]]),
-                u16::from_be_bytes([bytes[34], bytes[35]]),
-                u16::from_be_bytes([bytes[36], bytes[37]]),
-                u16::from_be_bytes([bytes[38], bytes[39]]),
-            );
-
-            let mut options = Vec::new();
-            let mut i = 40;
-            while i + 2 <= bytes.len() {
-                let option_type = NdpOptionType::new(bytes[i]);
-                let length = bytes[i + 1];
-                let option_len = (length as usize) * 8;
-
-                if option_len < 2 || i + option_len > bytes.len() {
-                    break;
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 40 {
+                    return None;
                 }
 
-                let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
-                options.push(NdpOptionPacket {
-                    option_type,
-                    length,
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let header = Icmpv6Header {
+                    icmpv6_type,
+                    icmpv6_code,
+                    checksum,
+                };
+
+                let reserved = u32be::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+
+                let target_addr = Ipv6Addr::new(
+                    u16::from_be_bytes([bytes[8], bytes[9]]),
+                    u16::from_be_bytes([bytes[10], bytes[11]]),
+                    u16::from_be_bytes([bytes[12], bytes[13]]),
+                    u16::from_be_bytes([bytes[14], bytes[15]]),
+                    u16::from_be_bytes([bytes[16], bytes[17]]),
+                    u16::from_be_bytes([bytes[18], bytes[19]]),
+                    u16::from_be_bytes([bytes[20], bytes[21]]),
+                    u16::from_be_bytes([bytes[22], bytes[23]]),
+                );
+
+                let dest_addr = Ipv6Addr::new(
+                    u16::from_be_bytes([bytes[24], bytes[25]]),
+                    u16::from_be_bytes([bytes[26], bytes[27]]),
+                    u16::from_be_bytes([bytes[28], bytes[29]]),
+                    u16::from_be_bytes([bytes[30], bytes[31]]),
+                    u16::from_be_bytes([bytes[32], bytes[33]]),
+                    u16::from_be_bytes([bytes[34], bytes[35]]),
+                    u16::from_be_bytes([bytes[36], bytes[37]]),
+                    u16::from_be_bytes([bytes[38], bytes[39]]),
+                );
+
+                let mut options = Vec::new();
+                let mut i = 40;
+                while i + 2 <= bytes.len() {
+                    let option_type = NdpOptionType::new(bytes[i]);
+                    let length = bytes[i + 1];
+                    let option_len = (length as usize) * 8;
+
+                    if option_len < 2 || i + option_len > bytes.len() {
+                        break;
+                    }
+
+                    let payload = Bytes::copy_from_slice(&bytes[i + 2..i + option_len]);
+                    options.push(NdpOptionPacket {
+                        option_type,
+                        length,
+                        payload,
+                    });
+
+                    i += option_len;
+                }
+
+                let payload = Bytes::copy_from_slice(&bytes[i..]);
+
+                Some(RedirectPacket {
+                    header,
+                    reserved,
+                    target_addr,
+                    dest_addr,
+                    options,
                     payload,
-                });
-
-                i += option_len;
-            }
-
-            let payload = Bytes::copy_from_slice(&bytes[i..]);
-
-            Some(RedirectPacket {
-                header,
-                reserved,
-                target_addr,
-                dest_addr,
-                options,
-                payload,
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
         fn to_bytes(&self) -> Bytes {
             let mut bytes = Vec::with_capacity(NDP_REDIRECT_PACKET_LEN);
@@ -1784,10 +1852,10 @@ pub mod ndp {
             bytes.push(self.header.icmpv6_code.value());
             bytes.extend_from_slice(&self.header.checksum.to_be_bytes());
             bytes.extend_from_slice(&self.reserved.to_be_bytes());
-            for (_, segment) in self.target_addr.segments().iter().enumerate() {
+            for segment in self.target_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
-            for (_, segment) in self.dest_addr.segments().iter().enumerate() {
+            for segment in self.dest_addr.segments().iter() {
                 bytes.extend_from_slice(&segment.to_be_bytes());
             }
             for option in &self.options {
@@ -2227,28 +2295,35 @@ pub mod echo_request {
 
     impl Packet for EchoRequestPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 8 {
-                return None;
-            }
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let identifier = u16::from_be_bytes([bytes[4], bytes[5]]);
-            let sequence_number = u16::from_be_bytes([bytes[6], bytes[7]]);
-            Some(EchoRequestPacket {
-                header: Icmpv6Header {
-                    icmpv6_type,
-                    icmpv6_code,
-                    checksum,
-                },
-                identifier,
-                sequence_number,
-                payload: Bytes::copy_from_slice(&bytes[8..]),
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 8 {
+                    return None;
+                }
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let identifier = u16::from_be_bytes([bytes[4], bytes[5]]);
+                let sequence_number = u16::from_be_bytes([bytes[6], bytes[7]]);
+                Some(EchoRequestPacket {
+                    header: Icmpv6Header {
+                        icmpv6_type,
+                        icmpv6_code,
+                        checksum,
+                    },
+                    identifier,
+                    sequence_number,
+                    payload: Bytes::copy_from_slice(&bytes[8..]),
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {
@@ -2377,28 +2452,35 @@ pub mod echo_reply {
     }
     impl Packet for EchoReplyPacket {
         type Header = ();
-        fn from_buf(bytes: &[u8]) -> Option<Self> {
-            if bytes.len() < 8 {
-                return None;
-            }
-            let icmpv6_type = Icmpv6Type::new(bytes[0]);
-            let icmpv6_code = Icmpv6Code::new(bytes[1]);
-            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-            let identifier = u16::from_be_bytes([bytes[4], bytes[5]]);
-            let sequence_number = u16::from_be_bytes([bytes[6], bytes[7]]);
-            Some(EchoReplyPacket {
-                header: Icmpv6Header {
-                    icmpv6_type,
-                    icmpv6_code,
-                    checksum,
-                },
-                identifier,
-                sequence_number,
-                payload: Bytes::copy_from_slice(&bytes[8..]),
+        fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+            (|| -> Option<Self> {
+                if bytes.len() < 8 {
+                    return None;
+                }
+                let icmpv6_type = Icmpv6Type::new(bytes[0]);
+                let icmpv6_code = Icmpv6Code::new(bytes[1]);
+                let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+                let identifier = u16::from_be_bytes([bytes[4], bytes[5]]);
+                let sequence_number = u16::from_be_bytes([bytes[6], bytes[7]]);
+                Some(EchoReplyPacket {
+                    header: Icmpv6Header {
+                        icmpv6_type,
+                        icmpv6_code,
+                        checksum,
+                    },
+                    identifier,
+                    sequence_number,
+                    payload: Bytes::copy_from_slice(&bytes[8..]),
+                })
+            })()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
             })
         }
-        fn from_bytes(bytes: Bytes) -> Option<Self> {
-            Self::from_buf(&bytes)
+        fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+            Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
         }
 
         fn to_bytes(&self) -> Bytes {

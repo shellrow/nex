@@ -1,30 +1,28 @@
 //! Cross-platform datalink I/O primitives for sending and receiving raw packets.
 
-#![deny(warnings)]
-
+use std::fmt;
 use std::io;
 use std::option::Option;
 use std::time::Duration;
 
 mod bindings;
 
+#[cfg(feature = "async")]
 pub mod async_io;
 
 #[cfg(windows)]
-#[path = "wpcap.rs"]
-mod backend;
+mod wpcap;
 
 #[cfg(windows)]
-pub mod wpcap;
-
-#[cfg(all(any(target_os = "linux", target_os = "android")))]
-#[path = "linux.rs"]
-mod backend;
+use wpcap as backend;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod linux;
+mod linux;
 
-#[cfg(all(any(
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use linux as backend;
+
+#[cfg(any(
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "netbsd",
@@ -32,19 +30,19 @@ pub mod linux;
     target_os = "solaris",
     target_os = "macos",
     target_os = "ios"
-)))]
-#[path = "bpf.rs"]
-mod backend;
+))]
+mod bpf;
 
 #[cfg(any(
     target_os = "freebsd",
+    target_os = "openbsd",
     target_os = "netbsd",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "macos",
     target_os = "ios"
 ))]
-pub mod bpf;
+use bpf as backend;
 
 #[cfg(feature = "pcap")]
 pub mod pcap;
@@ -54,6 +52,7 @@ pub type EtherType = u16;
 
 /// Type of data link channel to present (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub enum ChannelType {
     /// Send and receive layer 2 packets directly, including headers.
     Layer2,
@@ -70,23 +69,64 @@ pub enum Channel {
 
 /// Socket fanout type (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub enum FanoutType {
-    HASH,
-    LB,
-    CPU,
-    ROLLOVER,
-    RND,
-    QM,
-    CBPF,
-    EBPF,
+    /// Fan out packets by hashing packet fields.
+    Hash,
+    /// Round-robin load balancing.
+    LoadBalance,
+    /// Fan out packets to the CPU that received them.
+    Cpu,
+    /// Roll over to the next socket when one socket's queue is full.
+    Rollover,
+    /// Random fanout.
+    Random,
+    /// Queue-mapping fanout.
+    QueueMapping,
+    /// Classic BPF fanout.
+    ClassicBpf,
+    /// Extended BPF fanout.
+    ExtendedBpf,
+}
+
+impl FanoutType {
+    /// Compatibility alias for [`FanoutType::Hash`].
+    #[deprecated(note = "use FanoutType::Hash")]
+    pub const HASH: Self = Self::Hash;
+    /// Compatibility alias for [`FanoutType::LoadBalance`].
+    #[deprecated(note = "use FanoutType::LoadBalance")]
+    pub const LB: Self = Self::LoadBalance;
+    /// Compatibility alias for [`FanoutType::Cpu`].
+    #[deprecated(note = "use FanoutType::Cpu")]
+    pub const CPU: Self = Self::Cpu;
+    /// Compatibility alias for [`FanoutType::Rollover`].
+    #[deprecated(note = "use FanoutType::Rollover")]
+    pub const ROLLOVER: Self = Self::Rollover;
+    /// Compatibility alias for [`FanoutType::Random`].
+    #[deprecated(note = "use FanoutType::Random")]
+    pub const RND: Self = Self::Random;
+    /// Compatibility alias for [`FanoutType::QueueMapping`].
+    #[deprecated(note = "use FanoutType::QueueMapping")]
+    pub const QM: Self = Self::QueueMapping;
+    /// Compatibility alias for [`FanoutType::ClassicBpf`].
+    #[deprecated(note = "use FanoutType::ClassicBpf")]
+    pub const CBPF: Self = Self::ClassicBpf;
+    /// Compatibility alias for [`FanoutType::ExtendedBpf`].
+    #[deprecated(note = "use FanoutType::ExtendedBpf")]
+    pub const EBPF: Self = Self::ExtendedBpf;
 }
 
 /// Fanout settings (Linux only).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub struct FanoutOption {
+    /// Fanout group identifier.
     pub group_id: u16,
+    /// Fanout distribution strategy.
     pub fanout_type: FanoutType,
+    /// Whether fragmented packets should be defragmented before fanout.
     pub defrag: bool,
+    /// Whether queue rollover should be enabled.
     pub rollover: bool,
 }
 
@@ -94,7 +134,28 @@ pub struct FanoutOption {
 ///
 /// Each option should be treated as a hint - each backend is free to ignore any and all
 /// options which don't apply to it.
+///
+/// # Platform behavior
+///
+/// - Linux uses `AF_PACKET`. [`ChannelType::Layer2`] includes link-layer
+///   headers; [`ChannelType::Layer3`] uses datagram packet sockets for the
+///   selected EtherType. Buffer sizes configure the reusable userspace buffers,
+///   timeouts bound `poll`, and promiscuous/fanout settings are applied by the
+///   kernel.
+/// - macOS and BSD use BPF devices. `bpf_fd_attempts` bounds `/dev/bpf*`
+///   discovery, read buffering follows the BPF buffer size, and timeouts bound
+///   readiness waits.
+/// - Windows uses Npcap. Buffer sizes configure Npcap packet buffers,
+///   `read_timeout` bounds each receive via `PacketSetReadTimeout` (an elapsed
+///   timeout surfaces as [`io::ErrorKind::TimedOut`]), and `promiscuous`
+///   selects the adapter hardware filter. `write_timeout` and Linux/BPF-only
+///   options are not applied.
+///
+///   Packet.dll is loaded lazily on the first channel open, so a missing Npcap
+///   install surfaces as [`io::ErrorKind::NotFound`] from `channel()` rather
+///   than preventing the process from starting. Building requires no Npcap SDK.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
 pub struct Config {
     /// The size of buffer to use when writing packets. Defaults to 4096.
     pub write_buffer_size: usize,
@@ -102,7 +163,8 @@ pub struct Config {
     /// The size of buffer to use when reading packets. Defaults to 4096.
     pub read_buffer_size: usize,
 
-    /// Linux/BPF/Netmap only: The read timeout. Defaults to None.
+    /// Linux/BPF/Netmap/Windows only: The read timeout. Defaults to None,
+    /// meaning receives block until a packet arrives.
     pub read_timeout: Option<Duration>,
 
     /// Linux/BPF/Netmap only: The write timeout. Defaults to None.
@@ -116,9 +178,52 @@ pub struct Config {
     /// to: 1000.
     pub bpf_fd_attempts: usize,
 
+    /// Linux only: optional packet fanout group and distribution settings.
     pub linux_fanout: Option<FanoutOption>,
 
+    /// Whether the backend should request promiscuous packet capture.
     pub promiscuous: bool,
+}
+
+/// Semantic failures while validating or opening a datalink channel.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum DatalinkError {
+    /// A configuration value cannot be used by any backend.
+    InvalidConfig {
+        /// Configuration field that failed validation.
+        field: &'static str,
+        /// Required constraint.
+        requirement: &'static str,
+    },
+    /// The operating-system backend failed while creating the channel.
+    Io(io::Error),
+}
+
+impl fmt::Display for DatalinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidConfig { field, requirement } => {
+                write!(f, "invalid datalink configuration: {field} {requirement}")
+            }
+            Self::Io(error) => write!(f, "failed to open datalink channel: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for DatalinkError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::InvalidConfig { .. } => None,
+        }
+    }
+}
+
+impl From<io::Error> for DatalinkError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
 }
 
 impl Default for Config {
@@ -138,24 +243,24 @@ impl Default for Config {
 
 impl Config {
     /// Validates whether this configuration can be used safely.
-    pub fn validate(&self) -> io::Result<()> {
+    pub fn validate(&self) -> Result<(), DatalinkError> {
         if self.write_buffer_size == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "write_buffer_size must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "write_buffer_size",
+                requirement: "must be greater than zero",
+            });
         }
         if self.read_buffer_size == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "read_buffer_size must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "read_buffer_size",
+                requirement: "must be greater than zero",
+            });
         }
         if self.bpf_fd_attempts == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "bpf_fd_attempts must be greater than 0",
-            ));
+            return Err(DatalinkError::InvalidConfig {
+                field: "bpf_fd_attempts",
+                requirement: "must be greater than zero",
+            });
         }
         Ok(())
     }
@@ -209,14 +314,19 @@ impl Config {
 /// underlying backend; some settings may be ignored or treated differently depending on the system
 /// and library capabilities.
 ///
+/// The synchronous receiver blocks until data, an error, or a configured
+/// platform-supported timeout occurs. A timeout is reported as an
+/// [`io::ErrorKind::TimedOut`] or [`io::ErrorKind::WouldBlock`] according to
+/// the operating-system backend.
+///
 /// The function returns a `Channel` object encapsulating the transmission and reception capabilities.
 #[inline]
 pub fn channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
-) -> io::Result<Channel> {
+) -> Result<Channel, DatalinkError> {
     configuration.validate()?;
-    backend::channel(network_interface, (&configuration).into())
+    backend::channel(network_interface, (&configuration).into()).map_err(DatalinkError::Io)
 }
 
 /// Trait to enable sending `$packet` packets.
@@ -225,8 +335,13 @@ pub trait RawSender: Send {
     ///
     /// This will call `func` `num_packets` times. The function will be provided with a
     /// mutable packet to manipulate, which will then be sent. This allows packets to be
-    /// built in-place, avoiding the copy required for `send`. If there is not sufficient
-    /// capacity in the buffer, None will be returned.
+    /// built in-place, avoiding the copy required for `send`.
+    ///
+    /// `None` means the requested packet count or size does not fit the
+    /// sender's reusable userspace buffer and no send was attempted.
+    /// `Some(Err(_))` means capacity was available but an operating-system I/O
+    /// operation failed. `Some(Ok(()))` means every requested packet was
+    /// accepted by the backend.
     fn build_and_send(
         &mut self,
         num_packets: usize,
@@ -236,8 +351,10 @@ pub trait RawSender: Send {
 
     /// Send a packet.
     ///
-    /// This may require an additional copy compared to `build_and_send`, depending on the
-    /// operating system being used.
+    /// This may require an additional copy compared to `build_and_send`,
+    /// depending on the operating system being used. `None` means the packet
+    /// exceeds the sender's reusable capacity; `Some` contains the I/O result
+    /// when a send was attempted.
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>>;
 }
 
@@ -284,5 +401,12 @@ mod tests {
         assert_eq!(cfg.channel_type, ChannelType::Layer3(0x0800));
         assert!(!cfg.promiscuous);
         assert_eq!(cfg.bpf_fd_attempts, 42);
+    }
+
+    fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
+
+    #[test]
+    fn datalink_error_implements_public_error_contract() {
+        assert_error_contract::<DatalinkError>();
     }
 }

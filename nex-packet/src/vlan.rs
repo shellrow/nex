@@ -16,6 +16,7 @@ pub const VLAN_HEADER_LEN: usize = 4;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum ClassOfService {
     // Background
     BK = 1,
@@ -87,33 +88,40 @@ pub struct VlanPacket {
 impl Packet for VlanPacket {
     type Header = VlanHeader;
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < VLAN_HEADER_LEN {
-            return None;
-        }
+    fn try_from_buf(mut bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < VLAN_HEADER_LEN {
+                return None;
+            }
 
-        // VLAN TCI
-        let tci = bytes.get_u16();
-        let pcp = ClassOfService::new(((tci >> 13) & 0b111) as u8);
-        let drop_eligible_id = ((tci >> 12) & 0b1) as u1;
-        let vlan_id = (tci & 0x0FFF) as u12be;
+            // VLAN TCI
+            let tci = bytes.get_u16();
+            let pcp = ClassOfService::new(((tci >> 13) & 0b111) as u8);
+            let drop_eligible_id = ((tci >> 12) & 0b1) as u1;
+            let vlan_id = (tci & 0x0FFF) as u12be;
 
-        // EtherType
-        let ethertype = EtherType::new(bytes.get_u16());
+            // EtherType
+            let ethertype = EtherType::new(bytes.get_u16());
 
-        // Payload
-        Some(VlanPacket {
-            header: VlanHeader {
-                priority_code_point: pcp,
-                drop_eligible_id,
-                vlan_id,
-                ethertype,
-            },
-            payload: Bytes::copy_from_slice(bytes),
+            // Payload
+            Some(VlanPacket {
+                header: VlanHeader {
+                    priority_code_point: pcp,
+                    drop_eligible_id,
+                    vlan_id,
+                    ethertype,
+                },
+                payload: Bytes::copy_from_slice(bytes),
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&mut bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -121,7 +129,7 @@ impl Packet for VlanPacket {
 
         let pcp_bits = (self.header.priority_code_point.value() as u16 & 0b111) << 13;
         let dei_bits = (self.header.drop_eligible_id as u16 & 0b1) << 12;
-        let vlan_bits = self.header.vlan_id as u16 & 0x0FFF;
+        let vlan_bits = self.header.vlan_id & 0x0FFF;
 
         let tci = pcp_bits | dei_bits | vlan_bits;
 
@@ -198,7 +206,7 @@ impl<'a> MutablePacket<'a> for MutableVlanPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(VLAN_HEADER_LEN);
         header
     }
 
@@ -207,12 +215,18 @@ impl<'a> MutablePacket<'a> for MutableVlanPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(VLAN_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(VLAN_HEADER_LEN);
         payload
     }
 }
 
 impl<'a> MutableVlanPacket<'a> {
+    /// Create a mutable VLAN packet without validating its minimum length.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete VLAN header before any field accessor
+    /// is called. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self { buffer }
     }
@@ -225,9 +239,14 @@ impl<'a> MutableVlanPacket<'a> {
         &mut *self.buffer
     }
 
-    pub fn get_priority_code_point(&self) -> ClassOfService {
+    pub fn priority_code_point(&self) -> ClassOfService {
         let first = self.raw()[0];
         ClassOfService::new(first >> 5)
+    }
+    /// Deprecated compatibility alias for priority_code_point.
+    #[deprecated(note = "use priority_code_point")]
+    pub fn get_priority_code_point(&self) -> ClassOfService {
+        self.priority_code_point()
     }
 
     pub fn set_priority_code_point(&mut self, class: ClassOfService) {
@@ -235,19 +254,29 @@ impl<'a> MutableVlanPacket<'a> {
         buf[0] = (buf[0] & 0x1F) | ((class.value() & 0x07) << 5);
     }
 
-    pub fn get_drop_eligible_id(&self) -> u1 {
+    pub fn drop_eligible_id(&self) -> u1 {
         ((self.raw()[0] >> 4) & 0x01) as u1
+    }
+    /// Deprecated compatibility alias for drop_eligible_id.
+    #[deprecated(note = "use drop_eligible_id")]
+    pub fn get_drop_eligible_id(&self) -> u1 {
+        self.drop_eligible_id()
     }
 
     pub fn set_drop_eligible_id(&mut self, dei: u1) {
         let buf = self.raw_mut();
-        buf[0] = (buf[0] & !(1 << 4)) | (((dei & 0x1) as u8) << 4);
+        buf[0] = (buf[0] & !(1 << 4)) | ((dei & 0x1) << 4);
     }
 
-    pub fn get_vlan_id(&self) -> u16 {
+    pub fn vlan_id(&self) -> u16 {
         let first = self.raw()[0] as u16 & 0x0F;
         let second = self.raw()[1] as u16;
         (first << 8) | second
+    }
+    /// Deprecated compatibility alias for vlan_id.
+    #[deprecated(note = "use vlan_id")]
+    pub fn get_vlan_id(&self) -> u16 {
+        self.vlan_id()
     }
 
     pub fn set_vlan_id(&mut self, id: u16) {
@@ -256,8 +285,13 @@ impl<'a> MutableVlanPacket<'a> {
         buf[1] = id as u8;
     }
 
-    pub fn get_ethertype(&self) -> EtherType {
+    pub fn ethertype(&self) -> EtherType {
         EtherType::new(u16::from_be_bytes([self.raw()[2], self.raw()[3]]))
+    }
+    /// Deprecated compatibility alias for ethertype.
+    #[deprecated(note = "use ethertype")]
+    pub fn get_ethertype(&self) -> EtherType {
+        self.ethertype()
     }
 
     pub fn set_ethertype(&mut self, ty: EtherType) {

@@ -11,6 +11,7 @@ use crate::packet::{GenericMutablePacket, Packet};
 /// Flow control opcodes are defined in IEEE 802.3x
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum FlowControlOpcode {
     Pause = 0x0001,
     Unknown(u16),
@@ -56,33 +57,40 @@ pub struct FlowControlPacket {
 
 impl Packet for FlowControlPacket {
     type Header = ();
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 4 {
-            return None;
-        }
+    fn try_from_buf(mut bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < 4 {
+                return None;
+            }
 
-        let command = FlowControlOpcode::new(bytes.get_u16());
-        let quanta = bytes.get_u16();
+            let command = FlowControlOpcode::new(bytes.get_u16());
+            let quanta = bytes.get_u16();
 
-        // Payload including padding; its contents are not specified by the standard
-        let payload = Bytes::copy_from_slice(bytes);
+            // Payload including padding; its contents are not specified by the standard
+            let payload = Bytes::copy_from_slice(bytes);
 
-        Some(Self {
-            command,
-            quanta: quanta.into(),
-            payload,
+            Some(Self {
+                command,
+                quanta,
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
         let mut buf = bytes::BytesMut::with_capacity(4 + self.payload.len());
 
         buf.put_u16(self.command.value());
-        buf.put_u16(self.quanta.into());
+        buf.put_u16(self.quanta);
         buf.put_slice(&self.payload);
 
         buf.freeze()
@@ -91,7 +99,7 @@ impl Packet for FlowControlPacket {
         let mut buf = bytes::BytesMut::with_capacity(4);
 
         buf.put_u16(self.command.value());
-        buf.put_u16(self.quanta.into());
+        buf.put_u16(self.quanta);
 
         buf.freeze()
     }

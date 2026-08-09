@@ -29,80 +29,87 @@ pub struct GrePacket {
 impl Packet for GrePacket {
     type Header = ();
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.remaining() < 4 {
-            return None;
-        }
-
-        let flags = bytes.get_u16();
-        let protocol_type = bytes.get_u16();
-
-        let checksum_present = ((flags >> 15) & 0x1) as u1;
-        let routing_present = ((flags >> 14) & 0x1) as u1;
-        let key_present = ((flags >> 13) & 0x1) as u1;
-        let sequence_present = ((flags >> 12) & 0x1) as u1;
-        let strict_source_route = ((flags >> 11) & 0x1) as u1;
-        let recursion_control = ((flags >> 8) & 0x7) as u3;
-        let zero_flags = ((flags >> 3) & 0x1f) as u5;
-        let version = (flags & 0x7) as u3;
-
-        // Retrieve optional fields in order
-        let mut checksum = Vec::new();
-        let mut offset = Vec::new();
-        let mut key = Vec::new();
-        let mut sequence = Vec::new();
-        let routing = Vec::new();
-
-        if checksum_present != 0 || routing_present != 0 {
+    fn try_from_buf(mut bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
             if bytes.remaining() < 4 {
                 return None;
             }
-            checksum.push(bytes.get_u16());
-            offset.push(bytes.get_u16());
-        }
 
-        if key_present != 0 {
-            if bytes.remaining() < 4 {
+            let flags = bytes.get_u16();
+            let protocol_type = bytes.get_u16();
+
+            let checksum_present = ((flags >> 15) & 0x1) as u1;
+            let routing_present = ((flags >> 14) & 0x1) as u1;
+            let key_present = ((flags >> 13) & 0x1) as u1;
+            let sequence_present = ((flags >> 12) & 0x1) as u1;
+            let strict_source_route = ((flags >> 11) & 0x1) as u1;
+            let recursion_control = ((flags >> 8) & 0x7) as u3;
+            let zero_flags = ((flags >> 3) & 0x1f) as u5;
+            let version = (flags & 0x7) as u3;
+
+            // Retrieve optional fields in order
+            let mut checksum = Vec::new();
+            let mut offset = Vec::new();
+            let mut key = Vec::new();
+            let mut sequence = Vec::new();
+            let routing = Vec::new();
+
+            if checksum_present != 0 || routing_present != 0 {
+                if bytes.remaining() < 4 {
+                    return None;
+                }
+                checksum.push(bytes.get_u16());
+                offset.push(bytes.get_u16());
+            }
+
+            if key_present != 0 {
+                if bytes.remaining() < 4 {
+                    return None;
+                }
+                key.push(bytes.get_u32());
+            }
+
+            if sequence_present != 0 {
+                if bytes.remaining() < 4 {
+                    return None;
+                }
+                sequence.push(bytes.get_u32());
+            }
+
+            if routing_present != 0 {
+                // Source-routed GRE parsing is not yet supported.
                 return None;
             }
-            key.push(bytes.get_u32());
-        }
 
-        if sequence_present != 0 {
-            if bytes.remaining() < 4 {
-                return None;
-            }
-            sequence.push(bytes.get_u32());
-        }
+            let payload = Bytes::copy_from_slice(bytes);
 
-        if routing_present != 0 {
-            // Source-routed GRE parsing is not yet supported.
-            return None;
-        }
-
-        let payload = Bytes::copy_from_slice(bytes);
-
-        Some(Self {
-            checksum_present,
-            routing_present,
-            key_present,
-            sequence_present,
-            strict_source_route,
-            recursion_control,
-            zero_flags,
-            version,
-            protocol_type: protocol_type.into(),
-            checksum,
-            offset,
-            key,
-            sequence,
-            routing,
-            payload,
+            Some(Self {
+                checksum_present,
+                routing_present,
+                key_present,
+                sequence_present,
+                strict_source_route,
+                recursion_control,
+                zero_flags,
+                version,
+                protocol_type,
+                checksum,
+                offset,
+                key,
+                sequence,
+                routing,
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -122,7 +129,7 @@ impl Packet for GrePacket {
         flags |= self.version as u16;
 
         buf.put_u16(flags);
-        buf.put_u16(self.protocol_type.into());
+        buf.put_u16(self.protocol_type);
 
         if self.checksum_present != 0 || self.routing_present != 0 {
             for c in &self.checksum {
@@ -170,7 +177,7 @@ impl Packet for GrePacket {
         flags |= self.version as u16;
 
         buf.put_u16(flags);
-        buf.put_u16(self.protocol_type.into());
+        buf.put_u16(self.protocol_type);
 
         if self.checksum_present != 0 || self.routing_present != 0 {
             for c in &self.checksum {
@@ -269,7 +276,7 @@ mod tests {
             0x00,
         ]);
 
-        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+        let gre_packet = GrePacket::from_buf(&packet.clone()).unwrap();
 
         assert_eq!(&gre_packet.to_bytes(), &packet);
     }
@@ -285,7 +292,7 @@ mod tests {
             0x00,
         ]);
 
-        let gre_packet = GrePacket::from_buf(&mut packet.clone()).unwrap();
+        let gre_packet = GrePacket::from_buf(&packet.clone()).unwrap();
 
         assert_eq!(&gre_packet.to_bytes(), &packet);
     }

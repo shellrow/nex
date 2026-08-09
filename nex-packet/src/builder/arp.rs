@@ -1,5 +1,6 @@
 use crate::{
     arp::{ArpHardwareType, ArpHeader, ArpOperation, ArpPacket},
+    builder::BuildError,
     ethernet::EtherType,
     packet::Packet,
 };
@@ -93,18 +94,54 @@ impl ArpPacketBuilder {
         self
     }
 
-    /// Return the finished `ArpPacket`
-    pub fn build(self) -> ArpPacket {
-        self.packet
+    /// Validate the fixed address sizes and return the finished packet.
+    pub fn build(self) -> Result<ArpPacket, BuildError> {
+        if self.packet.header.hw_addr_len != 6 {
+            return Err(BuildError::InvalidFieldLength {
+                context: "ARP hardware address",
+                expected: 6,
+                actual: self.packet.header.hw_addr_len as usize,
+            });
+        }
+        if self.packet.header.proto_addr_len != 4 {
+            return Err(BuildError::InvalidFieldLength {
+                context: "ARP protocol address",
+                expected: 4,
+                actual: self.packet.header.proto_addr_len as usize,
+            });
+        }
+        Ok(self.packet)
     }
 
     /// Return the serialized bytes
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Return a reference to the internal `ArpPacket`
     pub fn packet(&self) -> &ArpPacket {
         &self.packet
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arp_builder_rejects_non_ethernet_address_length() {
+        let error =
+            ArpPacketBuilder::new(MacAddr::zero(), Ipv4Addr::LOCALHOST, Ipv4Addr::LOCALHOST)
+                .sender_hw_addr_len(5)
+                .build()
+                .expect_err("invalid ARP address length");
+
+        assert!(matches!(
+            error,
+            BuildError::InvalidFieldLength {
+                context: "ARP hardware address",
+                ..
+            }
+        ));
     }
 }

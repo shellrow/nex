@@ -120,6 +120,15 @@ pub struct bpf_hdr {
     pub bh_hdrlen: libc::c_ushort,
 }
 
+/// Number of bytes required to contain every defined field in `bpf_hdr`.
+///
+/// This can be smaller than `size_of::<bpf_hdr>()` because the C ABI may add
+/// trailing padding to the Rust representation. In particular, macOS reports
+/// an 18-byte BPF header on 64-bit targets even though the structure occupies
+/// 20 bytes when stored as a standalone value.
+pub const BPF_HDR_FIELD_LEN: usize =
+    std::mem::offset_of!(bpf_hdr, bh_hdrlen) + std::mem::size_of::<libc::c_ushort>();
+
 #[repr(C)]
 pub struct timeval32 {
     pub tv_sec: i32,

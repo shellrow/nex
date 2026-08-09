@@ -1,6 +1,7 @@
 use std::net::Ipv4Addr;
 
 use crate::{
+    builder::BuildError,
     icmp::{self, IcmpCode, IcmpHeader, IcmpPacket, IcmpType},
     packet::Packet,
 };
@@ -9,24 +10,18 @@ use bytes::{BufMut, Bytes, BytesMut};
 /// Builder for constructing ICMP packets
 #[derive(Debug, Clone)]
 pub struct IcmpPacketBuilder {
-    #[allow(unused)]
-    source: Ipv4Addr,
-    #[allow(unused)]
-    destination: Ipv4Addr,
     packet: IcmpPacket,
 }
 
 impl IcmpPacketBuilder {
     /// Create a new builder with an initial ICMP Type and Code
-    pub fn new(source: Ipv4Addr, destination: Ipv4Addr) -> Self {
+    pub fn new(_source: Ipv4Addr, _destination: Ipv4Addr) -> Self {
         let header = IcmpHeader {
             icmp_type: IcmpType::EchoRequest,
             icmp_code: icmp::echo_request::IcmpCodes::NoCode,
             checksum: 0,
         };
         Self {
-            source,
-            destination,
             packet: IcmpPacket {
                 header,
                 payload: Bytes::new(),
@@ -69,18 +64,55 @@ impl IcmpPacketBuilder {
     }
 
     /// Return an `IcmpPacket` with checksum computed
-    pub fn build(mut self) -> IcmpPacket {
+    pub fn build(mut self) -> Result<IcmpPacket, BuildError> {
+        let packet_length =
+            4usize
+                .checked_add(self.packet.payload.len())
+                .ok_or(BuildError::LengthOverflow {
+                    context: "ICMP packet",
+                    maximum: u16::MAX as usize - 20,
+                    actual: usize::MAX,
+                })?;
+        let maximum = u16::MAX as usize - 20;
+        if packet_length > maximum {
+            return Err(BuildError::LengthOverflow {
+                context: "ICMP packet",
+                maximum,
+                actual: packet_length,
+            });
+        }
         self.packet.header.checksum = icmp::checksum(&self.packet);
-        self.packet
+        Ok(self.packet)
     }
 
     /// Return the packet bytes with checksum computed
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Access the intermediate `IcmpPacket` if needed
     pub fn packet(&self) -> &IcmpPacket {
         &self.packet
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icmp_builder_rejects_packet_too_large_for_ipv4() {
+        let error = IcmpPacketBuilder::new(Ipv4Addr::LOCALHOST, Ipv4Addr::LOCALHOST)
+            .payload(Bytes::from(vec![0; u16::MAX as usize]))
+            .build()
+            .expect_err("oversized ICMP packet");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "ICMP packet",
+                ..
+            }
+        ));
     }
 }

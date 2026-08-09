@@ -38,7 +38,7 @@ impl IcmpSocket {
 
         // Set socket options based on configuration
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;

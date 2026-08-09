@@ -1,5 +1,6 @@
 use std::net::IpAddr;
 
+use crate::builder::BuildError;
 use crate::packet::Packet;
 use crate::udp::{UDP_HEADER_LEN, UdpHeader, UdpPacket};
 use bytes::Bytes;
@@ -32,19 +33,19 @@ impl UdpPacketBuilder {
 
     /// Set the source port
     pub fn source(mut self, port: u16) -> Self {
-        self.packet.header.source = port.into();
+        self.packet.header.source = port;
         self
     }
 
     /// Set the destination port
     pub fn destination(mut self, port: u16) -> Self {
-        self.packet.header.destination = port.into();
+        self.packet.header.destination = port;
         self
     }
 
     /// Set the checksum (optional)
     pub fn checksum(mut self, checksum: u16) -> Self {
-        self.packet.header.checksum = checksum.into();
+        self.packet.header.checksum = checksum;
         self
     }
 
@@ -63,26 +64,44 @@ impl UdpPacketBuilder {
     }
 
     /// Build the packet with checksum computed
-    pub fn build(mut self) -> UdpPacket {
+    pub fn build(mut self) -> Result<UdpPacket, BuildError> {
+        if !matches!(
+            (self.src_ip, self.dst_ip),
+            (IpAddr::V4(_), IpAddr::V4(_)) | (IpAddr::V6(_), IpAddr::V6(_))
+        ) {
+            return Err(BuildError::AddressFamilyMismatch { context: "UDP" });
+        }
+
         // Automatically compute the length
-        let total_len = UDP_HEADER_LEN + self.packet.payload.len();
-        self.packet.header.length = (total_len as u16).into();
+        let total_len = UDP_HEADER_LEN
+            .checked_add(self.packet.payload.len())
+            .ok_or(BuildError::LengthOverflow {
+                context: "UDP length",
+                maximum: u16::MAX as usize,
+                actual: usize::MAX,
+            })?;
+        if total_len > u16::MAX as usize {
+            return Err(BuildError::LengthOverflow {
+                context: "UDP length",
+                maximum: u16::MAX as usize,
+                actual: total_len,
+            });
+        }
+        self.packet.header.length = total_len as u16;
         // Calculate the checksum
         self.packet.header.checksum =
             crate::udp::checksum(&self.packet, &self.src_ip, &self.dst_ip);
-        self.packet
+        Ok(self.packet)
     }
 
     /// Serialize the packet into bytes with checksum computed
-    pub fn to_bytes(self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
     }
 
     /// Retrieve only the header bytes
-    pub fn header_bytes(&self) -> Bytes {
-        let mut pkt = self.clone().packet;
-        pkt.header.length = (UDP_HEADER_LEN + pkt.payload.len()) as u16;
-        pkt.header().clone()
+    pub fn header_bytes(&self) -> Result<Bytes, BuildError> {
+        self.clone().build().map(|packet| packet.header())
     }
 }
 
@@ -102,8 +121,28 @@ mod tests {
         .source(1)
         .destination(2)
         .payload(Bytes::from_static(&[1, 2, 3]))
-        .build();
+        .build()
+        .expect("valid UDP packet");
         assert_eq!(pkt.header.length, (UDP_HEADER_LEN + 3) as u16);
         assert_eq!(pkt.payload, Bytes::from_static(&[1, 2, 3]));
+    }
+
+    #[test]
+    fn udp_builder_rejects_oversized_payload() {
+        let error = UdpPacketBuilder::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+        )
+        .payload(Bytes::from(vec![0; u16::MAX as usize]))
+        .build()
+        .expect_err("UDP length overflow");
+
+        assert!(matches!(
+            error,
+            BuildError::LengthOverflow {
+                context: "UDP length",
+                ..
+            }
+        ));
     }
 }

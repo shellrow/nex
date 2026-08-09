@@ -16,6 +16,8 @@ pub struct AsyncIcmpSocket {
 impl AsyncIcmpSocket {
     /// Create a new asynchronous ICMP socket.
     pub async fn new(config: &IcmpConfig) -> io::Result<Self> {
+        config.validate()?;
+
         let (domain, proto) = match config.socket_family {
             SocketFamily::IPV4 => (Domain::IPV4, Some(Protocol::ICMPV4)),
             SocketFamily::IPV6 => (Domain::IPV6, Some(Protocol::ICMPV6)),
@@ -38,7 +40,7 @@ impl AsyncIcmpSocket {
 
         // Set socket options based on configuration
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -69,12 +71,16 @@ impl AsyncIcmpSocket {
 
         // Convert socket2::Socket into std::net::UdpSocket
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
 
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
 

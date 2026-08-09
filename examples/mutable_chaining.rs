@@ -6,7 +6,7 @@ use nex::packet::ethernet::{
 };
 use nex::packet::ip::IpNextProtocol;
 use nex::packet::ipv4::{self, IPV4_HEADER_LEN, Ipv4Packet, MutableIpv4Packet};
-use nex::packet::packet::{MutablePacket, Packet};
+use nex::packet::packet::MutablePacket;
 use nex::packet::udp::{self, MutableUdpPacket, UDP_HEADER_LEN, UdpPacket};
 use std::net::Ipv4Addr;
 
@@ -50,7 +50,7 @@ fn main() {
             }
 
             let snapshot = ipv4.freeze().expect("snapshot ipv4");
-            let udp_snapshot = UdpPacket::from_buf(&snapshot.payload).expect("snapshot udp");
+            let udp_snapshot = UdpPacket::try_from_buf(&snapshot.payload).expect("snapshot udp");
             let udp_checksum = udp::ipv4_checksum(
                 &udp_snapshot,
                 &snapshot.header.source,
@@ -65,9 +65,9 @@ fn main() {
     }
 
     // Inspect immutable packet views to confirm changes persisted across layers.
-    let ethernet_packet = EthernetPacket::from_buf(&frame).expect("immutable ethernet");
-    let ipv4_packet = Ipv4Packet::from_buf(&ethernet_packet.payload).expect("immutable ipv4");
-    let udp_packet = UdpPacket::from_buf(&ipv4_packet.payload).expect("immutable udp");
+    let ethernet_packet = EthernetPacket::try_from_buf(&frame).expect("immutable ethernet");
+    let ipv4_packet = Ipv4Packet::try_from_buf(&ethernet_packet.payload).expect("immutable ipv4");
+    let udp_packet = UdpPacket::try_from_buf(&ipv4_packet.payload).expect("immutable udp");
 
     println!(
         "Ethernet: {} -> {} ({:?})",

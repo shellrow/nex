@@ -11,6 +11,12 @@ pub struct EthernetPacketBuilder {
     packet: EthernetPacket,
 }
 
+impl Default for EthernetPacketBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EthernetPacketBuilder {
     /// Create a new builder instance.
     pub fn new() -> Self {
@@ -51,6 +57,9 @@ impl EthernetPacketBuilder {
     }
 
     /// Consume the builder and produce an `EthernetPacket`.
+    ///
+    /// This finalizer is infallible because Ethernet II uses a fixed-size
+    /// header and does not encode the payload length in the frame.
     pub fn build(self) -> EthernetPacket {
         self.packet
     }

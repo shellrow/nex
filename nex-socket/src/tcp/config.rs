@@ -7,6 +7,7 @@ use crate::SocketFamily;
 
 /// TCP socket type, either STREAM or RAW.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TcpSocketType {
     Stream,
     Raw,
@@ -24,7 +25,7 @@ impl TcpSocketType {
     }
 
     /// Converts the TCP socket type to a `socket2::Type`.
-    pub(crate) fn to_sock_type(&self) -> SockType {
+    pub(crate) fn to_sock_type(self) -> SockType {
         match self {
             TcpSocketType::Stream => SockType::STREAM,
             TcpSocketType::Raw => SockType::RAW,
@@ -34,6 +35,7 @@ impl TcpSocketType {
 
 /// Configuration options for a TCP socket.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct TcpConfig {
     /// The socket family, either IPv4 or IPv6.
     pub socket_family: SocketFamily,

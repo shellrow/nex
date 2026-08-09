@@ -79,12 +79,17 @@ fn main() {
         .hop_limit(255);
 
     let ndp = NdpPacketBuilder::new(src_mac, src_ip, target_ip);
+    let ndp_packet = ndp.build().expect("valid NDP packet");
+    let ipv6_packet = ipv6
+        .payload(ndp_packet.to_bytes())
+        .build()
+        .expect("valid IPv6 packet");
 
     let ethernet = EthernetPacketBuilder::new()
         .source(src_mac)
         .destination(dst_mac)
         .ethertype(EtherType::Ipv6)
-        .payload(ipv6.payload(ndp.build().to_bytes()).build().to_bytes());
+        .payload(ipv6_packet.to_bytes());
 
     // Send NDP Neighbor Solicitation
     let packet = ethernet.build().to_bytes();
@@ -107,31 +112,25 @@ fn main() {
                     parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
                 }
 
-                if let Some(frame) = Frame::from_buf(&packet, parse_option) {
-                    if let Some(ip_layer) = &frame.ip {
-                        if let Some(icmpv6) = &ip_layer.icmpv6 {
-                            if icmpv6.icmpv6_type == Icmpv6Type::NeighborAdvertisement {
-                                if let Some(ipv6_hdr) = &ip_layer.ipv6 {
-                                    println!(
-                                        "Received Neighbor Advertisement from {}",
-                                        ipv6_hdr.source
-                                    );
-                                    if let Some(dlink) = &frame.datalink {
-                                        if let Some(eth) = &dlink.ethernet {
-                                            println!("MAC address: {}", eth.source.address());
-                                        }
-                                    }
-                                    println!(
-                                        "---- Interface: {}, Total Length: {} bytes ----",
-                                        interface.name,
-                                        packet.len()
-                                    );
-                                    println!("Frame: {:?}", frame);
-                                    break;
-                                }
-                            }
-                        }
+                if let Ok(frame) = Frame::try_from_buf(packet, parse_option)
+                    && let Some(ip_layer) = &frame.ip
+                    && let Some(icmpv6) = &ip_layer.icmpv6
+                    && icmpv6.icmpv6_type == Icmpv6Type::NeighborAdvertisement
+                    && let Some(ipv6_hdr) = &ip_layer.ipv6
+                {
+                    println!("Received Neighbor Advertisement from {}", ipv6_hdr.source);
+                    if let Some(dlink) = &frame.datalink
+                        && let Some(eth) = &dlink.ethernet
+                    {
+                        println!("MAC address: {}", eth.source.address());
                     }
+                    println!(
+                        "---- Interface: {}, Total Length: {} bytes ----",
+                        interface.name,
+                        packet.len()
+                    );
+                    println!("Frame: {:?}", frame);
+                    break;
                 }
             }
             Err(e) => eprintln!("Receive failed: {}", e),

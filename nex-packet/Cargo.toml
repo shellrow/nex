@@ -2,6 +2,7 @@
 name = "nex-packet"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 description = "Cross-platform packet parsing and building library. Provides low-level packet handling. Part of nex project."
 repository = "https://github.com/shellrow/nex"
@@ -14,14 +15,19 @@ license = "MIT"
 bytes = { workspace = true }
 nex-core = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-rand = { workspace = true }
 
 [features]
+default = []
 serde = ["dep:serde", "nex-core/serde", "bytes/serde"]
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8"
+proptest = "1"
 
 [[bench]]
 name = "packet_parse"
+harness = false
+
+[[bench]]
+name = "packet_operations"
 harness = false

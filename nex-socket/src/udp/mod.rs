@@ -2,6 +2,7 @@
 //!
 //! Provides synchronous and asynchronous UDP APIs along with
 //! configuration utilities for common socket options.
+#[cfg(feature = "async")]
 mod async_impl;
 mod config;
 mod sync_impl;
@@ -21,6 +22,8 @@ fn set_bool_sockopt(
 ) -> io::Result<()> {
     use std::os::fd::AsRawFd;
     let value: libc::c_int = if on { 1 } else { 0 };
+    // SAFETY: The socket descriptor is open and `value` is readable with the
+    // exact size supplied for the duration of setsockopt.
     let ret = unsafe {
         libc::setsockopt(
             socket.as_raw_fd(),
@@ -42,6 +45,8 @@ fn get_bool_sockopt(socket: &Socket, level: libc::c_int, optname: libc::c_int) -
     use std::os::fd::AsRawFd;
     let mut value: libc::c_int = 0;
     let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+    // SAFETY: The socket descriptor is open; `value` and `len` are writable for
+    // the duration of getsockopt.
     let ret = unsafe {
         libc::getsockopt(
             socket.as_raw_fd(),
@@ -117,6 +122,7 @@ pub(crate) fn recv_pktinfo_v6(_socket: &Socket) -> io::Result<bool> {
     ))
 }
 
+#[cfg(feature = "async")]
 pub use async_impl::*;
 pub use config::*;
 pub use sync_impl::*;

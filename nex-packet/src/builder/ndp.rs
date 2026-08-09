@@ -1,3 +1,4 @@
+use crate::builder::BuildError;
 use crate::icmpv6::ndp::{NdpOptionPacket, NdpOptionTypes, NeighborSolicitPacket};
 use crate::icmpv6::{self, Icmpv6Header, Icmpv6Packet, Icmpv6Type, checksum};
 use crate::packet::Packet;
@@ -7,7 +8,7 @@ use std::net::Ipv6Addr;
 
 /// Length rounded up to an 8-byte multiple (for option length)
 fn octets_len(len: usize) -> u8 {
-    ((len + 7) / 8) as u8
+    len.div_ceil(8) as u8
 }
 
 /// Builder for ICMPv6 Neighbor Solicitation packets
@@ -41,7 +42,7 @@ impl NdpPacketBuilder {
     }
 
     /// Build the Neighbor Solicitation packet
-    pub fn build(&self) -> Icmpv6Packet {
+    pub fn build(&self) -> Result<Icmpv6Packet, BuildError> {
         // Build the MAC address option
         let mac_bytes = self.src_mac.octets();
         let opt_payload = Bytes::copy_from_slice(&mac_bytes);
@@ -66,15 +67,32 @@ impl NdpPacketBuilder {
         };
 
         // Build an Icmpv6Packet and calculate the checksum
-        let mut icmp_packet = Icmpv6Packet::from_bytes(packet.to_bytes())
-            .expect("Failed to create Icmpv6Packet from NeighborSolicitPacket");
+        let mut icmp_packet =
+            Icmpv6Packet::from_bytes(packet.to_bytes()).ok_or(BuildError::SerializationFailed {
+                context: "NDP neighbor solicitation",
+            })?;
 
         icmp_packet.header.checksum = checksum(&icmp_packet, &self.src_ip, &self.dst_ip);
-        icmp_packet
+        Ok(icmp_packet)
     }
 
     /// Get the packet as bytes
-    pub fn to_bytes(&self) -> Bytes {
-        self.build().to_bytes()
+    pub fn to_bytes(&self) -> Result<Bytes, BuildError> {
+        self.build().map(|packet| packet.to_bytes())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ndp_builder_produces_aligned_source_link_layer_option() {
+        let packet =
+            NdpPacketBuilder::new(MacAddr::zero(), Ipv6Addr::LOCALHOST, Ipv6Addr::LOCALHOST)
+                .build()
+                .expect("valid NDP packet");
+
+        assert_eq!(packet.payload.len(), 28);
     }
 }

@@ -1,7 +1,7 @@
 use crate::udp::UdpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
-use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket as StdUdpSocket};
 use tokio::net::UdpSocket;
 
 /// Asynchronous UDP socket built on top of Tokio.
@@ -48,7 +48,7 @@ impl AsyncUdpSocket {
             socket.set_broadcast(flag)?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -66,25 +66,9 @@ impl AsyncUdpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
-        #[cfg(any(
-            target_os = "android",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "ios",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "tvos",
-            target_os = "visionos",
-            target_os = "watchos"
-        ))]
-        if let Some(tclass) = config.tclass_v6 {
-            socket.set_tclass_v6(tclass)?;
-        }
+        crate::apply_tclass_v6(&socket, config.tclass_v6)?;
         if let Some(only_v6) = config.only_v6 {
             socket.set_only_v6(only_v6)?;
         }
@@ -104,11 +88,15 @@ impl AsyncUdpSocket {
         }
 
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())
@@ -125,11 +113,15 @@ impl AsyncUdpSocket {
         socket.set_nonblocking(true)?;
 
         #[cfg(windows)]
+        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::windows::io::{FromRawSocket, IntoRawSocket};
             StdUdpSocket::from_raw_socket(socket.into_raw_socket())
         };
         #[cfg(unix)]
+        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
+        // `StdUdpSocket`.
         let std_socket = unsafe {
             use std::os::fd::{FromRawFd, IntoRawFd};
             StdUdpSocket::from_raw_fd(socket.into_raw_fd())
@@ -209,6 +201,26 @@ impl AsyncUdpSocket {
     /// Get broadcast mode.
     pub fn broadcast(&self) -> io::Result<bool> {
         self.inner.broadcast()
+    }
+
+    /// Join an IPv4 multicast group on the selected interface.
+    pub fn join_multicast_v4(&self, group: Ipv4Addr, interface: Ipv4Addr) -> io::Result<()> {
+        self.inner.join_multicast_v4(group, interface)
+    }
+
+    /// Leave an IPv4 multicast group on the selected interface.
+    pub fn leave_multicast_v4(&self, group: Ipv4Addr, interface: Ipv4Addr) -> io::Result<()> {
+        self.inner.leave_multicast_v4(group, interface)
+    }
+
+    /// Join an IPv6 multicast group on the selected interface index.
+    pub fn join_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.inner.join_multicast_v6(group, interface)
+    }
+
+    /// Leave an IPv6 multicast group on the selected interface index.
+    pub fn leave_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.inner.leave_multicast_v6(group, interface)
     }
 
     #[cfg(unix)]

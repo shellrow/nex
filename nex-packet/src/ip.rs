@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum IpNextProtocol {
     /// IPv6 Hop-by-Hop Option \[RFC2460\]
     Hopopt = 0,
@@ -256,17 +257,17 @@ pub enum IpNextProtocol {
     Sm = 122,
     /// Performance Transparency Protocol
     Ptp = 123,
-    ///
+    /// Intermediate System to Intermediate System over IPv4.
     IsisOverIpv4 = 124,
-    ///
+    /// FIRE.
     Fire = 125,
     /// Combat Radio Transport Protocol
     Crtp = 126,
     /// Combat Radio User Datagram
     Crudp = 127,
-    ///
+    /// Service-Specific Connection Oriented Protocol in a Multimedia Communications Environment.
     Sscopmce = 128,
-    ///
+    /// IPLT.
     Iplt = 129,
     /// Secure Packet Shield
     Sps = 130,

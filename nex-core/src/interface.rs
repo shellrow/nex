@@ -2,12 +2,38 @@ use crate::ip::{is_global_ip, is_global_ipv4, is_global_ipv6};
 use crate::mac::MacAddr;
 pub use ipnet::{self, Ipv4Net, Ipv6Net};
 use std::convert::TryFrom;
+use std::fmt;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::SystemTime;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+/// Errors returned when discovering system network interfaces or gateways.
+#[derive(Clone, Eq, PartialEq, Debug)]
+#[non_exhaustive]
+pub enum InterfaceError {
+    /// The operating system did not provide a default network interface.
+    DefaultInterfaceUnavailable { message: String },
+    /// The operating system did not provide a default gateway.
+    DefaultGatewayUnavailable { message: String },
+}
+
+impl fmt::Display for InterfaceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DefaultInterfaceUnavailable { message } => {
+                write!(f, "default interface is unavailable: {message}")
+            }
+            Self::DefaultGatewayUnavailable { message } => {
+                write!(f, "default gateway is unavailable: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for InterfaceError {}
 
 #[cfg(unix)]
 pub const IFF_UP: u32 = nex_sys::IFF_UP as u32;
@@ -40,6 +66,7 @@ pub const IFF_RUNNING: u32 = libc::IFF_RUNNING as u32;
 /// Operational state of a network interface.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum OperState {
     Unknown,
     NotPresent,
@@ -128,6 +155,7 @@ impl From<netdev::interface::state::OperState> for OperState {
 /// Cross-platform classification of a network interface.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum InterfaceType {
     Unknown,
     Ethernet,
@@ -156,6 +184,7 @@ pub enum InterfaceType {
     MultiRateSymmetricDsl,
     HighPerformanceSerialBus,
     Wman,
+    Wwan,
     Wwanpp,
     Wwanpp2,
     Bridge,
@@ -194,6 +223,7 @@ impl InterfaceType {
             InterfaceType::MultiRateSymmetricDsl => String::from("Multi-Rate Symmetric DSL"),
             InterfaceType::HighPerformanceSerialBus => String::from("High Performance Serial Bus"),
             InterfaceType::Wman => String::from("WMAN"),
+            InterfaceType::Wwan => String::from("WWAN"),
             InterfaceType::Wwanpp => String::from("WWANPP"),
             InterfaceType::Wwanpp2 => String::from("WWANPP2"),
             InterfaceType::Bridge => String::from("Bridge"),
@@ -248,6 +278,7 @@ impl From<netdev::interface::types::InterfaceType> for InterfaceType {
                 InterfaceType::HighPerformanceSerialBus
             }
             netdev::interface::types::InterfaceType::Wman => InterfaceType::Wman,
+            netdev::interface::types::InterfaceType::Wwan => InterfaceType::Wwan,
             netdev::interface::types::InterfaceType::Wwanpp => InterfaceType::Wwanpp,
             netdev::interface::types::InterfaceType::Wwanpp2 => InterfaceType::Wwanpp2,
             netdev::interface::types::InterfaceType::Bridge => InterfaceType::Bridge,
@@ -275,9 +306,13 @@ impl TryFrom<u32> for InterfaceType {
 /// Address information for a related network device.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct NetworkDevice {
+    /// Link-layer address of the related device.
     pub mac_addr: MacAddr,
+    /// IPv4 addresses assigned to the device.
     pub ipv4: Vec<Ipv4Addr>,
+    /// IPv6 addresses assigned to the device.
     pub ipv6: Vec<Ipv6Addr>,
 }
 
@@ -310,9 +345,13 @@ impl From<netdev::NetworkDevice> for NetworkDevice {
 /// Interface traffic statistics at a given point in time.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct InterfaceStats {
+    /// Total received bytes.
     pub rx_bytes: u64,
+    /// Total transmitted bytes.
     pub tx_bytes: u64,
+    /// Time at which the counters were sampled.
     pub timestamp: Option<SystemTime>,
 }
 
@@ -329,34 +368,53 @@ impl From<netdev::stats::counters::InterfaceStats> for InterfaceStats {
 /// A network interface.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Interface {
+    /// Operating-system interface index.
     pub index: u32,
+    /// Operating-system interface name.
     pub name: String,
+    /// User-facing interface name when supplied by the platform.
     pub friendly_name: Option<String>,
+    /// Platform-provided interface description.
     pub description: Option<String>,
+    /// Classified interface hardware or transport type.
     pub if_type: InterfaceType,
+    /// Link-layer address, when one is available.
     pub mac_addr: Option<MacAddr>,
+    /// Assigned IPv4 networks.
     pub ipv4: Vec<Ipv4Net>,
+    /// Assigned IPv6 networks.
     pub ipv6: Vec<Ipv6Net>,
+    /// Scope identifiers corresponding to scoped IPv6 addresses.
     pub ipv6_scope_ids: Vec<u32>,
+    /// Raw platform interface flags.
     pub flags: u32,
+    /// Current operational state.
     pub oper_state: OperState,
+    /// Reported transmit speed in bits per second.
     pub transmit_speed: Option<u64>,
+    /// Reported receive speed in bits per second.
     pub receive_speed: Option<u64>,
+    /// Most recently sampled traffic statistics.
     pub stats: Option<InterfaceStats>,
     #[cfg(feature = "gateway")]
+    /// Default gateway reachable through this interface.
     pub gateway: Option<NetworkDevice>,
     #[cfg(feature = "gateway")]
+    /// DNS servers associated with this interface.
     pub dns_servers: Vec<IpAddr>,
+    /// Maximum transmission unit in bytes.
     pub mtu: Option<u32>,
     #[cfg(feature = "gateway")]
+    /// Whether this is the platform's default interface.
     pub default: bool,
 }
 
 impl Interface {
     #[cfg(feature = "gateway")]
     #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Result<Interface, String> {
+    pub fn default() -> Result<Interface, InterfaceError> {
         get_default_interface()
     }
 
@@ -589,17 +647,53 @@ pub fn get_interfaces() -> Vec<Interface> {
 }
 
 #[cfg(feature = "gateway")]
-pub fn get_default_interface() -> Result<Interface, String> {
-    netdev::get_default_interface().map(Into::into)
+pub fn get_default_interface() -> Result<Interface, InterfaceError> {
+    netdev::get_default_interface()
+        .map(Into::into)
+        .map_err(|message| InterfaceError::DefaultInterfaceUnavailable { message })
 }
 
 #[cfg(feature = "gateway")]
-pub fn get_default_gateway() -> Result<NetworkDevice, String> {
-    netdev::get_default_gateway().map(Into::into)
+pub fn get_default_gateway() -> Result<NetworkDevice, InterfaceError> {
+    netdev::get_default_gateway()
+        .map(Into::into)
+        .map_err(|message| InterfaceError::DefaultGatewayUnavailable { message })
 }
 
 fn lookup_interface(name: &str, index: u32) -> Option<netdev::Interface> {
     netdev::get_interfaces()
         .into_iter()
         .find(|iface| iface.index == index || iface.name == name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InterfaceError, InterfaceType};
+
+    fn assert_error_contract<T: std::error::Error + Send + Sync + 'static>() {}
+
+    #[test]
+    fn interface_error_implements_public_error_contract() {
+        assert_error_contract::<InterfaceError>();
+    }
+
+    #[test]
+    fn interface_error_includes_operation_context() {
+        let error = InterfaceError::DefaultGatewayUnavailable {
+            message: "route table is empty".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "default gateway is unavailable: route table is empty"
+        );
+    }
+
+    #[test]
+    fn converts_wwan_interface_type() {
+        let interface_type = InterfaceType::from(netdev::interface::types::InterfaceType::Wwan);
+
+        assert_eq!(interface_type, InterfaceType::Wwan);
+        assert_eq!(interface_type.name(), "WWAN");
+    }
 }

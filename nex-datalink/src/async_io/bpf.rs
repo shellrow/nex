@@ -20,15 +20,9 @@ const ETHERNET_NULL_HEADER_SIZE: usize = 4;
 
 #[derive(Debug)]
 struct Inner {
-    fd: RawFd,
+    fd: nex_sys::FileDesc,
     loopback: bool,
     buffer_offset: usize,
-}
-
-impl Drop for Inner {
-    fn drop(&mut self) {
-        unsafe { nex_sys::close(self.fd) };
-    }
 }
 
 /// Sender half of an asynchronous BPF socket.
@@ -44,9 +38,17 @@ impl AsyncRawSender for AsyncBpfSocketSender {
         } else {
             0
         };
+        if packet.len() < offset {
+            return Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "loopback packets must include an Ethernet header",
+            )));
+        }
+        // SAFETY: The descriptor is owned by `inner`; the packet slice remains
+        // readable for the duration of `write`.
         let ret = unsafe {
             libc::write(
-                self.inner.fd,
+                self.inner.fd.as_raw(),
                 packet[offset..].as_ptr() as *const libc::c_void,
                 (packet.len() - offset) as libc::size_t,
             )
@@ -57,10 +59,11 @@ impl AsyncRawSender for AsyncBpfSocketSender {
         let err = io::Error::last_os_error();
         if err.kind() == io::ErrorKind::WouldBlock {
             let mut pfd = libc::pollfd {
-                fd: self.inner.fd,
+                fd: self.inner.fd.as_raw(),
                 events: libc::POLLOUT,
                 revents: 0,
             };
+            // SAFETY: `pfd` points to one initialized poll descriptor.
             unsafe { libc::poll(&mut pfd, 1, 0) };
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -90,38 +93,70 @@ impl Stream for AsyncBpfSocketReceiver {
         };
         if me.packets.is_empty() {
             let buffer = &mut me.read_buffer[me.inner.buffer_offset..];
+            // SAFETY: The descriptor is open and `buffer` is writable for its
+            // full reported length.
             let ret = unsafe {
                 libc::read(
-                    me.inner.fd,
+                    me.inner.fd.as_raw(),
                     buffer.as_mut_ptr() as *mut libc::c_void,
                     buffer.len() as libc::size_t,
                 )
             };
             if ret >= 0 {
                 let buflen = ret as usize;
-                let mut ptr = buffer.as_mut_ptr();
-                let end = unsafe { buffer.as_ptr().add(buflen) };
-                while (ptr as *const u8) < end {
-                    unsafe {
-                        let packet: *const bpf::bpf_hdr = mem::transmute(ptr);
-                        let start =
-                            ptr as isize + (*packet).bh_hdrlen as isize - buffer.as_ptr() as isize;
-                        me.packets.push_back((
-                            start as usize + header_size,
-                            (*packet).bh_caplen as usize - header_size,
-                        ));
-                        let offset = (*packet).bh_hdrlen as isize + (*packet).bh_caplen as isize;
-                        ptr = ptr.offset(bpf::BPF_WORDALIGN(offset));
+                let mut cursor = 0usize;
+                while cursor < buflen {
+                    let remaining = buflen - cursor;
+                    if remaining < mem::size_of::<bpf::bpf_hdr>() {
+                        return Poll::Ready(Some(Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "truncated BPF record header",
+                        ))));
                     }
+                    // SAFETY: The size check proves the complete header is
+                    // in-bounds. `read_unaligned` handles Vec<u8>'s alignment.
+                    let packet = unsafe {
+                        std::ptr::read_unaligned(buffer.as_ptr().add(cursor) as *const bpf::bpf_hdr)
+                    };
+                    let header_len = packet.bh_hdrlen as usize;
+                    let captured_len = packet.bh_caplen as usize;
+                    let record_len = match crate::bpf::validate_record_lengths(
+                        header_len,
+                        captured_len,
+                        remaining,
+                        header_size,
+                    ) {
+                        Ok(record_len) => record_len,
+                        Err(err) => return Poll::Ready(Some(Err(err))),
+                    };
+                    me.packets.push_back((
+                        cursor + header_len + header_size,
+                        captured_len - header_size,
+                    ));
+                    let Ok(record_len) = isize::try_from(record_len) else {
+                        return Poll::Ready(Some(Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "BPF record exceeds platform pointer range",
+                        ))));
+                    };
+                    let Some(next) = cursor.checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
+                    else {
+                        return Poll::Ready(Some(Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "BPF record offset overflow",
+                        ))));
+                    };
+                    cursor = next;
                 }
             } else {
                 let err = io::Error::last_os_error();
                 if err.kind() == io::ErrorKind::WouldBlock {
                     let mut pfd = libc::pollfd {
-                        fd: me.inner.fd,
+                        fd: me.inner.fd.as_raw(),
                         events: libc::POLLIN,
                         revents: 0,
                     };
+                    // SAFETY: `pfd` points to one initialized poll descriptor.
                     unsafe { libc::poll(&mut pfd, 1, 0) };
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
@@ -136,7 +171,7 @@ impl Stream for AsyncBpfSocketReceiver {
                 let padding = ETHERNET_HEADER_SIZE - me.inner.buffer_offset;
                 start -= padding;
             }
-            for i in (&mut me.read_buffer[start..start + me.inner.buffer_offset]).iter_mut() {
+            for i in me.read_buffer[start..start + me.inner.buffer_offset].iter_mut() {
                 *i = 0;
             }
             let pkt = me.read_buffer[start..start + len].to_vec();
@@ -157,6 +192,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
             let c_file_name = CString::new(file_name).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path")
             })?;
+            // SAFETY: `c_file_name` is a live, NUL-terminated path and the
+            // selected flags require no variadic mode argument.
             let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
             if fd != -1 {
                 return Ok(fd);
@@ -173,6 +210,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     fn get_fd(_attempts: usize) -> io::Result<RawFd> {
         let c_file_name = CString::new("/dev/bpf")
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path"))?;
+        // SAFETY: `c_file_name` is a live, NUL-terminated path and the selected
+        // flags require no variadic mode argument.
         let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
         if fd == -1 {
             Err(io::Error::last_os_error())
@@ -181,45 +220,39 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         }
     }
 
-    let fd = get_fd(config.bpf_fd_attempts)?;
+    let raw_fd = get_fd(config.bpf_fd_attempts)?;
+    // SAFETY: `raw_fd` was just opened and exclusive ownership moves into the
+    // guard exactly once.
+    let fd = unsafe { nex_sys::FileDesc::from_raw(raw_fd) };
 
+    // SAFETY: A zero bit pattern is a valid initial value for `ifreq`.
     let mut iface: bpf::ifreq = unsafe { mem::zeroed() };
     for (i, c) in network_interface.name.bytes().enumerate() {
         iface.ifr_name[i] = c as libc::c_char;
     }
 
     let buflen = config.read_buffer_size as libc::c_uint;
-    if unsafe { bpf::ioctl(fd, bpf::BIOCSBLEN, &buflen) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and `buflen` has the exact argument type
+    // expected by BIOCSBLEN.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &buflen) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
-    if unsafe { bpf::ioctl(fd, bpf::BIOCSETIF, &iface) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: `iface` remains readable throughout the ioctl call.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSETIF, &iface) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
-    if unsafe { bpf::ioctl(fd, bpf::BIOCIMMEDIATE, &1) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and the integer argument is valid for
+    // BIOCIMMEDIATE.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCIMMEDIATE, &1) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     let mut dlt: libc::c_uint = 0;
-    if unsafe { bpf::ioctl(fd, bpf::BIOCGDLT, &mut dlt) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: `dlt` is writable for the returned device type.
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCGDLT, &mut dlt) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     let mut loopback = false;
@@ -231,21 +264,16 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         buffer_offset = (ETHERNET_HEADER_SIZE - ETHERNET_NULL_HEADER_SIZE).next_multiple_of(align);
         read_buffer_size += buffer_offset;
     } else {
-        if unsafe { bpf::ioctl(fd, bpf::BIOCSHDRCMPLT, &1) } == -1 {
-            let err = io::Error::last_os_error();
-            unsafe {
-                nex_sys::close(fd);
-            }
-            return Err(err);
+        // SAFETY: The descriptor is open and the integer argument is valid for
+        // BIOCSHDRCMPLT.
+        if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
+            return Err(io::Error::last_os_error());
         }
     }
 
-    if unsafe { libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
-        let err = io::Error::last_os_error();
-        unsafe {
-            nex_sys::close(fd);
-        }
-        return Err(err);
+    // SAFETY: The descriptor is open and F_SETFL retains no borrowed pointers.
+    if unsafe { libc::fcntl(fd.as_raw(), libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     let read_buffer = vec![0u8; read_buffer_size];

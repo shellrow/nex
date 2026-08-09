@@ -1,8 +1,10 @@
+#![allow(clippy::useless_conversion)]
+
 use crate::udp::UdpConfig;
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
 use std::net::IpAddr;
-use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket as StdUdpSocket};
 
 /// Synchronous low level UDP socket.
 #[derive(Debug)]
@@ -70,7 +72,7 @@ impl UdpSocket {
             socket.set_broadcast(flag)?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -88,25 +90,9 @@ impl UdpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
-        #[cfg(any(
-            target_os = "android",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "ios",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "tvos",
-            target_os = "visionos",
-            target_os = "watchos"
-        ))]
-        if let Some(tclass) = config.tclass_v6 {
-            socket.set_tclass_v6(tclass)?;
-        }
+        crate::apply_tclass_v6(&socket, config.tclass_v6)?;
         if let Some(only_v6) = config.only_v6 {
             socket.set_only_v6(only_v6)?;
         }
@@ -177,6 +163,8 @@ impl UdpSocket {
 
         let iov = [IoSlice::new(buf)];
         let raw_fd = self.socket.as_raw_fd();
+        let packet_info_meta =
+            meta.filter(|meta| meta.source_addr.is_some() || meta.interface_index.is_some());
 
         match target {
             SocketAddr::V4(addr) => {
@@ -188,50 +176,47 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta {
-                        if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                            if let Some(src) = meta.source_addr {
-                                if !src.is_ipv4() {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "source_addr family does not match target",
-                                    ));
-                                }
+                    if let Some(meta) = packet_info_meta {
+                        if meta.source_addr.is_some_and(|src| !src.is_ipv4()) {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "source_addr family does not match target",
+                            ));
+                        }
+                        // SAFETY: A zero bit pattern is a valid initial
+                        // `in_pktinfo` value.
+                        let mut pktinfo: libc::in_pktinfo = unsafe { std::mem::zeroed() };
+                        if let Some(src) = meta.source_addr.and_then(|ip| match ip {
+                            IpAddr::V4(v4) => Some(v4),
+                            IpAddr::V6(_) => None,
+                        }) {
+                            #[cfg(target_os = "netbsd")]
+                            {
+                                pktinfo.ipi_addr.s_addr = u32::from_ne_bytes(src.octets());
                             }
-                            let mut pktinfo: libc::in_pktinfo = unsafe { std::mem::zeroed() };
-                            if let Some(src) = meta.source_addr.and_then(|ip| match ip {
-                                IpAddr::V4(v4) => Some(v4),
-                                IpAddr::V6(_) => None,
-                            }) {
+                            #[cfg(not(target_os = "netbsd"))]
+                            {
                                 pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
                             }
-                            if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "interface_index is out of range for this platform",
-                                    )
-                                })?;
-                            }
-                            let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
-                            return sendmsg(
-                                raw_fd,
-                                &iov,
-                                &cmsgs,
-                                MsgFlags::empty(),
-                                Some(&sockaddr),
-                            )
-                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
                         }
+                        if let Some(ifindex) = meta.interface_index {
+                            pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "interface_index is out of range for this platform",
+                                )
+                            })?;
+                        }
+                        let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
+                        return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
+                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta {
-                    if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this platform",
-                        ));
-                    }
+                if packet_info_meta.is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "send_msg packet-info metadata is not supported on this platform",
+                    ));
                 }
                 sendmsg(raw_fd, &iov, &[], MsgFlags::empty(), Some(&sockaddr))
                     .map_err(|e| io::Error::from_raw_os_error(e as i32))
@@ -246,50 +231,40 @@ impl UdpSocket {
                     target_vendor = "apple"
                 ))]
                 {
-                    if let Some(meta) = meta {
-                        if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                            if let Some(src) = meta.source_addr {
-                                if !src.is_ipv6() {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "source_addr family does not match target",
-                                    ));
-                                }
-                            }
-                            let mut pktinfo: libc::in6_pktinfo = unsafe { std::mem::zeroed() };
-                            if let Some(src) = meta.source_addr.and_then(|ip| match ip {
-                                IpAddr::V4(_) => None,
-                                IpAddr::V6(v6) => Some(v6),
-                            }) {
-                                pktinfo.ipi6_addr.s6_addr = src.octets();
-                            }
-                            if let Some(ifindex) = meta.interface_index {
-                                pktinfo.ipi6_ifindex = ifindex.try_into().map_err(|_| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "interface_index is out of range for this platform",
-                                    )
-                                })?;
-                            }
-                            let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
-                            return sendmsg(
-                                raw_fd,
-                                &iov,
-                                &cmsgs,
-                                MsgFlags::empty(),
-                                Some(&sockaddr),
-                            )
-                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
+                    if let Some(meta) = packet_info_meta {
+                        if meta.source_addr.is_some_and(|src| !src.is_ipv6()) {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "source_addr family does not match target",
+                            ));
                         }
+                        // SAFETY: A zero bit pattern is a valid initial
+                        // `in6_pktinfo` value.
+                        let mut pktinfo: libc::in6_pktinfo = unsafe { std::mem::zeroed() };
+                        if let Some(src) = meta.source_addr.and_then(|ip| match ip {
+                            IpAddr::V4(_) => None,
+                            IpAddr::V6(v6) => Some(v6),
+                        }) {
+                            pktinfo.ipi6_addr.s6_addr = src.octets();
+                        }
+                        if let Some(ifindex) = meta.interface_index {
+                            pktinfo.ipi6_ifindex = ifindex.try_into().map_err(|_| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "interface_index is out of range for this platform",
+                                )
+                            })?;
+                        }
+                        let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
+                        return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
+                            .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
                 }
-                if let Some(meta) = meta {
-                    if meta.source_addr.is_some() || meta.interface_index.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Unsupported,
-                            "send_msg packet-info metadata is not supported on this platform",
-                        ));
-                    }
+                if packet_info_meta.is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "send_msg packet-info metadata is not supported on this platform",
+                    ));
                 }
                 sendmsg(raw_fd, &iov, &[], MsgFlags::empty(), Some(&sockaddr))
                     .map_err(|e| io::Error::from_raw_os_error(e as i32))
@@ -313,7 +288,8 @@ impl UdpSocket {
 
     /// Receive data.
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` has the same layout as `u8`.
+        // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the slice
+        // preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,
@@ -461,11 +437,11 @@ impl UdpSocket {
     }
 
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
-        self.socket.set_ttl(ttl)
+        self.socket.set_ttl_v4(ttl)
     }
 
     pub fn ttl(&self) -> io::Result<u32> {
-        self.socket.ttl()
+        self.socket.ttl_v4()
     }
 
     pub fn set_hoplimit(&self, hops: u32) -> io::Result<()> {
@@ -528,6 +504,26 @@ impl UdpSocket {
         self.socket.broadcast()
     }
 
+    /// Join an IPv4 multicast group on the selected interface.
+    pub fn join_multicast_v4(&self, group: &Ipv4Addr, interface: &Ipv4Addr) -> io::Result<()> {
+        self.socket.join_multicast_v4(group, interface)
+    }
+
+    /// Leave an IPv4 multicast group on the selected interface.
+    pub fn leave_multicast_v4(&self, group: &Ipv4Addr, interface: &Ipv4Addr) -> io::Result<()> {
+        self.socket.leave_multicast_v4(group, interface)
+    }
+
+    /// Join an IPv6 multicast group on the selected interface index.
+    pub fn join_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.socket.join_multicast_v6(group, interface)
+    }
+
+    /// Leave an IPv6 multicast group on the selected interface index.
+    pub fn leave_multicast_v6(&self, group: &Ipv6Addr, interface: u32) -> io::Result<()> {
+        self.socket.leave_multicast_v6(group, interface)
+    }
+
     pub fn set_recv_buffer_size(&self, size: usize) -> io::Result<()> {
         self.socket.set_recv_buffer_size(size)
     }
@@ -545,11 +541,11 @@ impl UdpSocket {
     }
 
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-        self.socket.set_tos(tos)
+        self.socket.set_tos_v4(tos)
     }
 
     pub fn tos(&self) -> io::Result<u32> {
-        self.socket.tos()
+        self.socket.tos_v4()
     }
 
     #[cfg(any(
@@ -557,14 +553,10 @@ impl UdpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
         self.socket.set_tclass_v6(tclass)
@@ -575,14 +567,10 @@ impl UdpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn tclass_v6(&self) -> io::Result<u32> {
         self.socket.tclass_v6()
@@ -629,7 +617,7 @@ impl UdpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Convert into a raw `std::net::UdpSocket`.
@@ -672,8 +660,51 @@ mod tests {
     #[test]
     fn create_v4_socket() {
         let sock = UdpSocket::v4_dgram().expect("create socket");
-        sock.socket.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into()).expect("bind");
+        sock.socket
+            .bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
         let addr = sock.local_addr().expect("addr");
         assert!(addr.is_ipv4());
+    }
+
+    #[test]
+    fn v4_socket_options_and_family_mismatch() {
+        let sock = UdpSocket::v4_dgram().expect("create socket");
+        sock.socket
+            .bind(&"127.0.0.1:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+
+        sock.set_ttl(37).expect("set ttl");
+        assert_eq!(sock.ttl().expect("ttl"), 37);
+        sock.set_broadcast(true).expect("set broadcast");
+        assert!(sock.broadcast().expect("broadcast"));
+
+        let mismatch = sock.send_to(&[], "[::1]:9".parse().unwrap());
+        assert!(mismatch.is_err(), "IPv6 target must fail on IPv4 socket");
+    }
+
+    #[test]
+    fn v4_multicast_membership_round_trip() {
+        let sock = UdpSocket::v4_dgram().expect("create socket");
+        sock.socket
+            .bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+        let group = Ipv4Addr::new(239, 255, 0, 1);
+
+        sock.join_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
+            .expect("join multicast");
+        sock.leave_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
+            .expect("leave multicast");
+    }
+
+    #[test]
+    fn v6_hop_limit_round_trip() {
+        let sock = UdpSocket::v6_dgram().expect("create socket");
+        sock.socket
+            .bind(&"[::1]:0".parse::<SocketAddr>().unwrap().into())
+            .expect("bind");
+
+        sock.set_hoplimit(23).expect("set hop limit");
+        assert_eq!(sock.hoplimit().expect("hop limit"), 23);
     }
 }

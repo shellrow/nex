@@ -17,13 +17,18 @@ It includes sub-crates with responsibilities:
 
 The project aims to expose portable low-level primitives.  
 
+## Minimum Supported Rust Version
+
+`nex` requires Rust 1.88.0 or later. MSRV changes are treated as compatibility
+changes and are verified in CI.
+
 ## Usage
 
 To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.26"
+nex = "0.27"
 ```
 
 ## Using Specific Sub-crates
@@ -34,6 +39,25 @@ You can also directly use specific sub-crates by importing them individually.
 
 If you want to focus on network interfaces, you can use the [netdev](https://github.com/shellrow/netdev).
 
+## Features
+
+All optional features are disabled by default in `nex`, `nex-packet`,
+`nex-datalink`, and `nex-socket`. `nex-core` keeps `gateway` enabled by default
+because gateway discovery is part of its primary interface functionality.
+
+| Feature | Crate | Purpose |
+| --- | --- | --- |
+| `async` | `nex`, `nex-datalink`, `nex-socket` | Enables asynchronous datalink I/O and Tokio-based socket APIs. |
+| `pcap` | `nex`, `nex-datalink` | Enables the libpcap backend. |
+| `serde` | `nex`, `nex-core`, `nex-packet`, `nex-datalink` | Enables serialization support for public data types. |
+| `gateway` | `nex-core` | Enables default gateway discovery through `netdev`. |
+
+To use asynchronous APIs through the facade:
+
+```toml
+[dependencies]
+nex = { version = "0.27", features = ["async"] }
+```
 
 ## Privileges
 `nex-datalink` uses a raw socket which may require elevated privileges depending on your system's configuration.  

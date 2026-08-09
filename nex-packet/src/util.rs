@@ -3,8 +3,6 @@
 use crate::ip::IpNextProtocol;
 use nex_core::bitfield::u16be;
 
-use core::u8;
-use core::u16;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Convert a value to a byte array.
@@ -65,7 +63,7 @@ impl Octets for u8 {
 /// Calculates a checksum. Used by ipv4 and icmp. The two bytes starting at `skipword * 2` will be
 /// ignored. Supposed to be the checksum field, which is regarded as zero during calculation.
 pub fn checksum(data: &[u8], skipword: usize) -> u16be {
-    if data.len() == 0 {
+    if data.is_empty() {
         return 0;
     }
     let sum = sum_be_words(data, skipword);
@@ -99,8 +97,7 @@ pub fn ipv4_checksum(
     sum += len as u32;
 
     // Checksum packet header and data
-    sum += sum_be_words(data, skipword);
-    sum += sum_be_words(extra_data, extra_data.len() / 2);
+    sum += sum_be_words_joined(data, skipword, extra_data);
 
     finalize_checksum(sum)
 }
@@ -130,8 +127,7 @@ pub fn ipv6_checksum(
     sum += len as u32;
 
     // Checksum packet header and data
-    sum += sum_be_words(data, skipword);
-    sum += sum_be_words(extra_data, extra_data.len() / 2);
+    sum += sum_be_words_joined(data, skipword, extra_data);
 
     finalize_checksum(sum)
 }
@@ -143,11 +139,11 @@ fn ipv6_word_sum(ip: &Ipv6Addr) -> u32 {
 /// Sum all words (16 bit chunks) in the given data. The word at word offset
 /// `skipword` will be skipped. Each word is treated as big endian.
 fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
-    if data.len() == 0 {
+    if data.is_empty() {
         return 0;
     }
     let len = data.len();
-    let mut cur_data = &data[..];
+    let mut cur_data = data;
     let mut sum = 0u32;
     let mut i = 0;
     while cur_data.len() >= 2 {
@@ -166,9 +162,29 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
     sum
 }
 
+/// Sum two logically contiguous byte slices without allocating.
+///
+/// Treating each slice independently would incorrectly pad an odd final byte
+/// from `data` before consuming the first byte from `extra_data`.
+fn sum_be_words_joined(data: &[u8], skipword: usize, extra_data: &[u8]) -> u32 {
+    let mut bytes = data.iter().chain(extra_data);
+    let mut word_index = 0;
+    let mut sum = 0u32;
+
+    while let Some(high) = bytes.next() {
+        let low = bytes.next().copied().unwrap_or(0);
+        if word_index != skipword {
+            sum += ((*high as u32) << 8) | low as u32;
+        }
+        word_index += 1;
+    }
+
+    sum
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sum_be_words;
+    use super::{checksum, sum_be_words, sum_be_words_joined};
     use core::slice;
 
     #[test]
@@ -204,20 +220,43 @@ mod tests {
     fn sum_be_words_misaligned_ptr() {
         let mut data = vec![0; 13];
         let ptr = match data.as_ptr() as usize % 2 {
+            // SAFETY: The vector contains 13 bytes, so advancing by one still
+            // leaves the 12-byte range constructed below in bounds.
             0 => unsafe { data.as_mut_ptr().offset(1) },
             _ => data.as_mut_ptr(),
         };
+        // SAFETY: `ptr` points into `data` with at least 12 writable bytes
+        // remaining for the lifetime of this test scope.
         unsafe {
             let slice_data = slice::from_raw_parts_mut(ptr, 12);
-            for i in 0..11 {
-                slice_data[i] = i as u8;
+            for (i, byte) in slice_data.iter_mut().enumerate().take(11) {
+                *byte = i as u8;
             }
-            assert_eq!(7190, sum_be_words(&slice_data, 1));
-            assert_eq!(6676, sum_be_words(&slice_data, 2));
+            assert_eq!(7190, sum_be_words(slice_data, 1));
+            assert_eq!(6676, sum_be_words(slice_data, 2));
             // Assert having the skipword outside the range gives correct and equal
             // results
-            assert_eq!(7705, sum_be_words(&slice_data, 99));
-            assert_eq!(7705, sum_be_words(&slice_data, 101));
+            assert_eq!(7705, sum_be_words(slice_data, 99));
+            assert_eq!(7705, sum_be_words(slice_data, 101));
         }
+    }
+
+    #[test]
+    fn joined_word_sum_preserves_odd_slice_boundary() {
+        assert_eq!(
+            sum_be_words(&[0x01, 0x02, 0x03, 0x04], usize::MAX),
+            sum_be_words_joined(&[0x01], usize::MAX, &[0x02, 0x03, 0x04])
+        );
+        assert_eq!(
+            sum_be_words(&[0x01, 0x02, 0x03], usize::MAX),
+            sum_be_words_joined(&[0x01, 0x02], usize::MAX, &[0x03])
+        );
+    }
+
+    #[test]
+    fn checksum_folds_carries_and_pads_odd_lengths() {
+        assert_eq!(checksum(&[0xff, 0xff, 0xff, 0xff], usize::MAX), 0);
+        assert_eq!(checksum(&[0x01], usize::MAX), 0xfeff);
+        assert_eq!(checksum(&[0x01, 0x02, 0x03], usize::MAX), 0xfbfd);
     }
 }

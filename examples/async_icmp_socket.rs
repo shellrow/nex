@@ -11,7 +11,7 @@ use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_packet::ipv4::Ipv4Packet;
 use nex_packet::packet::Packet;
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
-use rand::{Rng, thread_rng};
+use rand::{RngExt, rng};
 use std::collections::HashMap;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
 
     let src_ip = interface
         .ipv4
-        .get(0)
+        .first()
         .map(|v| v.addr())
         .expect("No IPv4 address on interface");
 
@@ -54,29 +54,24 @@ async fn main() -> std::io::Result<()> {
         loop {
             if let Ok((n, from)) = socket_clone.recv_from(&mut buf).await {
                 println!("Received {} bytes from {}", n, from.ip());
-                if let Some(ipv4_packet) = Ipv4Packet::from_buf(&buf[..n]) {
-                    if ipv4_packet.header.next_level_protocol
+                if let Ok(ipv4_packet) = Ipv4Packet::try_from_buf(&buf[..n])
+                    && ipv4_packet.header.next_level_protocol
                         == nex_packet::ip::IpNextProtocol::Icmp
-                    {
-                        if let Some(icmp_packet) = IcmpPacket::from_bytes(ipv4_packet.payload()) {
-                            println!(
-                                "\t{:?} from: {:?} to {:?}, TTL: {}",
-                                icmp_packet.header.icmp_type,
-                                ipv4_packet.header.source,
-                                ipv4_packet.header.destination,
-                                ipv4_packet.header.ttl
-                            );
-                            match EchoReplyPacket::try_from(icmp_packet) {
-                                Ok(reply) => {
-                                    println!(
-                                        "\tID: {}, Seq: {}",
-                                        reply.identifier, reply.sequence_number
-                                    );
-                                }
-                                Err(_) => {
-                                    println!("\tReceived non-echo-reply ICMP packet");
-                                }
-                            }
+                    && let Ok(icmp_packet) = IcmpPacket::try_from_bytes(ipv4_packet.payload())
+                {
+                    println!(
+                        "\t{:?} from: {:?} to {:?}, TTL: {}",
+                        icmp_packet.header.icmp_type,
+                        ipv4_packet.header.source,
+                        ipv4_packet.header.destination,
+                        ipv4_packet.header.ttl
+                    );
+                    match EchoReplyPacket::try_from(icmp_packet) {
+                        Ok(reply) => {
+                            println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
+                        }
+                        Err(_) => {
+                            println!("\tReceived non-echo-reply ICMP packet");
                         }
                     }
                 }
@@ -87,7 +82,7 @@ async fn main() -> std::io::Result<()> {
     let mut handles = Vec::new();
     for i in 1u8..=254 {
         let addr = Ipv4Addr::new(parts[0], parts[1], parts[2], i);
-        let id: u16 = thread_rng().r#gen();
+        let id: u16 = rng().random();
         let seq: u16 = 1;
         let socket = socket.clone();
         let replies = replies.clone();
@@ -98,7 +93,8 @@ async fn main() -> std::io::Result<()> {
                 .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
                 .echo_fields(id, seq)
                 .payload(Bytes::from_static(b"ping"))
-                .to_bytes();
+                .to_bytes()
+                .expect("valid ICMP packet");
             let target = SocketAddr::new(IpAddr::V4(addr), 0);
             let _ = socket.send_to(&pkt, target).await;
             {

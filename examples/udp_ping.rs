@@ -54,7 +54,7 @@ fn main() {
     let src_ip: IpAddr = match target_ip {
         IpAddr::V4(_) => interface
             .ipv4
-            .get(0)
+            .first()
             .map(|v| IpAddr::V4(v.addr()))
             .expect("No IPv4 address on interface"),
         IpAddr::V6(_) => interface
@@ -68,7 +68,8 @@ fn main() {
     let udp_packet = UdpPacketBuilder::new(src_ip, target_ip)
         .source(SRC_PORT)
         .destination(DST_PORT)
-        .build();
+        .build()
+        .expect("valid UDP packet");
 
     let ip_packet: Bytes = match (src_ip, target_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
@@ -77,15 +78,15 @@ fn main() {
             .protocol(IpNextProtocol::Udp)
             .flags(Ipv4Flags::DontFragment)
             .payload(udp_packet.to_bytes())
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv4 packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
             .destination(dst)
             .next_header(IpNextProtocol::Udp)
             .payload(udp_packet.to_bytes())
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv6 packet"),
         _ => panic!("Source and destination IP version mismatch"),
     };
 
@@ -93,7 +94,7 @@ fn main() {
         .source(if use_tun {
             MacAddr::zero()
         } else {
-            interface.mac_addr.clone().unwrap()
+            interface.mac_addr.unwrap()
         })
         .destination(if use_tun {
             MacAddr::zero()
@@ -126,38 +127,38 @@ fn main() {
                     parse_option.from_ip_packet = true;
                     parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
                 }
-                let frame = Frame::from_buf(&packet, parse_option).unwrap();
+                let frame = Frame::try_from_buf(packet, parse_option).unwrap();
 
                 if let Some(ip_layer) = &frame.ip {
-                    if let Some(icmp) = &ip_layer.icmp {
-                        if icmp.icmp_type == IcmpType::DestinationUnreachable {
-                            println!(
-                                "Received ICMP Port Unreachable (v4) from {}",
-                                ip_layer.ipv4.as_ref().unwrap().source
-                            );
-                            println!(
-                                "---- Interface: {}, Total Length: {} bytes ----",
-                                interface.name,
-                                packet.len()
-                            );
-                            println!("Packet Frame: {:?}", frame);
-                            break;
-                        }
+                    if let Some(icmp) = &ip_layer.icmp
+                        && icmp.icmp_type == IcmpType::DestinationUnreachable
+                    {
+                        println!(
+                            "Received ICMP Port Unreachable (v4) from {}",
+                            ip_layer.ipv4.as_ref().unwrap().source
+                        );
+                        println!(
+                            "---- Interface: {}, Total Length: {} bytes ----",
+                            interface.name,
+                            packet.len()
+                        );
+                        println!("Packet Frame: {:?}", frame);
+                        break;
                     }
-                    if let Some(icmpv6) = &ip_layer.icmpv6 {
-                        if icmpv6.icmpv6_type == Icmpv6Type::DestinationUnreachable {
-                            println!(
-                                "Received ICMP Port Unreachable (v6) from {}",
-                                ip_layer.ipv6.as_ref().unwrap().source
-                            );
-                            println!(
-                                "---- Interface: {}, Total Length: {} bytes ----",
-                                interface.name,
-                                packet.len()
-                            );
-                            println!("Packet Frame: {:?}", frame);
-                            break;
-                        }
+                    if let Some(icmpv6) = &ip_layer.icmpv6
+                        && icmpv6.icmpv6_type == Icmpv6Type::DestinationUnreachable
+                    {
+                        println!(
+                            "Received ICMP Port Unreachable (v6) from {}",
+                            ip_layer.ipv6.as_ref().unwrap().source
+                        );
+                        println!(
+                            "---- Interface: {}, Total Length: {} bytes ----",
+                            interface.name,
+                            packet.len()
+                        );
+                        println!("Packet Frame: {:?}", frame);
+                        break;
                     }
                 }
             }

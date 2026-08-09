@@ -29,6 +29,7 @@ pub const TCP_HEADER_MAX_LEN: usize = TCP_HEADER_LEN + TCP_OPTION_MAX_LEN;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TcpOptionKind {
     EOL = 0,
     NOP = 1,
@@ -280,7 +281,7 @@ pub struct TcpOptionHeader {
 
 impl TcpOptionHeader {
     /// Get the timestamp of the TCP option
-    pub fn get_timestamp(&self) -> (u32, u32) {
+    pub fn timestamp_value(&self) -> (u32, u32) {
         if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
             let mut my: [u8; 4] = [0; 4];
             my.copy_from_slice(&self.data[0..4]);
@@ -288,11 +289,16 @@ impl TcpOptionHeader {
             their.copy_from_slice(&self.data[4..8]);
             (u32::from_be_bytes(my), u32::from_be_bytes(their))
         } else {
-            return (0, 0);
+            (0, 0)
         }
     }
+    /// Deprecated compatibility alias for timestamp_value.
+    #[deprecated(note = "use timestamp_value")]
+    pub fn get_timestamp(&self) -> (u32, u32) {
+        self.timestamp_value()
+    }
     /// Get the MSS of the TCP option
-    pub fn get_mss(&self) -> u16 {
+    pub fn maximum_segment_size(&self) -> u16 {
         if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
             let mut mss: [u8; 2] = [0; 2];
             mss.copy_from_slice(&self.data[0..2]);
@@ -301,13 +307,23 @@ impl TcpOptionHeader {
             0
         }
     }
+    /// Deprecated compatibility alias for maximum_segment_size.
+    #[deprecated(note = "use maximum_segment_size")]
+    pub fn get_mss(&self) -> u16 {
+        self.maximum_segment_size()
+    }
     /// Get the WSCALE of the TCP option
-    pub fn get_wscale(&self) -> u8 {
-        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+    pub fn window_scale(&self) -> u8 {
+        if self.kind == TcpOptionKind::WSCALE && !self.data.is_empty() {
             self.data[0]
         } else {
             0
         }
+    }
+    /// Deprecated compatibility alias for window_scale.
+    #[deprecated(note = "use window_scale")]
+    pub fn get_wscale(&self) -> u8 {
+        self.window_scale()
     }
 }
 
@@ -321,6 +337,17 @@ pub struct TcpOptionPacket {
 }
 
 impl TcpOptionPacket {
+    pub(crate) fn encoded_len(&self) -> usize {
+        match self.kind {
+            TcpOptionKind::EOL | TcpOptionKind::NOP => 1,
+            _ => 2 + self.data.len(),
+        }
+    }
+
+    pub(crate) fn declared_len(&self) -> Option<u8> {
+        self.length
+    }
+
     /// NOP: This may be used to align option fields on 32-bit boundaries for better performance.
     pub fn nop() -> Self {
         TcpOptionPacket {
@@ -400,15 +427,10 @@ impl TcpOptionPacket {
     }
     /// Get length of the TCP option.
     pub fn length(&self) -> u8 {
-        if let Some(len) = self.length {
-            len
-        } else {
-            // If length is None, it means the option has no length (like NOP).
-            0
-        }
+        self.length.unwrap_or_default()
     }
     /// Get the timestamp of the TCP option
-    pub fn get_timestamp(&self) -> (u32, u32) {
+    pub fn timestamp_value(&self) -> (u32, u32) {
         if self.kind == TcpOptionKind::TIMESTAMPS && self.data.len() >= 8 {
             let mut my: [u8; 4] = [0; 4];
             my.copy_from_slice(&self.data[0..4]);
@@ -416,11 +438,16 @@ impl TcpOptionPacket {
             their.copy_from_slice(&self.data[4..8]);
             (u32::from_be_bytes(my), u32::from_be_bytes(their))
         } else {
-            return (0, 0);
+            (0, 0)
         }
     }
+    /// Deprecated compatibility alias for timestamp_value.
+    #[deprecated(note = "use timestamp_value")]
+    pub fn get_timestamp(&self) -> (u32, u32) {
+        self.timestamp_value()
+    }
     /// Get the MSS of the TCP option
-    pub fn get_mss(&self) -> u16 {
+    pub fn maximum_segment_size(&self) -> u16 {
         if self.kind == TcpOptionKind::MSS && self.data.len() >= 2 {
             let mut mss: [u8; 2] = [0; 2];
             mss.copy_from_slice(&self.data[0..2]);
@@ -429,13 +456,23 @@ impl TcpOptionPacket {
             0
         }
     }
+    /// Deprecated compatibility alias for maximum_segment_size.
+    #[deprecated(note = "use maximum_segment_size")]
+    pub fn get_mss(&self) -> u16 {
+        self.maximum_segment_size()
+    }
     /// Get the WSCALE of the TCP option
-    pub fn get_wscale(&self) -> u8 {
-        if self.kind == TcpOptionKind::WSCALE && self.data.len() > 0 {
+    pub fn window_scale(&self) -> u8 {
+        if self.kind == TcpOptionKind::WSCALE && !self.data.is_empty() {
             self.data[0]
         } else {
             0
         }
+    }
+    /// Deprecated compatibility alias for window_scale.
+    #[deprecated(note = "use window_scale")]
+    pub fn get_wscale(&self) -> u8 {
+        self.window_scale()
     }
 }
 
@@ -466,11 +503,19 @@ pub struct TcpPacket {
 impl Packet for TcpPacket {
     type Header = TcpHeader;
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        Self::try_from_buf(&mut bytes).ok()
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_buf(bytes)
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
-    fn from_bytes(mut bytes: Bytes) -> Option<Self> {
-        Self::try_from_bytes(bytes.split_to(bytes.len())).ok()
+    fn try_from_bytes(mut bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::try_from_bytes(bytes.split_to(bytes.len()))
+            .ok()
+            .ok_or(crate::parse::ParseError::Malformed {
+                context: std::any::type_name::<Self>(),
+            })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -846,7 +891,7 @@ impl<'a> MutablePacket<'a> for MutableTcpPacket<'a> {
 
     fn header_mut(&mut self) -> &mut [u8] {
         let len = self.header_len();
-        let (header, _) = (&mut *self.buffer).split_at_mut(len);
+        let (header, _) = self.buffer.split_at_mut(len);
         header
     }
 
@@ -857,13 +902,18 @@ impl<'a> MutablePacket<'a> for MutableTcpPacket<'a> {
 
     fn payload_mut(&mut self) -> &mut [u8] {
         let len = self.header_len();
-        let (_, payload) = (&mut *self.buffer).split_at_mut(len);
+        let (_, payload) = self.buffer.split_at_mut(len);
         payload
     }
 }
 
 impl<'a> MutableTcpPacket<'a> {
     /// Create a packet without validating the header fields.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete TCP header whose data-offset field fits
+    /// in the slice. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -1001,8 +1051,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.raw().len().saturating_sub(self.header_len())
     }
 
-    pub fn get_source(&self) -> u16 {
+    pub fn source(&self) -> u16 {
         u16::from_be_bytes([self.raw()[0], self.raw()[1]])
+    }
+    /// Deprecated compatibility alias for source.
+    #[deprecated(note = "use source")]
+    pub fn get_source(&self) -> u16 {
+        self.source()
     }
 
     pub fn set_source(&mut self, value: u16) {
@@ -1010,8 +1065,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_destination(&self) -> u16 {
+    pub fn destination(&self) -> u16 {
         u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+    /// Deprecated compatibility alias for destination.
+    #[deprecated(note = "use destination")]
+    pub fn get_destination(&self) -> u16 {
+        self.destination()
     }
 
     pub fn set_destination(&mut self, value: u16) {
@@ -1019,8 +1079,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_sequence(&self) -> u32 {
+    pub fn sequence(&self) -> u32 {
         u32::from_be_bytes([self.raw()[4], self.raw()[5], self.raw()[6], self.raw()[7]])
+    }
+    /// Deprecated compatibility alias for sequence.
+    #[deprecated(note = "use sequence")]
+    pub fn get_sequence(&self) -> u32 {
+        self.sequence()
     }
 
     pub fn set_sequence(&mut self, value: u32) {
@@ -1028,8 +1093,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_acknowledgement(&self) -> u32 {
+    pub fn acknowledgement(&self) -> u32 {
         u32::from_be_bytes([self.raw()[8], self.raw()[9], self.raw()[10], self.raw()[11]])
+    }
+    /// Deprecated compatibility alias for acknowledgement.
+    #[deprecated(note = "use acknowledgement")]
+    pub fn get_acknowledgement(&self) -> u32 {
+        self.acknowledgement()
     }
 
     pub fn set_acknowledgement(&mut self, value: u32) {
@@ -1037,8 +1107,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_data_offset(&self) -> u8 {
+    pub fn data_offset(&self) -> u8 {
         self.raw()[12] >> 4
+    }
+    /// Deprecated compatibility alias for data_offset.
+    #[deprecated(note = "use data_offset")]
+    pub fn get_data_offset(&self) -> u8 {
+        self.data_offset()
     }
 
     pub fn set_data_offset(&mut self, offset: u8) {
@@ -1047,8 +1122,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_reserved(&self) -> u8 {
+    pub fn reserved(&self) -> u8 {
         self.raw()[12] & 0x0F
+    }
+    /// Deprecated compatibility alias for reserved.
+    #[deprecated(note = "use reserved")]
+    pub fn get_reserved(&self) -> u8 {
+        self.reserved()
     }
 
     pub fn set_reserved(&mut self, value: u8) {
@@ -1057,8 +1137,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_flags(&self) -> u8 {
+    pub fn flags(&self) -> u8 {
         self.raw()[13]
+    }
+    /// Deprecated compatibility alias for flags.
+    #[deprecated(note = "use flags")]
+    pub fn get_flags(&self) -> u8 {
+        self.flags()
     }
 
     pub fn set_flags(&mut self, flags: u8) {
@@ -1066,8 +1151,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_window(&self) -> u16 {
+    pub fn window(&self) -> u16 {
         u16::from_be_bytes([self.raw()[14], self.raw()[15]])
+    }
+    /// Deprecated compatibility alias for window.
+    #[deprecated(note = "use window")]
+    pub fn get_window(&self) -> u16 {
+        self.window()
     }
 
     pub fn set_window(&mut self, value: u16) {
@@ -1075,8 +1165,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.after_field_mutation();
     }
 
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.raw()[16], self.raw()[17]])
+    }
+    /// Deprecated compatibility alias for checksum.
+    #[deprecated(note = "use checksum")]
+    pub fn get_checksum(&self) -> u16 {
+        self.checksum()
     }
 
     pub fn set_checksum(&mut self, value: u16) {
@@ -1084,8 +1179,13 @@ impl<'a> MutableTcpPacket<'a> {
         self.checksum.clear_dirty();
     }
 
-    pub fn get_urgent_ptr(&self) -> u16 {
+    pub fn urgent_ptr(&self) -> u16 {
         u16::from_be_bytes([self.raw()[18], self.raw()[19]])
+    }
+    /// Deprecated compatibility alias for urgent_ptr.
+    #[deprecated(note = "use urgent_ptr")]
+    pub fn get_urgent_ptr(&self) -> u16 {
+        self.urgent_ptr()
     }
 
     pub fn set_urgent_ptr(&mut self, value: u16) {
@@ -1227,8 +1327,8 @@ mod tests {
                 destination: 0x2328,
                 sequence: 0x9037d2b8,
                 acknowledgement: 0x944bb276,
-                data_offset: 8.into(), // 8 * 4 = 32 bytes
-                reserved: 0.into(),
+                data_offset: 8, // 8 * 4 = 32 bytes
+                reserved: 0,
                 flags: 0x18, // PSH + ACK
                 window: 0x0faf,
                 checksum: 0xc031,
@@ -1304,7 +1404,7 @@ mod tests {
 
         let frozen = packet.freeze().expect("freeze");
         let expected = ipv4_checksum(&frozen, &src, &dst);
-        assert_eq!(updated, expected as u16);
+        assert_eq!(updated, expected);
     }
 
     #[test]

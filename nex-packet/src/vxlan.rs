@@ -25,42 +25,49 @@ pub struct VxlanPacket {
 impl Packet for VxlanPacket {
     type Header = ();
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 8 {
-            return None;
-        }
+    fn try_from_buf(mut bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < 8 {
+                return None;
+            }
 
-        let flags = bytes.get_u8();
+            let flags = bytes.get_u8();
 
-        let reserved1 = {
-            let b1 = bytes.get_u8();
-            let b2 = bytes.get_u8();
-            let b3 = bytes.get_u8();
-            bitfield::utils::u24be_from_bytes([b1, b2, b3])
-        };
+            let reserved1 = {
+                let b1 = bytes.get_u8();
+                let b2 = bytes.get_u8();
+                let b3 = bytes.get_u8();
+                bitfield::utils::u24be_from_bytes([b1, b2, b3])
+            };
 
-        let vni = {
-            let b1 = bytes.get_u8();
-            let b2 = bytes.get_u8();
-            let b3 = bytes.get_u8();
-            bitfield::utils::u24be_from_bytes([b1, b2, b3])
-        };
+            let vni = {
+                let b1 = bytes.get_u8();
+                let b2 = bytes.get_u8();
+                let b3 = bytes.get_u8();
+                bitfield::utils::u24be_from_bytes([b1, b2, b3])
+            };
 
-        let reserved2 = bytes.get_u8();
+            let reserved2 = bytes.get_u8();
 
-        let payload = Bytes::copy_from_slice(bytes);
+            let payload = Bytes::copy_from_slice(bytes);
 
-        Some(Self {
-            flags,
-            reserved1,
-            vni,
-            reserved2,
-            payload,
+            Some(Self {
+                flags,
+                reserved1,
+                vni,
+                reserved2,
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {

@@ -46,10 +46,10 @@ impl AsyncTcpSocket {
             socket.set_reuse_port(flag)?;
         }
         if let Some(flag) = config.nodelay {
-            socket.set_nodelay(flag)?;
+            socket.set_tcp_nodelay(flag)?;
         }
         if let Some(ttl) = config.ttl {
-            socket.set_ttl(ttl)?;
+            socket.set_ttl_v4(ttl)?;
         }
         if let Some(hoplimit) = config.hoplimit {
             socket.set_unicast_hops_v6(hoplimit)?;
@@ -70,25 +70,9 @@ impl AsyncTcpSocket {
             socket.set_send_buffer_size(size)?;
         }
         if let Some(tos) = config.tos {
-            socket.set_tos(tos)?;
+            socket.set_tos_v4(tos)?;
         }
-        #[cfg(any(
-            target_os = "android",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "ios",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "tvos",
-            target_os = "visionos",
-            target_os = "watchos"
-        ))]
-        if let Some(tclass) = config.tclass_v6 {
-            socket.set_tclass_v6(tclass)?;
-        }
+        crate::apply_tclass_v6(&socket, config.tclass_v6)?;
         if let Some(only_v6) = config.only_v6 {
             socket.set_only_v6(only_v6)?;
         }
@@ -141,7 +125,7 @@ impl AsyncTcpSocket {
             Ok(_) => {
                 // connection completed immediately (rare case)
                 let std_stream: StdTcpStream = self.socket.into();
-                return TcpStream::from_std(std_stream);
+                TcpStream::from_std(std_stream)
             }
             Err(e)
                 if e.kind() == io::ErrorKind::WouldBlock
@@ -157,11 +141,9 @@ impl AsyncTcpSocket {
                     return Err(err);
                 }
 
-                return Ok(stream);
+                Ok(stream)
             }
-            Err(e) => {
-                return Err(e);
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -195,7 +177,8 @@ impl AsyncTcpSocket {
 
     /// Receive a raw TCP packet. Requires `SockType::RAW`.
     pub fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        // Safety: `MaybeUninit<u8>` has the same memory layout as `u8`.
+        // SAFETY: `MaybeUninit<u8>` has the same layout as `u8`, and the slice
+        // preserves the original buffer's length and lifetime.
         let buf_maybe = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,
@@ -266,12 +249,12 @@ impl AsyncTcpSocket {
 
     /// Set no delay option for TCP.
     pub fn set_nodelay(&self, on: bool) -> io::Result<()> {
-        self.socket.set_nodelay(on)
+        self.socket.set_tcp_nodelay(on)
     }
 
     /// Get no delay option for TCP.
     pub fn nodelay(&self) -> io::Result<bool> {
-        self.socket.nodelay()
+        self.socket.tcp_nodelay()
     }
 
     /// Set linger option for the socket.
@@ -281,12 +264,12 @@ impl AsyncTcpSocket {
 
     /// Set the time-to-live for IPv4 packets.
     pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
-        self.socket.set_ttl(ttl)
+        self.socket.set_ttl_v4(ttl)
     }
 
     /// Get the time-to-live for IPv4 packets.
     pub fn ttl(&self) -> io::Result<u32> {
-        self.socket.ttl()
+        self.socket.ttl_v4()
     }
 
     /// Set the hop limit for IPv6 packets.
@@ -331,12 +314,12 @@ impl AsyncTcpSocket {
 
     /// Set IPv4 TOS / DSCP.
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
-        self.socket.set_tos(tos)
+        self.socket.set_tos_v4(tos)
     }
 
     /// Get IPv4 TOS / DSCP.
     pub fn tos(&self) -> io::Result<u32> {
-        self.socket.tos()
+        self.socket.tos_v4()
     }
 
     /// Set IPv6 traffic class where supported.
@@ -345,14 +328,10 @@ impl AsyncTcpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
         self.socket.set_tclass_v6(tclass)
@@ -364,14 +343,10 @@ impl AsyncTcpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn tclass_v6(&self) -> io::Result<u32> {
         self.socket.tclass_v6()
@@ -407,7 +382,7 @@ impl AsyncTcpSocket {
         self.socket
             .local_addr()?
             .as_socket()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to retrieve local address"))
+            .ok_or_else(|| io::Error::other("failed to retrieve local address"))
     }
 
     /// Convert the internal socket into a Tokio `TcpStream`.

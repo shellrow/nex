@@ -15,6 +15,7 @@ pub const DHCP_MIN_PACKET_SIZE: usize = 236;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum DhcpOperation {
     Request = 1,
     Reply = 2,
@@ -43,6 +44,7 @@ impl DhcpOperation {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum DhcpHardwareType {
     Ethernet = 1,
     ExperimentalEthernet = 2,
@@ -277,63 +279,70 @@ pub struct DhcpPacket {
 impl Packet for DhcpPacket {
     type Header = DhcpHeader;
 
-    fn from_buf(mut bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < DHCP_MIN_PACKET_SIZE {
-            return None;
-        }
+    fn try_from_buf(mut bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < DHCP_MIN_PACKET_SIZE {
+                return None;
+            }
 
-        let op = DhcpOperation::new(bytes.get_u8());
-        let htype = DhcpHardwareType::new(bytes.get_u8());
-        let hlen = bytes.get_u8();
-        let hops = bytes.get_u8();
-        let xid = bytes.get_u32();
-        let secs = bytes.get_u16();
-        let flags = bytes.get_u16();
+            let op = DhcpOperation::new(bytes.get_u8());
+            let htype = DhcpHardwareType::new(bytes.get_u8());
+            let hlen = bytes.get_u8();
+            let hops = bytes.get_u8();
+            let xid = bytes.get_u32();
+            let secs = bytes.get_u16();
+            let flags = bytes.get_u16();
 
-        let ciaddr = Ipv4Addr::from(bytes.get_u32());
-        let yiaddr = Ipv4Addr::from(bytes.get_u32());
-        let siaddr = Ipv4Addr::from(bytes.get_u32());
-        let giaddr = Ipv4Addr::from(bytes.get_u32());
+            let ciaddr = Ipv4Addr::from(bytes.get_u32());
+            let yiaddr = Ipv4Addr::from(bytes.get_u32());
+            let siaddr = Ipv4Addr::from(bytes.get_u32());
+            let giaddr = Ipv4Addr::from(bytes.get_u32());
 
-        let mut chaddr = [0u8; 6];
-        bytes.copy_to_slice(&mut chaddr);
-        let chaddr = MacAddr::from_octets(chaddr);
+            let mut chaddr = [0u8; 6];
+            bytes.copy_to_slice(&mut chaddr);
+            let chaddr = MacAddr::from_octets(chaddr);
 
-        let mut chaddr_pad = [0u8; 10];
-        bytes.copy_to_slice(&mut chaddr_pad);
+            let mut chaddr_pad = [0u8; 10];
+            bytes.copy_to_slice(&mut chaddr_pad);
 
-        let mut sname = [0u8; 64];
-        bytes.copy_to_slice(&mut sname);
+            let mut sname = [0u8; 64];
+            bytes.copy_to_slice(&mut sname);
 
-        let mut file = [0u8; 128];
-        bytes.copy_to_slice(&mut file);
+            let mut file = [0u8; 128];
+            bytes.copy_to_slice(&mut file);
 
-        let header = DhcpHeader {
-            op,
-            htype,
-            hlen,
-            hops,
-            xid,
-            secs,
-            flags,
-            ciaddr,
-            yiaddr,
-            siaddr,
-            giaddr,
-            chaddr,
-            chaddr_pad: chaddr_pad.to_vec(),
-            sname: sname.to_vec(),
-            file: file.to_vec(),
-        };
+            let header = DhcpHeader {
+                op,
+                htype,
+                hlen,
+                hops,
+                xid,
+                secs,
+                flags,
+                ciaddr,
+                yiaddr,
+                siaddr,
+                giaddr,
+                chaddr,
+                chaddr_pad: chaddr_pad.to_vec(),
+                sname: sname.to_vec(),
+                file: file.to_vec(),
+            };
 
-        Some(Self {
-            header,
-            payload: Bytes::copy_from_slice(bytes),
+            Some(Self {
+                header,
+                payload: Bytes::copy_from_slice(bytes),
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
 
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {

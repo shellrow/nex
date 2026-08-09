@@ -1,7 +1,7 @@
 //! Asynchronous data link layer I/O operations.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod linux;
+mod linux;
 
 #[cfg(any(
     target_os = "freebsd",
@@ -11,17 +11,17 @@ pub mod linux;
     target_os = "macos",
     target_os = "ios",
 ))]
-pub mod bpf;
+mod bpf;
 
 #[cfg(windows)]
-pub mod wpcap;
+mod wpcap;
 
 use std::io;
 use std::task::{Context, Poll};
 
 use futures_core::stream::Stream;
 
-use crate::Config;
+use crate::{Config, DatalinkError};
 
 /// Trait for asynchronously sending raw packets.
 pub trait AsyncRawSender: Send {
@@ -50,28 +50,36 @@ pub enum AsyncChannel {
 }
 
 /// Creates a new asynchronous datalink channel for sending and receiving raw packets.
+///
+/// The returned sender reports `Poll::Pending` when the backend is not writable
+/// and registers the current task for wakeup. The receiver is a
+/// [`Stream<Item = io::Result<Vec<u8>>>`](Stream); each item owns its bytes so
+/// it remains valid after the next poll. Configuration fields have the same
+/// platform support as [`crate::channel`]; async readiness replaces blocking
+/// waits, so synchronous timeout settings are not a portable stream deadline.
 #[inline]
 pub fn async_channel(
     network_interface: &nex_core::interface::Interface,
     configuration: Config,
-) -> io::Result<AsyncChannel> {
-    #[cfg(all(any(target_os = "linux", target_os = "android")))]
+) -> Result<AsyncChannel, DatalinkError> {
+    configuration.validate()?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        linux::channel(network_interface, configuration)
+        linux::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
-    #[cfg(all(any(
+    #[cfg(any(
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "illumos",
         target_os = "solaris",
         target_os = "macos",
         target_os = "ios",
-    )))]
+    ))]
     {
-        bpf::channel(network_interface, configuration)
+        bpf::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
     #[cfg(windows)]
     {
-        wpcap::channel(network_interface, configuration)
+        wpcap::channel(network_interface, configuration).map_err(DatalinkError::Io)
     }
 }

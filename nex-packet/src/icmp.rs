@@ -23,6 +23,7 @@ pub const ICMPV4_IP_PACKET_LEN: usize = IPV4_HEADER_LEN + ICMPV4_HEADER_LEN;
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum IcmpType {
     EchoReply,
     DestinationUnreachable,
@@ -184,25 +185,32 @@ pub struct IcmpPacket {
 impl Packet for IcmpPacket {
     type Header = IcmpHeader;
 
-    fn from_buf(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < ICMPV4_HEADER_LEN {
-            return None;
-        }
-        let icmp_type = IcmpType::new(bytes[0]);
-        let icmp_code = IcmpCode::new(bytes[1]);
-        let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
-        let payload = Bytes::copy_from_slice(&bytes[ICMP_COMMON_HEADER_LEN..]);
-        Some(IcmpPacket {
-            header: IcmpHeader {
-                icmp_type,
-                icmp_code,
-                checksum,
-            },
-            payload,
+    fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
+        (|| -> Option<Self> {
+            if bytes.len() < ICMPV4_HEADER_LEN {
+                return None;
+            }
+            let icmp_type = IcmpType::new(bytes[0]);
+            let icmp_code = IcmpCode::new(bytes[1]);
+            let checksum = u16::from_be_bytes([bytes[2], bytes[3]]);
+            let payload = Bytes::copy_from_slice(&bytes[ICMP_COMMON_HEADER_LEN..]);
+            Some(IcmpPacket {
+                header: IcmpHeader {
+                    icmp_type,
+                    icmp_code,
+                    checksum,
+                },
+                payload,
+            })
+        })()
+        .ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
         })
     }
-    fn from_bytes(bytes: Bytes) -> Option<Self> {
-        Self::from_buf(&bytes)
+    fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
+        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
+            context: std::any::type_name::<Self>(),
+        })
     }
 
     fn to_bytes(&self) -> Bytes {
@@ -242,7 +250,7 @@ impl Packet for IcmpPacket {
 impl IcmpPacket {
     pub fn with_computed_checksum(&self) -> Self {
         let mut pkt = self.clone();
-        pkt.header.checksum = checksum(&pkt).into();
+        pkt.header.checksum = checksum(&pkt);
         pkt
     }
 }
@@ -277,7 +285,7 @@ impl<'a> MutablePacket<'a> for MutableIcmpPacket<'a> {
     }
 
     fn header_mut(&mut self) -> &mut [u8] {
-        let (header, _) = (&mut *self.buffer).split_at_mut(ICMP_COMMON_HEADER_LEN);
+        let (header, _) = self.buffer.split_at_mut(ICMP_COMMON_HEADER_LEN);
         header
     }
 
@@ -286,13 +294,18 @@ impl<'a> MutablePacket<'a> for MutableIcmpPacket<'a> {
     }
 
     fn payload_mut(&mut self) -> &mut [u8] {
-        let (_, payload) = (&mut *self.buffer).split_at_mut(ICMP_COMMON_HEADER_LEN);
+        let (_, payload) = self.buffer.split_at_mut(ICMP_COMMON_HEADER_LEN);
         payload
     }
 }
 
 impl<'a> MutableIcmpPacket<'a> {
     /// Create a mutable ICMP packet without performing validation.
+    ///
+    /// # Safety
+    ///
+    /// `buffer` must contain a complete ICMP header before any field accessor
+    /// is called. Prefer [`MutablePacket::new`].
     pub fn new_unchecked(buffer: &'a mut [u8]) -> Self {
         Self {
             buffer,
@@ -364,8 +377,13 @@ impl<'a> MutableIcmpPacket<'a> {
     }
 
     /// Returns the current ICMP type field.
-    pub fn get_type(&self) -> IcmpType {
+    pub fn packet_type(&self) -> IcmpType {
         IcmpType::new(self.raw()[0])
+    }
+    /// Deprecated compatibility alias for packet_type.
+    #[deprecated(note = "use packet_type")]
+    pub fn get_type(&self) -> IcmpType {
+        self.packet_type()
     }
 
     /// Sets the ICMP type field and marks the checksum as dirty.
@@ -375,8 +393,13 @@ impl<'a> MutableIcmpPacket<'a> {
     }
 
     /// Returns the current ICMP code field.
-    pub fn get_code(&self) -> IcmpCode {
+    pub fn code(&self) -> IcmpCode {
         IcmpCode::new(self.raw()[1])
+    }
+    /// Deprecated compatibility alias for code.
+    #[deprecated(note = "use code")]
+    pub fn get_code(&self) -> IcmpCode {
+        self.code()
     }
 
     /// Sets the ICMP code field and marks the checksum as dirty.
@@ -386,8 +409,13 @@ impl<'a> MutableIcmpPacket<'a> {
     }
 
     /// Returns the serialized checksum value.
-    pub fn get_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([self.raw()[2], self.raw()[3]])
+    }
+    /// Deprecated compatibility alias for checksum.
+    #[deprecated(note = "use checksum")]
+    pub fn get_checksum(&self) -> u16 {
+        self.checksum()
     }
 
     /// Sets the serialized checksum value and clears the dirty flag.
@@ -541,8 +569,8 @@ pub mod echo_reply {
 
             Ok(Self {
                 header: pkt.header,
-                identifier: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]).into(),
-                sequence_number: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]).into(),
+                identifier: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]),
+                sequence_number: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -615,8 +643,8 @@ pub mod destination_unreachable {
 
             Ok(Self {
                 header: pkt.header,
-                unused: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]).into(),
-                next_hop_mtu: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]).into(),
+                unused: u16::from_be_bytes([pkt.payload[0], pkt.payload[1]]),
+                next_hop_mtu: u16::from_be_bytes([pkt.payload[2], pkt.payload[3]]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -664,8 +692,7 @@ pub mod time_exceeded {
                     pkt.payload[1],
                     pkt.payload[2],
                     pkt.payload[3],
-                ])
-                .into(),
+                ]),
                 payload: pkt.payload.slice(4..),
             })
         }
@@ -802,7 +829,7 @@ mod tests {
         assert_eq!(packet.get_checksum(), updated);
 
         let frozen = packet.freeze().expect("freeze");
-        let expected: u16 = checksum(&frozen).into();
+        let expected: u16 = checksum(&frozen);
         assert_eq!(packet.get_checksum(), expected);
     }
 
@@ -822,7 +849,7 @@ mod tests {
         assert!(!packet.is_checksum_dirty());
 
         let frozen = packet.freeze().expect("freeze");
-        let expected: u16 = checksum(&frozen).into();
+        let expected: u16 = checksum(&frozen);
         assert_ne!(baseline, expected);
         assert_eq!(packet.get_checksum(), expected);
     }

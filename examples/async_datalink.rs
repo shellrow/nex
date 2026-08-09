@@ -22,7 +22,7 @@ use nex_packet::{icmp, icmpv6};
 use std::env;
 use std::net::IpAddr;
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let interface = match env::args().nth(2) {
         Some(name) => nex::net::interface::get_interfaces()
             .into_iter()
@@ -45,7 +45,7 @@ fn main() -> std::io::Result<()> {
     let src_ip: IpAddr = match target_ip {
         IpAddr::V4(_) => interface
             .ipv4
-            .get(0)
+            .first()
             .map(|v| IpAddr::V4(v.addr()))
             .expect("No IPv4 address"),
         IpAddr::V6(_) => interface
@@ -62,15 +62,15 @@ fn main() -> std::io::Result<()> {
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid ICMP packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
             .icmpv6_type(Icmpv6Type::EchoRequest)
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
             .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid ICMPv6 packet"),
         _ => panic!("Source and destination IP version mismatch"),
     };
 
@@ -81,15 +81,15 @@ fn main() -> std::io::Result<()> {
             .protocol(IpNextProtocol::Icmp)
             .flags(Ipv4Flags::DontFragment)
             .payload(icmp_packet)
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv4 packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
             .destination(dst)
             .next_header(IpNextProtocol::Icmpv6)
             .payload(icmp_packet)
-            .build()
-            .to_bytes(),
+            .to_bytes()
+            .expect("valid IPv6 packet"),
         _ => unreachable!(),
     };
 
@@ -97,7 +97,7 @@ fn main() -> std::io::Result<()> {
         .source(if use_tun {
             MacAddr::zero()
         } else {
-            interface.mac_addr.clone().unwrap()
+            interface.mac_addr.unwrap()
         })
         .destination(if use_tun {
             MacAddr::zero()
@@ -133,38 +133,38 @@ fn main() -> std::io::Result<()> {
                         parse_option.from_ip_packet = true;
                         parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
                     }
-                    let frame = Frame::from_buf(&packet, parse_option).unwrap();
+                    let frame = Frame::try_from_buf(&packet, parse_option).unwrap();
 
                     if let Some(ip_layer) = &frame.ip {
-                        if let Some(icmp) = &ip_layer.icmp {
-                            if icmp.icmp_type == IcmpType::EchoReply {
-                                println!(
-                                    "Received ICMP Echo Reply from {}",
-                                    ip_layer.ipv4.as_ref().unwrap().source
-                                );
-                                println!(
-                                    "---- Interface: {}, Total Length: {} bytes ----",
-                                    interface.name,
-                                    packet.len()
-                                );
-                                println!("Frame: {:?}", frame);
-                                break;
-                            }
+                        if let Some(icmp) = &ip_layer.icmp
+                            && icmp.icmp_type == IcmpType::EchoReply
+                        {
+                            println!(
+                                "Received ICMP Echo Reply from {}",
+                                ip_layer.ipv4.as_ref().unwrap().source
+                            );
+                            println!(
+                                "---- Interface: {}, Total Length: {} bytes ----",
+                                interface.name,
+                                packet.len()
+                            );
+                            println!("Frame: {:?}", frame);
+                            break;
                         }
-                        if let Some(icmpv6) = &ip_layer.icmpv6 {
-                            if icmpv6.icmpv6_type == Icmpv6Type::EchoReply {
-                                println!(
-                                    "Received ICMPv6 Echo Reply from {}",
-                                    ip_layer.ipv6.as_ref().unwrap().source
-                                );
-                                println!(
-                                    "---- Interface: {}, Total Length: {} bytes ----",
-                                    interface.name,
-                                    packet.len()
-                                );
-                                println!("Frame: {:?}", frame);
-                                break;
-                            }
+                        if let Some(icmpv6) = &ip_layer.icmpv6
+                            && icmpv6.icmpv6_type == Icmpv6Type::EchoReply
+                        {
+                            println!(
+                                "Received ICMPv6 Echo Reply from {}",
+                                ip_layer.ipv6.as_ref().unwrap().source
+                            );
+                            println!(
+                                "---- Interface: {}, Total Length: {} bytes ----",
+                                interface.name,
+                                packet.len()
+                            );
+                            println!("Frame: {:?}", frame);
+                            break;
                         }
                     }
                 }

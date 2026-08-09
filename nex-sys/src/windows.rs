@@ -22,12 +22,25 @@ pub type SockAddrFamily6 = ws::ADDRESS_FAMILY;
 pub type InAddr = ws::IN_ADDR;
 pub type In6Addr = ws::IN6_ADDR;
 
+/// Close a raw Windows socket.
+///
+/// # Safety
+///
+/// `sock` must be a valid socket owned by the caller. It must not be used
+/// again after this function returns.
 pub unsafe fn close(sock: CSocket) {
+    // SAFETY: The caller guarantees that `sock` is a valid owned socket.
     unsafe {
         let _ = ws::closesocket(sock);
     }
 }
 
+/// Call WinSock `sendto` using raw socket arguments.
+///
+/// # Safety
+///
+/// `buf` must be valid for reads of `len` bytes. `to` must point to a valid
+/// socket address of length `tolen`.
 pub unsafe fn sendto(
     socket: CSocket,
     buf: Buf,
@@ -36,9 +49,17 @@ pub unsafe fn sendto(
     to: *const SockAddr,
     tolen: SockLen,
 ) -> CouldFail {
+    // SAFETY: The caller guarantees the buffer and address pointer contracts
+    // documented on this function.
     unsafe { ws::sendto(socket, buf as *const u8, len, flags, to, tolen) }
 }
 
+/// Call WinSock `recvfrom` using raw socket arguments.
+///
+/// # Safety
+///
+/// `buf` must be valid for writes of `len` bytes. `addr` and `addrlen` must
+/// point to writable storage for the returned socket address.
 pub unsafe fn recvfrom(
     socket: CSocket,
     buf: MutBuf,
@@ -47,6 +68,8 @@ pub unsafe fn recvfrom(
     addr: *mut SockAddr,
     addrlen: *mut SockLen,
 ) -> CouldFail {
+    // SAFETY: The caller guarantees the writable buffer and address pointer
+    // contracts documented on this function.
     unsafe { ws::recvfrom(socket, buf as *mut u8, len, flags, addr, addrlen) }
 }
 

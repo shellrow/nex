@@ -36,6 +36,7 @@ pub use libc::{IFF_BROADCAST, IFF_LOOPBACK, IFF_MULTICAST, IFF_POINTOPOINT, IFF_
 /// `sock` must be a valid descriptor owned by the caller. It must not be used
 /// again after this function returns.
 pub unsafe fn close(sock: CSocket) {
+    // SAFETY: The caller guarantees that `sock` is a valid owned descriptor.
     unsafe {
         let _ = libc::close(sock);
     }
@@ -48,8 +49,15 @@ fn ntohs(u: u16) -> u16 {
 pub fn sockaddr_to_addr(storage: &SockAddrStorage, len: usize) -> io::Result<SocketAddr> {
     match storage.ss_family as libc::c_int {
         AF_INET => {
-            assert!(len >= mem::size_of::<SockAddrIn>());
-            let storage: &SockAddrIn = unsafe { mem::transmute(storage) };
+            if len < mem::size_of::<SockAddrIn>() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "IPv4 socket address is truncated",
+                ));
+            }
+            // SAFETY: `SockAddrStorage` is large and aligned enough for
+            // `SockAddrIn`, and the reported length was checked above.
+            let storage = unsafe { &*(storage as *const SockAddrStorage as *const SockAddrIn) };
             let ip = ipv4_addr_int(storage.sin_addr);
             // octets
             let o1 = (ip >> 24) as u8;
@@ -61,19 +69,16 @@ pub fn sockaddr_to_addr(storage: &SockAddrStorage, len: usize) -> io::Result<Soc
             Ok(SocketAddr::V4(sockaddrv4))
         }
         AF_INET6 => {
-            assert!(len >= mem::size_of::<SockAddrIn6>());
-            let storage: &SockAddrIn6 = unsafe { mem::transmute(storage) };
-            let arr: [u16; 8] = unsafe { mem::transmute(storage.sin6_addr.s6_addr) };
-            // hextets
-            let h1 = ntohs(arr[0]);
-            let h2 = ntohs(arr[1]);
-            let h3 = ntohs(arr[2]);
-            let h4 = ntohs(arr[3]);
-            let h5 = ntohs(arr[4]);
-            let h6 = ntohs(arr[5]);
-            let h7 = ntohs(arr[6]);
-            let h8 = ntohs(arr[7]);
-            let ip = Ipv6Addr::new(h1, h2, h3, h4, h5, h6, h7, h8);
+            if len < mem::size_of::<SockAddrIn6>() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "IPv6 socket address is truncated",
+                ));
+            }
+            // SAFETY: `SockAddrStorage` is large and aligned enough for
+            // `SockAddrIn6`, and the reported length was checked above.
+            let storage = unsafe { &*(storage as *const SockAddrStorage as *const SockAddrIn6) };
+            let ip = Ipv6Addr::from(storage.sin6_addr.s6_addr);
             Ok(SocketAddr::V6(SocketAddrV6::new(
                 ip,
                 ntohs(storage.sin6_port),
@@ -130,6 +135,8 @@ pub unsafe fn sendto(
     addr: *const SockAddr,
     addrlen: SockLen,
 ) -> CouldFail {
+    // SAFETY: The caller guarantees the buffer and address pointer contracts
+    // documented on this function.
     unsafe { libc::sendto(socket, buf, len, flags, addr, addrlen) }
 }
 
@@ -147,6 +154,8 @@ pub unsafe fn recvfrom(
     addr: *mut SockAddr,
     addrlen: *mut SockLen,
 ) -> CouldFail {
+    // SAFETY: The caller guarantees the writable buffer and address pointer
+    // contracts documented on this function.
     unsafe { libc::recvfrom(socket, buf, len, flags, addr, addrlen) }
 }
 
@@ -192,5 +201,29 @@ mod tests {
             s_addr: u32::from_be(0x7f000001),
         };
         assert_eq!(ipv4_addr_int(addr), 0x7f000001);
+    }
+
+    #[test]
+    fn sockaddr_to_addr_rejects_truncated_ipv4_storage() {
+        // SAFETY: An all-zero byte pattern is valid for `sockaddr_storage`.
+        let mut storage: SockAddrStorage = unsafe { mem::zeroed() };
+        storage.ss_family = AF_INET as SockAddrFamily;
+
+        let error = sockaddr_to_addr(&storage, mem::size_of::<SockAddrIn>() - 1)
+            .expect_err("truncated IPv4 storage must be rejected");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn sockaddr_to_addr_rejects_truncated_ipv6_storage() {
+        // SAFETY: An all-zero byte pattern is valid for `sockaddr_storage`.
+        let mut storage: SockAddrStorage = unsafe { mem::zeroed() };
+        storage.ss_family = AF_INET6 as SockAddrFamily;
+
+        let error = sockaddr_to_addr(&storage, mem::size_of::<SockAddrIn6>() - 1)
+            .expect_err("truncated IPv6 storage must be rejected");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     }
 }
