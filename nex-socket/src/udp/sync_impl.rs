@@ -92,23 +92,7 @@ impl UdpSocket {
         if let Some(tos) = config.tos {
             socket.set_tos_v4(tos)?;
         }
-        #[cfg(any(
-            target_os = "android",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "ios",
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "netbsd",
-            target_os = "openbsd",
-            target_os = "tvos",
-            target_os = "visionos",
-            target_os = "watchos"
-        ))]
-        if let Some(tclass) = config.tclass_v6 {
-            socket.set_tclass_v6(tclass)?;
-        }
+        crate::apply_tclass_v6(&socket, config.tclass_v6)?;
         if let Some(only_v6) = config.only_v6 {
             socket.set_only_v6(only_v6)?;
         }
@@ -206,7 +190,14 @@ impl UdpSocket {
                             IpAddr::V4(v4) => Some(v4),
                             IpAddr::V6(_) => None,
                         }) {
-                            pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
+                            #[cfg(target_os = "netbsd")]
+                            {
+                                pktinfo.ipi_addr.s_addr = u32::from_ne_bytes(src.octets());
+                            }
+                            #[cfg(not(target_os = "netbsd"))]
+                            {
+                                pktinfo.ipi_spec_dst.s_addr = u32::from_ne_bytes(src.octets());
+                            }
                         }
                         if let Some(ifindex) = meta.interface_index {
                             pktinfo.ipi_ifindex = ifindex.try_into().map_err(|_| {
@@ -562,14 +553,10 @@ impl UdpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
         self.socket.set_tclass_v6(tclass)
@@ -580,14 +567,10 @@ impl UdpSocket {
         target_os = "dragonfly",
         target_os = "freebsd",
         target_os = "fuchsia",
-        target_os = "ios",
         target_os = "linux",
         target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "tvos",
-        target_os = "visionos",
-        target_os = "watchos"
+        target_os = "openbsd"
     ))]
     pub fn tclass_v6(&self) -> io::Result<u32> {
         self.socket.tclass_v6()
