@@ -183,7 +183,7 @@ impl<T: Activated + State + Send + Sync> RawReceiver for RawReceiverImpl<T> {
         let mut cap = lock_capture(&self.capture)?;
         match cap.next_packet() {
             Ok(pkt) => {
-                self.read_buffer.truncate(0);
+                self.read_buffer.clear();
                 self.read_buffer.extend(pkt.data);
             }
             Err(e) => return Err(io::Error::other(e)),

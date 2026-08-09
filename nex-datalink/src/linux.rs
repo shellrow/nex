@@ -293,10 +293,7 @@ impl RawSender for RawSenderImpl {
                         return Some(Err(e));
                     }
                 } else {
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Unexpected poll event",
-                    )));
+                    return Some(Err(io::Error::other("Unexpected poll event")));
                 }
             }
 
@@ -349,10 +346,7 @@ impl RawSender for RawSenderImpl {
                 Ok(_) => Some(Ok(())),
             }
         } else {
-            Some(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unexpected poll event",
-            )))
+            Some(Err(io::Error::other("Unexpected poll event")))
         }
     }
 }
@@ -403,10 +397,7 @@ impl RawReceiver for RawReceiverImpl {
                 Err(e) => Err(e),
             }
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unexpected poll event",
-            ))
+            Err(io::Error::other("Unexpected poll event"))
         }
     }
 }
