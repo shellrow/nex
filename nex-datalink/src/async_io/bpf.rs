@@ -120,21 +120,15 @@ impl Stream for AsyncBpfSocketReceiver {
                     };
                     let header_len = packet.bh_hdrlen as usize;
                     let captured_len = packet.bh_caplen as usize;
-                    let Some(record_len) = header_len.checked_add(captured_len) else {
-                        return Poll::Ready(Some(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "BPF record length overflow",
-                        ))));
+                    let record_len = match crate::bpf::validate_record_lengths(
+                        header_len,
+                        captured_len,
+                        remaining,
+                        header_size,
+                    ) {
+                        Ok(record_len) => record_len,
+                        Err(err) => return Poll::Ready(Some(Err(err))),
                     };
-                    if header_len < mem::size_of::<bpf::bpf_hdr>()
-                        || captured_len < header_size
-                        || record_len > remaining
-                    {
-                        return Poll::Ready(Some(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "invalid BPF record lengths",
-                        ))));
-                    }
                     me.packets.push_back((
                         cursor + header_len + header_size,
                         captured_len - header_size,

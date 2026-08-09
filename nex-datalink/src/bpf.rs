@@ -63,6 +63,27 @@ impl Default for Config {
     }
 }
 
+pub(crate) fn validate_record_lengths(
+    header_len: usize,
+    captured_len: usize,
+    remaining: usize,
+    minimum_payload_len: usize,
+) -> io::Result<usize> {
+    let record_len = header_len
+        .checked_add(captured_len)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "BPF record length overflow"))?;
+    if header_len < bpf::BPF_HDR_FIELD_LEN
+        || captured_len < minimum_payload_len
+        || record_len > remaining
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid BPF record lengths",
+        ));
+    }
+    Ok(record_len)
+}
+
 /// Create a datalink channel using the /dev/bpf device
 // NOTE buffer must be word aligned.
 #[inline]
@@ -432,18 +453,8 @@ impl RawReceiver for RawReceiverImpl {
                     };
                     let header_len = packet.bh_hdrlen as usize;
                     let captured_len = packet.bh_caplen as usize;
-                    let record_len = header_len.checked_add(captured_len).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "BPF record length overflow")
-                    })?;
-                    if header_len < mem::size_of::<bpf::bpf_hdr>()
-                        || captured_len < header_size
-                        || record_len > remaining
-                    {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "invalid BPF record lengths",
-                        ));
-                    }
+                    let record_len =
+                        validate_record_lengths(header_len, captured_len, remaining, header_size)?;
                     self.packets.push_back((
                         cursor + header_len + header_size,
                         captured_len - header_size,
@@ -479,5 +490,40 @@ impl RawReceiver for RawReceiverImpl {
             *i = 0;
         }
         Ok(&self.read_buffer[start..start + len])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_header_without_repr_c_trailing_padding() {
+        let header_len = bpf::BPF_HDR_FIELD_LEN;
+        let captured_len = 86;
+
+        assert_eq!(
+            validate_record_lengths(header_len, captured_len, header_len + captured_len, 0,)
+                .unwrap(),
+            header_len + captured_len
+        );
+    }
+
+    #[test]
+    fn rejects_header_that_cannot_contain_all_fields() {
+        let header_len = bpf::BPF_HDR_FIELD_LEN - 1;
+        let err = validate_record_lengths(header_len, 86, header_len + 86, 0).unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[cfg(all(
+        any(target_os = "macos", target_os = "ios"),
+        target_pointer_width = "64"
+    ))]
+    #[test]
+    fn apple_bpf_header_has_two_bytes_of_trailing_padding() {
+        assert_eq!(bpf::BPF_HDR_FIELD_LEN, 18);
+        assert_eq!(mem::size_of::<bpf::bpf_hdr>(), 20);
     }
 }
