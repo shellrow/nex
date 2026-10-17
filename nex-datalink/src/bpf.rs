@@ -7,13 +7,14 @@ use nex_core::interface::Interface;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::io;
-use std::mem::{self, align_of};
+use std::mem;
 use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 
 static ETHERNET_HEADER_SIZE: usize = 14;
-static ETHERNET_NULL_HEADER_SIZE: usize = 4;
+mod records;
+pub(crate) use records::{LinkType, parse_records};
 
 /// The BPF-specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -85,7 +86,6 @@ pub(crate) fn validate_record_lengths(
 }
 
 /// Create a datalink channel using the /dev/bpf device
-// NOTE buffer must be word aligned.
 #[inline]
 pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     #[cfg(any(
@@ -154,12 +154,12 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         iface.ifr_name[i] = c as libc::c_char;
     }
 
-    let buflen = config.read_buffer_size as libc::c_uint;
+    let mut buflen = config.read_buffer_size as libc::c_uint;
     // NOTE Buffer length must be set before binding to an interface
     //      otherwise this will return Invalid Argument
     // SAFETY: The descriptor is open and `buflen` has the exact argument type
     // expected by BIOCSBLEN.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &buflen) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &mut buflen) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
@@ -185,29 +185,17 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         return Err(io::Error::last_os_error());
     }
 
-    let mut loopback = false;
-    let mut buffer_offset = 0;
-    let mut allocated_read_buffer_size = config.read_buffer_size;
-    if dlt == bpf::DLT_NULL {
-        loopback = true;
-        // The loopback device provides a smaller header (4 bytes) compared to Ethernet's 14-byte header.
-        // This reduction in header size is primarily due to the absence of destination and source MAC addresses.
-        // To handle the smaller header size, mainly for achieve compatibility with the expected packet format,
-        // offsetting the write buffer and overwriting the null header with a zeroed Ethernet header.
-        let align = align_of::<bpf::bpf_hdr>();
-        buffer_offset = (ETHERNET_HEADER_SIZE - ETHERNET_NULL_HEADER_SIZE).next_multiple_of(align);
-        allocated_read_buffer_size += buffer_offset;
-
-        // Allow packets to be read back after they are written
-        set_feedback(fd.as_raw())?
+    let link_type = LinkType::from_dlt(dlt)?;
+    let loopback = link_type.is_ip();
+    if loopback {
+        set_feedback(fd.as_raw())?;
     } else {
-        // Don't fill in source MAC
-        // SAFETY: The descriptor is open and the integer argument is valid for
-        // BIOCSHDRCMPLT.
+        // SAFETY: The descriptor is open and the ioctl reads an integer.
         if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
             return Err(io::Error::last_os_error());
         }
     }
+    let allocated_read_buffer_size = buflen as usize;
 
     // Enable nonblocking
     // SAFETY: The descriptor is open and F_SETFL consumes the integer flag
@@ -236,8 +224,8 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         // SAFETY: A zero bit pattern is a valid empty `fd_set`.
         fd_set: unsafe { mem::zeroed() },
         read_buffer: vec![0; allocated_read_buffer_size],
-        buffer_offset,
-        loopback,
+        link_type,
+        normalized: Vec::new(),
         timeout: config.read_timeout.map(nex_sys::duration_to_timespec),
         // Enough room for minimally sized packets without reallocating
         packets: VecDeque::with_capacity(allocated_read_buffer_size / 64),
@@ -387,21 +375,16 @@ struct RawReceiverImpl {
     fd: Arc<nex_sys::FileDesc>,
     fd_set: libc::fd_set,
     read_buffer: Vec<u8>,
-    buffer_offset: usize,
-    loopback: bool,
+    link_type: LinkType,
+    normalized: Vec<u8>,
     timeout: Option<libc::timespec>,
     packets: VecDeque<(usize, usize)>,
 }
 
 impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
-        let header_size = if self.loopback {
-            ETHERNET_NULL_HEADER_SIZE
-        } else {
-            0
-        };
         if self.packets.is_empty() {
-            let buffer = &mut self.read_buffer[self.buffer_offset..];
+            let buffer = &mut self.read_buffer[..];
             // SAFETY: `fd_set` and the optional timeout are initialized and
             // remain live throughout pselect.
             let ret = unsafe {
@@ -435,61 +418,21 @@ impl RawReceiver for RawReceiverImpl {
                     len if len > 0 => len,
                     _ => return Err(io::Error::last_os_error()),
                 };
-                let buflen = buflen as usize;
-                let mut cursor = 0usize;
-                while cursor < buflen {
-                    let remaining = buflen - cursor;
-                    if remaining < mem::size_of::<bpf::bpf_hdr>() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "truncated BPF record header",
-                        ));
-                    }
-                    // SAFETY: The size check proves the complete header is
-                    // in-bounds. `read_unaligned` does not require Vec<u8>'s
-                    // allocation to satisfy `bpf_hdr` alignment.
-                    let packet = unsafe {
-                        std::ptr::read_unaligned(buffer.as_ptr().add(cursor) as *const bpf::bpf_hdr)
-                    };
-                    let header_len = packet.bh_hdrlen as usize;
-                    let captured_len = packet.bh_caplen as usize;
-                    let record_len =
-                        validate_record_lengths(header_len, captured_len, remaining, header_size)?;
-                    self.packets.push_back((
-                        cursor + header_len + header_size,
-                        captured_len - header_size,
-                    ));
-                    let record_len = isize::try_from(record_len).map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "BPF record exceeds platform pointer range",
-                        )
-                    })?;
-                    cursor = cursor
-                        .checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
-                        .ok_or_else(|| {
-                            io::Error::new(io::ErrorKind::InvalidData, "BPF record offset overflow")
-                        })?;
-                }
+                self.packets = parse_records(&buffer[..buflen as usize])?;
             }
         }
-        let (mut start, mut len) = self.packets.pop_front().ok_or_else(|| {
+        let (start, len) = self.packets.pop_front().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "packet queue unexpectedly empty",
             )
         })?;
-        len += self.buffer_offset;
-        // If on loopback, adjust the start position to include padding for the fake Ethernet header.
-        if self.loopback {
-            let padding = ETHERNET_HEADER_SIZE - self.buffer_offset;
-            start -= padding;
+        let packet = &self.read_buffer[start..start + len];
+        if self.link_type == LinkType::Ethernet {
+            return Ok(packet);
         }
-        // Zero out part that will become fake ethernet header if on loopback.
-        for i in self.read_buffer[start..start + self.buffer_offset].iter_mut() {
-            *i = 0;
-        }
-        Ok(&self.read_buffer[start..start + len])
+        self.link_type.normalize(packet, &mut self.normalized)?;
+        Ok(&self.normalized)
     }
 }
 
