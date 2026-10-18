@@ -8,7 +8,7 @@ use crate::{
     icmpv6::{Icmpv6Header, Icmpv6Packet},
     ip::IpNextProtocol,
     ipv4::{Ipv4Header, Ipv4Packet},
-    ipv6::{Ipv6Header, Ipv6Packet},
+    ipv6::{Ipv6ExtensionHeader, Ipv6Header, Ipv6Packet},
     packet::Packet,
     parse::{ParseError, ParseMode},
     tcp::{TcpHeader, TcpPacket},
@@ -173,6 +173,10 @@ impl<'a> FrameSlice<'a> {
         self.network = Some(&bytes[..header_len]);
         let protocol = IpNextProtocol::new(bytes[9]);
         self.ip_protocol = Some(protocol);
+        if u16::from_be_bytes([bytes[6], bytes[7]]) & 0x1fff != 0 {
+            self.payload = &bytes[header_len..packet_len];
+            return Ok(());
+        }
         self.parse_transport(protocol, &bytes[header_len..packet_len])
     }
 
@@ -232,8 +236,16 @@ impl<'a> FrameSlice<'a> {
                     expected: cursor.saturating_add(extension_len),
                     actual: packet_len,
                 })?;
+            let noninitial_fragment =
+                next == 44 && u16::from_be_bytes([bytes[cursor + 2], bytes[cursor + 3]]) >> 3 != 0;
             next = bytes[cursor];
             cursor = end;
+            if noninitial_fragment {
+                self.network = Some(&bytes[..cursor]);
+                self.ip_protocol = Some(IpNextProtocol::new(next));
+                self.payload = &bytes[cursor..packet_len];
+                return Ok(());
+            }
         }
         self.network = Some(&bytes[..cursor]);
         let protocol = IpNextProtocol::new(next);
@@ -364,10 +376,15 @@ impl<'a> FrameView<'a> {
 
     /// Parse a frame view and return a structured error on failure.
     pub fn try_from_buf(packet: &'a [u8], option: ParseOption) -> Result<Self, ParseError> {
-        let offset = option.offset;
-        let from_ip_packet = option.from_ip_packet;
-        let frame = Frame::try_from_buf(packet, option)?;
-        let payload = find_payload_slice(packet, &frame, offset, from_ip_packet);
+        let owned = Bytes::copy_from_slice(packet);
+        let frame = Frame::try_from_bytes(owned.clone(), option)?;
+        // Parsed payloads share the input allocation, including IP-only frames.
+        let payload = if frame.payload.is_empty() {
+            &packet[..0]
+        } else {
+            let start = frame.payload.as_ptr() as usize - owned.as_ptr() as usize;
+            &packet[start..start + frame.payload.len()]
+        };
         Ok(FrameView {
             datalink: frame.datalink,
             ip: frame.ip,
@@ -447,12 +464,17 @@ fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
         Ok(ipv4_packet) => {
             let (header, payload) = ipv4_packet.into_parts();
             let proto = header.next_level_protocol;
+            let noninitial_fragment = header.fragment_offset != 0;
             frame.ip = Some(IpLayer {
                 ipv4: Some(header),
                 ipv6: None,
                 icmp: None,
                 icmpv6: None,
             });
+            if noninitial_fragment {
+                frame.payload = payload;
+                return Ok(());
+            }
             match proto {
                 IpNextProtocol::Tcp => {
                     parse_tcp_packet(payload, frame);
@@ -490,14 +512,24 @@ fn parse_ipv6_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
     };
     match parsed {
         Ok(ipv6_packet) => {
+            let proto = ipv6_packet.extensions.last().map_or(
+                ipv6_packet.header.next_header,
+                Ipv6ExtensionHeader::next_protocol,
+            );
+            let noninitial_fragment = ipv6_packet.extensions.iter().any(|extension| {
+                matches!(extension, Ipv6ExtensionHeader::Fragment { offset, .. } if *offset != 0)
+            });
             let (header, payload) = ipv6_packet.into_parts();
-            let proto = header.next_header;
             frame.ip = Some(IpLayer {
                 ipv4: None,
                 ipv6: Some(header),
                 icmp: None,
                 icmpv6: None,
             });
+            if noninitial_fragment {
+                frame.payload = payload;
+                return Ok(());
+            }
             match proto {
                 IpNextProtocol::Tcp => {
                     parse_tcp_packet(payload, frame);
@@ -582,9 +614,12 @@ fn parse_frame_from_bytes(
     };
 
     let ethernet_packet = if option.from_ip_packet {
-        create_dummy_ethernet_packet(&packet, option.offset).ok_or(ParseError::Malformed {
-            context: "Frame dummy Ethernet classification",
-        })?
+        let mut ethernet =
+            create_dummy_ethernet_packet(&packet, option.offset).ok_or(ParseError::Malformed {
+                context: "Frame dummy Ethernet classification",
+            })?;
+        ethernet.payload = packet.slice(option.offset..);
+        ethernet
     } else {
         EthernetPacket::try_from_bytes(packet)?
     };
@@ -606,25 +641,11 @@ fn parse_frame_from_bytes(
     Ok(frame)
 }
 
-fn find_payload_slice<'a>(
-    packet: &'a [u8],
-    frame: &Frame,
-    offset: usize,
-    from_ip_packet: bool,
-) -> &'a [u8] {
-    let start = if from_ip_packet { offset } else { 14 };
-    let available = packet.get(start..).unwrap_or(&[]);
-    let payload_len = frame.payload.len();
-    if payload_len > available.len() {
-        return &[];
-    }
-    &available[available.len() - payload_len..]
-}
-
 fn parse_icmp_packet(packet: Bytes, frame: &mut Frame) {
     match IcmpPacket::from_bytes(packet.clone()) {
         Some(icmp_packet) => {
-            let (header, payload) = icmp_packet.into_parts();
+            let header = icmp_packet.header;
+            let payload = packet.slice(crate::icmp::ICMP_COMMON_HEADER_LEN..);
             if let Some(ip) = &mut frame.ip {
                 ip.icmp = Some(header);
             }
@@ -642,7 +663,8 @@ fn parse_icmp_packet(packet: Bytes, frame: &mut Frame) {
 fn parse_icmpv6_packet(packet: Bytes, frame: &mut Frame) {
     match Icmpv6Packet::from_bytes(packet.clone()) {
         Some(icmpv6_packet) => {
-            let (header, payload) = icmpv6_packet.into_parts();
+            let header = icmpv6_packet.header;
+            let payload = packet.slice(crate::icmpv6::ICMPV6_COMMON_HEADER_LEN..);
             if let Some(ip) = &mut frame.ip {
                 ip.icmpv6 = Some(header);
             }

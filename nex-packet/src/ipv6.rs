@@ -368,6 +368,10 @@ where
                         });
                         next_header = nh;
                         offset += 8;
+                        // Later fragments contain continuation data, not an extension chain.
+                        if offset_val != 0 {
+                            break;
+                        }
                     }
                     _ => break,
                 }
