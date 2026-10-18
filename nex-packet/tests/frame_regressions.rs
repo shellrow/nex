@@ -89,3 +89,26 @@ fn borrowed_icmp_payloads_match_owned_frames_with_padding() {
         assert_eq!(view.payload, frame.payload.as_ref());
     }
 }
+
+#[test]
+fn frame_slice_respects_udp_length_inside_ip_payload() {
+    let mut raw = ipv4(0);
+    raw.extend_from_slice(&[0x40, 0xaa, 0xbb, 0xcc]);
+    let length = raw.len() as u16;
+    raw[2..4].copy_from_slice(&length.to_be_bytes());
+    let frame = Frame::try_from_buf(&raw, ip_option()).unwrap();
+    let slices = FrameSlice::try_from_buf(&raw, ip_option()).unwrap();
+    assert_eq!(slices.payload, frame.payload.as_ref());
+    assert_eq!(slices.payload, &[1, 2, 3, 4]);
+}
+
+#[test]
+fn frame_slice_does_not_decode_incomplete_udp_datagrams() {
+    let mut raw = ipv4(0);
+    raw[24..26].copy_from_slice(&16u16.to_be_bytes());
+    let slices = FrameSlice::try_from_buf(&raw, ip_option()).unwrap();
+    assert!(slices.transport.is_none());
+    assert_eq!(slices.payload, &raw[20..]);
+    raw[24..26].copy_from_slice(&7u16.to_be_bytes());
+    assert!(FrameSlice::try_from_buf(&raw, ip_option()).is_err());
+}

@@ -256,7 +256,7 @@ impl<'a> FrameSlice<'a> {
     fn parse_transport(
         &mut self,
         protocol: IpNextProtocol,
-        bytes: &'a [u8],
+        mut bytes: &'a [u8],
     ) -> Result<(), ParseError> {
         let header_len = match protocol {
             IpNextProtocol::Tcp => {
@@ -278,6 +278,18 @@ impl<'a> FrameSlice<'a> {
                     self.payload = bytes;
                     return Ok(());
                 }
+                let length = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+                if length < 8 {
+                    return Err(ParseError::InvalidLength {
+                        context: "UDP frame length",
+                        value: length,
+                    });
+                }
+                if length > bytes.len() {
+                    self.payload = bytes;
+                    return Ok(());
+                }
+                bytes = &bytes[..length];
                 8
             }
             IpNextProtocol::Icmp | IpNextProtocol::Icmpv6 => {
