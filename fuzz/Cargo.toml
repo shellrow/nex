@@ -105,3 +105,10 @@ path = "fuzz_targets/vxlan.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "quic"
+path = "fuzz_targets/quic.rs"
+test = false
+doc = false
+bench = false
