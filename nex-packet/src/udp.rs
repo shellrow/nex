@@ -151,6 +151,16 @@ impl<'a> MutablePacket<'a> for MutableUdpPacket<'a> {
 }
 
 impl UdpPacket {
+    /// Explicitly interpret this UDP payload as a QUIC datagram.
+    /// No port-based detection or authentication is performed. Short headers
+    /// require the destination connection ID length from connection state.
+    pub fn quic_packets(
+        &self,
+        options: crate::quic::QuicParseOptions,
+    ) -> crate::quic::QuicDatagram<'_> {
+        crate::quic::QuicDatagram::new(&self.payload, options)
+    }
+
     /// Parse a UDP packet and return a structured error on failure.
     pub fn try_from_buf(mut bytes: &[u8]) -> Result<Self, ParseError> {
         if bytes.len() < UDP_HEADER_LEN {

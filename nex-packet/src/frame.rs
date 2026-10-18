@@ -299,6 +299,16 @@ impl<'a> FrameSlice<'a> {
 }
 
 impl Frame {
+    /// Explicitly parse the decoded UDP payload as QUIC, without port-based
+    /// detection or authentication. Returns `None` for frames without UDP.
+    pub fn quic_packets(
+        &self,
+        options: crate::quic::QuicParseOptions,
+    ) -> Option<crate::quic::QuicDatagram<'_>> {
+        self.transport.as_ref()?.udp.as_ref()?;
+        Some(crate::quic::QuicDatagram::new(&self.payload, options))
+    }
+
     /// Parse a frame from a raw buffer.
     ///
     /// Unknown or currently unsupported payloads are preserved in `payload`
@@ -369,6 +379,16 @@ pub struct FrameView<'a> {
 }
 
 impl<'a> FrameView<'a> {
+    /// Explicitly parse the decoded UDP payload as QUIC, without port-based
+    /// detection or authentication. Returns `None` for frames without UDP.
+    pub fn quic_packets(
+        &self,
+        options: crate::quic::QuicParseOptions,
+    ) -> Option<crate::quic::QuicDatagram<'_>> {
+        self.transport.as_ref()?.udp.as_ref()?;
+        Some(crate::quic::QuicDatagram::new(self.payload, options))
+    }
+
     /// Parse a frame view without allocating payload storage.
     pub fn from_buf(packet: &'a [u8], option: ParseOption) -> Option<Self> {
         Self::try_from_buf(packet, option).ok()

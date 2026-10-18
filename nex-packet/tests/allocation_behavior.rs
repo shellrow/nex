@@ -47,4 +47,16 @@ fn frame_slice_parsing_does_not_allocate() {
 
     assert!(parsed.is_ok());
     assert_eq!(after, before);
+
+    let quic = [0xe0, 0, 0, 0, 1, 0, 0, 1, 0xaa];
+    let before = ALLOCATIONS.load(Ordering::Relaxed);
+    let count =
+        nex_packet::quic::QuicDatagram::new(std::hint::black_box(&quic), Default::default())
+            .inspect(|p| {
+                std::hint::black_box(p.as_ref().unwrap());
+            })
+            .count();
+    let after = ALLOCATIONS.load(Ordering::Relaxed);
+    assert_eq!(count, 1);
+    assert_eq!(after, before);
 }
