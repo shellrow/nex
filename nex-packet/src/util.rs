@@ -70,11 +70,21 @@ pub fn checksum(data: &[u8], skipword: usize) -> u16be {
     finalize_checksum(sum)
 }
 
-fn finalize_checksum(mut sum: u32) -> u16be {
+fn fold_sum(mut sum: u32) -> u32 {
     while sum >> 16 != 0 {
         sum = (sum >> 16) + (sum & 0xFFFF);
     }
-    !sum as u16
+    sum
+}
+
+fn finalize_checksum(sum: u32) -> u16be {
+    !fold_sum(sum) as u16
+}
+
+// Preserve the end-around carry even when the accumulator itself overflows.
+fn add_word(sum: u32, word: u32) -> u32 {
+    let (sum, carry) = sum.overflowing_add(word);
+    sum + u32::from(carry)
 }
 
 /// Calculate the checksum for a packet built on IPv4. Used by UDP and TCP.
@@ -94,7 +104,8 @@ pub fn ipv4_checksum(
     sum += next_level_protocol as u32;
 
     let len = data.len() + extra_data.len();
-    sum += len as u32;
+    let len = len as u32;
+    sum += (len >> 16) + (len & 0xffff);
 
     // Checksum packet header and data
     sum += sum_be_words_joined(data, skipword, extra_data);
@@ -124,7 +135,8 @@ pub fn ipv6_checksum(
     sum += next_level_protocol as u32;
 
     let len = data.len() + extra_data.len();
-    sum += len as u32;
+    let len = len as u32;
+    sum += (len >> 16) + (len & 0xffff);
 
     // Checksum packet header and data
     sum += sum_be_words_joined(data, skipword, extra_data);
@@ -148,7 +160,7 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
     let mut i = 0;
     while cur_data.len() >= 2 {
         if i != skipword {
-            sum += ((cur_data[0] as u32) << 8) + cur_data[1] as u32;
+            sum = add_word(sum, ((cur_data[0] as u32) << 8) | cur_data[1] as u32);
         }
         cur_data = &cur_data[2..];
         i += 1;
@@ -156,10 +168,10 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
 
     // If the length is odd, make sure to checksum the final byte
     if i != skipword && len & 1 != 0 {
-        sum += (data[len - 1] as u32) << 8;
+        sum = add_word(sum, (data[len - 1] as u32) << 8);
     }
 
-    sum
+    fold_sum(sum)
 }
 
 /// Sum two logically contiguous byte slices without allocating.
@@ -174,12 +186,12 @@ fn sum_be_words_joined(data: &[u8], skipword: usize, extra_data: &[u8]) -> u32 {
     while let Some(high) = bytes.next() {
         let low = bytes.next().copied().unwrap_or(0);
         if word_index != skipword {
-            sum += ((*high as u32) << 8) | low as u32;
+            sum = add_word(sum, ((*high as u32) << 8) | low as u32);
         }
         word_index += 1;
     }
 
-    sum
+    fold_sum(sum)
 }
 
 #[cfg(test)]

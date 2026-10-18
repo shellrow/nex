@@ -59,3 +59,52 @@ fn changing_pseudo_header_invalidates_transport_checksums() {
     let mut icmpv6 = [128, 0, 0, 0, 0, 0, 0, 0];
     check_context!(MutableIcmpv6Packet::new(&mut icmpv6).unwrap());
 }
+
+// Independent wide accumulator for inputs larger than a normal IP datagram.
+fn reference_checksum(data: &[u8], skipword: usize, initial: u64) -> u16 {
+    let mut sum = initial;
+    for (index, word) in data.chunks(2).enumerate() {
+        if index != skipword {
+            sum += ((word[0] as u64) << 8) | u64::from(*word.get(1).unwrap_or(&0));
+        }
+    }
+    while sum > 0xffff {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    !(sum as u16)
+}
+
+#[test]
+fn checksum_handles_inputs_that_overflow_a_u32_accumulator() {
+    for length in [131_074, 131_076, 200_001] {
+        let data = vec![0xff; length];
+        assert_eq!(
+            nex_packet::util::checksum(&data, usize::MAX),
+            reference_checksum(&data, usize::MAX, 0)
+        );
+    }
+}
+
+#[test]
+fn transport_checksum_handles_large_split_inputs() {
+    use nex_packet::{ip::IpNextProtocol, util};
+    let data = vec![0xff; 200_001];
+    let source = Ipv6Addr::LOCALHOST;
+    // Two ::1 addresses, UDP protocol, and the 32-bit length's two words.
+    let length = data.len() as u64;
+    let initial = 2 + 17 + (length >> 16) + (length & 0xffff);
+    let expected = reference_checksum(&data, 3, initial);
+    for split in [0, 1, 65_535, 131_073, data.len()] {
+        assert_eq!(
+            util::ipv6_checksum(
+                &data[..split],
+                3,
+                &data[split..],
+                &source,
+                &source,
+                IpNextProtocol::Udp
+            ),
+            expected
+        );
+    }
+}
