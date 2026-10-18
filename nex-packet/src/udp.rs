@@ -309,7 +309,8 @@ impl<'a> MutableUdpPacket<'a> {
     /// Defines the pseudo-header context used when recomputing the checksum.
     pub fn set_checksum_context(&mut self, context: TransportChecksumContext) {
         self.checksum_context = Some(context);
-        if self.checksum.automatic() && self.checksum.is_dirty() {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
             let _ = self.recompute_checksum();
         }
     }
@@ -363,6 +364,7 @@ impl<'a> MutableUdpPacket<'a> {
             ) as u16,
         };
 
+        let checksum = encode_checksum(checksum);
         self.write_checksum(checksum);
         self.checksum.clear_dirty();
         Some(checksum)
@@ -448,6 +450,11 @@ pub fn checksum(packet: &UdpPacket, source: &IpAddr, destination: &IpAddr) -> u1
     }
 }
 
+// RFC 768 reserves a transmitted zero for an omitted checksum.
+fn encode_checksum(checksum: u16) -> u16 {
+    if checksum == 0 { u16::MAX } else { checksum }
+}
+
 /// Calculate a checksum for a packet built on IPv4.
 pub fn ipv4_checksum(packet: &UdpPacket, source: &Ipv4Addr, destination: &Ipv4Addr) -> u16be {
     ipv4_checksum_adv(packet, &[], source, destination)
@@ -466,14 +473,14 @@ pub fn ipv4_checksum_adv(
     source: &Ipv4Addr,
     destination: &Ipv4Addr,
 ) -> u16be {
-    util::ipv4_checksum(
+    encode_checksum(util::ipv4_checksum(
         packet.to_bytes().as_ref(),
         3,
         extra_data,
         source,
         destination,
         IpNextProtocol::Udp,
-    )
+    ))
 }
 
 /// Calculate a checksum for a packet built on IPv6.
@@ -494,14 +501,14 @@ pub fn ipv6_checksum_adv(
     source: &Ipv6Addr,
     destination: &Ipv6Addr,
 ) -> u16be {
-    util::ipv6_checksum(
+    encode_checksum(util::ipv6_checksum(
         packet.to_bytes().as_ref(),
         3,
         extra_data,
         source,
         destination,
         IpNextProtocol::Udp,
-    )
+    ))
 }
 
 #[cfg(test)]

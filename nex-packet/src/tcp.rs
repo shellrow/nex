@@ -980,7 +980,8 @@ impl<'a> MutableTcpPacket<'a> {
     /// Configures the pseudo-header context required for checksum calculation.
     pub fn set_checksum_context(&mut self, context: TransportChecksumContext) {
         self.checksum_context = Some(context);
-        if self.checksum.automatic() && self.checksum.is_dirty() {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
             let _ = self.recompute_checksum();
         }
     }
