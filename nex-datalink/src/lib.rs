@@ -130,6 +130,25 @@ pub struct FanoutOption {
     pub rollover: bool,
 }
 
+impl FanoutOption {
+    /// Creates a fanout group with defragmentation and rollover disabled.
+    ///
+    /// ```
+    /// use nex_datalink::{Config, FanoutOption, FanoutType};
+    /// let fanout = FanoutOption::new(42, FanoutType::LoadBalance);
+    /// let config = Config::default().with_linux_fanout(Some(fanout));
+    /// assert_eq!(config.linux_fanout.unwrap().group_id, 42);
+    /// ```
+    pub const fn new(group_id: u16, fanout_type: FanoutType) -> Self {
+        Self {
+            group_id,
+            fanout_type,
+            defrag: false,
+            rollover: false,
+        }
+    }
+}
+
 /// A generic configuration type, encapsulating all options supported by each backend.
 ///
 /// Each option should be treated as a hint - each backend is free to ignore any and all
