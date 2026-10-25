@@ -9,6 +9,11 @@
 //! - `datalink` (`nex-datalink`): Interfaces with the data link layer; supports raw packet send/receive.
 //! - `packet` (`nex-packet`): Enables parsing and building of packets at multiple protocol layers.
 //! - `socket` (`nex-socket`): Provides sockets for working with transport protocols such as TCP, UDP, and ICMP (but L3).
+//!
+//! On Windows, the optional `winptap` feature exposes the explicitly selected
+//! `datalink::winptap::open` receive-only backend without Npcap. Enabling `async`
+//! also exposes `datalink::winptap::open_async`, a runtime-independent Stream.
+//! Neither endpoint supports packet injection or promiscuous mode.
 
 /// Provides core networking types and utilities.
 pub mod net {

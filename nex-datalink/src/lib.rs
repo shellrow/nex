@@ -7,6 +7,9 @@ use std::time::Duration;
 
 mod bindings;
 
+#[cfg(all(windows, feature = "winptap"))]
+pub mod winptap;
+
 #[cfg(feature = "async")]
 pub mod async_io;
 
@@ -377,8 +380,8 @@ pub trait RawSender: Send {
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>>;
 }
 
-/// Structure for receiving packets at the data link layer. Should be constructed using
-/// `channel()`.
+/// Receives packets at the data link layer, from [`channel()`] or an explicit
+/// receive-only backend (such as `winptap::open` on Windows).
 pub trait RawReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;

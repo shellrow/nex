@@ -28,6 +28,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "signal", "macros"
 default = []
 async = ["nex-datalink/async", "nex-socket/async"]
 pcap = ["nex-datalink/pcap"]
+winptap = ["nex-datalink/winptap"]
 serde = ["nex-core/serde", "nex-packet/serde", "nex-datalink/serde"]
 
 [[example]]
@@ -102,3 +103,13 @@ required-features = ["async"]
 [[example]]
 name = "mutable_chaining"
 path = "../examples/mutable_chaining.rs"
+
+[[example]]
+name = "winptap_dump"
+path = "../examples/winptap_dump.rs"
+required-features = ["winptap"]
+
+[[example]]
+name = "async_winptap_dump"
+path = "../examples/async_winptap_dump.rs"
+required-features = ["winptap", "async"]

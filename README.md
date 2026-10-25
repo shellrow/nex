@@ -49,6 +49,7 @@ because gateway discovery is part of its primary interface functionality.
 | --- | --- | --- |
 | `async` | `nex`, `nex-datalink`, `nex-socket` | Enables asynchronous datalink I/O and Tokio-based socket APIs. |
 | `pcap` | `nex`, `nex-datalink` | Enables the libpcap backend. |
+| `winptap` | `nex`, `nex-datalink` | Enables an explicitly selected receive-only Windows Packet Monitor backend without Npcap; combine with `async` for asynchronous reception. |
 | `serde` | `nex`, `nex-core`, `nex-packet`, `nex-datalink` | Enables serialization support for public data types. |
 | `gateway` | `nex-core` | Enables default gateway discovery through `netdev`. |
 
@@ -64,6 +65,14 @@ nex = { version = "0.27", features = ["async"] }
 Execute with administrator privileges if necessary.
 
 ## For Windows Users
+For receive-only Ethernet capture without Npcap, enable `winptap` and call
+`nex::datalink::winptap::open` with its dedicated configuration. This requires
+administrator privileges and does not support transmission or promiscuous mode.
+With both `winptap` and `async`, `winptap::open_async` returns a runtime-independent
+`AsyncRawReceiver`/`Stream` with a bounded handoff and cross-thread cancellation.
+The official backend observes incoming and outgoing traffic; native observes
+incoming traffic only.
+
 Please note that in order to send and receive raw packets using `nex-datalink` on Windows, [Npcap](https://npcap.com/#download) is required.
 
 1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
