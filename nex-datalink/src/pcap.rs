@@ -60,7 +60,8 @@ impl Default for Config {
 /// Create a datalink channel from the provided pcap device.
 #[inline]
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
-    let cap = match pcap::Capture::from_device(&*network_interface.name) {
+    let device_name = capture_device_name(&network_interface.name);
+    let cap = match pcap::Capture::from_device(device_name.as_ref()) {
         Ok(cap) => cap,
         Err(e) => return Err(io::Error::other(e)),
     }
@@ -88,6 +89,16 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
             read_buffer: vec![0; config.read_buffer_size],
         }),
     ))
+}
+
+fn capture_device_name(name: &str) -> std::borrow::Cow<'_, str> {
+    // Core interfaces use bare adapter GUIDs on Windows, while pcap enumerates
+    // full NPF paths. Preserve names already returned by pcap, including URLs.
+    #[cfg(windows)]
+    if name.starts_with('{') && name.ends_with('}') {
+        return crate::bindings::windows::to_npf_name(name).into();
+    }
+    name.into()
 }
 
 /// Create a datalink channel from a pcap file.
@@ -212,5 +223,30 @@ pub fn interfaces() -> Vec<Interface> {
             .collect()
     } else {
         vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_device_name;
+
+    #[test]
+    fn capture_names_are_preserved() {
+        for name in [
+            "eth0",
+            r"\Device\NPF_{12345678-0000-0000-0000-000000000000}",
+            "rpcap://host/eth0",
+        ] {
+            assert_eq!(capture_device_name(name), name);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn core_adapter_guid_is_converted_to_npf_path() {
+        assert_eq!(
+            capture_device_name("{12345678-0000-0000-0000-000000000000}"),
+            r"\Device\NPF_{12345678-0000-0000-0000-000000000000}"
+        );
     }
 }
