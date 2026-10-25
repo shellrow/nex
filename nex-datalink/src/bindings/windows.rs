@@ -226,6 +226,57 @@ pub fn packet_api() -> io::Result<&'static PacketApi> {
 }
 
 #[cfg(test)]
+pub(crate) mod failure_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+
+    static FAILURES: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe extern "C" fn fail_after_adapter_open(_: LPADAPTER, _: libc::c_int) -> BOOLEAN {
+        FAILURES.fetch_add(1, Ordering::Relaxed);
+        0
+    }
+
+    fn handles() -> u32 {
+        let mut count = 0;
+        // SAFETY: The pseudo-handle is valid and count is writable.
+        assert_ne!(
+            unsafe { GetProcessHandleCount(GetCurrentProcess(), &mut count) },
+            0
+        );
+        count
+    }
+
+    pub fn assert_cleanup(
+        open: impl Fn(&nex_core::interface::Interface, &'static PacketApi) -> bool,
+    ) {
+        static API: OnceLock<PacketApi> = OnceLock::new();
+        let api = API.get_or_init(|| {
+            let mut api = *packet_api().expect("Npcap installed");
+            // Keep real allocation and close functions, failing only after
+            // the adapter and its kernel buffer have been configured.
+            api.PacketSetMinToCopy = fail_after_adapter_open;
+            api
+        });
+        let name = std::env::var("NEX_TEST_INTERFACE").unwrap();
+        let interface = nex_core::interface::get_interfaces()
+            .into_iter()
+            .find(|interface| interface.name == name)
+            .expect("test interface");
+        assert!(open(&interface, api));
+        let baseline = handles();
+        let failures = FAILURES.load(Ordering::Relaxed);
+        for iteration in 0..1_000 {
+            assert!(open(&interface, api));
+            assert_eq!(handles(), baseline, "leak after failure {iteration}");
+        }
+        assert_eq!(FAILURES.load(Ordering::Relaxed) - failures, 1_000);
+        eprintln!("1,000 post-allocation failures: handles={baseline}");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
