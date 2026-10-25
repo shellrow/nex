@@ -211,8 +211,11 @@ impl<'a> QuicPacketSlice<'a> {
     pub fn supported_versions(&self) -> Option<impl ExactSizeIterator<Item = u32> + 'a> {
         (self.layout.kind == QuicPacketType::VersionNegotiation).then(|| {
             self.payload()
-                .chunks_exact(4)
-                .map(|v| u32::from_be_bytes([v[0], v[1], v[2], v[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .copied()
+                .map(u32::from_be_bytes)
         })
     }
     /// Copy this packet into an owned representation.

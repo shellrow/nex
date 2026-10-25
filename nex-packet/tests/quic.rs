@@ -12,7 +12,9 @@ use proptest::prelude::*;
 fn hex(input: &str) -> Vec<u8> {
     let s: String = input.chars().filter(|c| !c.is_whitespace()).collect();
     s.as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|v| u8::from_str_radix(std::str::from_utf8(v).unwrap(), 16).unwrap())
         .collect()
 }
