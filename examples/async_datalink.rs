@@ -1,5 +1,8 @@
 //! Basic demonstration of asynchronous datalink send/receive.
 
+#[path = "support/next_hop.rs"]
+mod next_hop;
+
 use bytes::Bytes;
 use futures::{future::poll_fn, stream::StreamExt};
 use nex::net::mac::MacAddr;
@@ -60,15 +63,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (IpAddr::V4(src), IpAddr::V4(dst)) => IcmpPacketBuilder::new(src, dst)
             .icmp_type(IcmpType::EchoRequest)
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
-            .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
+            .echo_fields(0x1234, 0x1)
             .to_bytes()
             .expect("valid ICMP packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
             .icmpv6_type(Icmpv6Type::EchoRequest)
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
-            .echo_fields(0x1234, 0x1)
             .payload(Bytes::from_static(b"hello"))
+            .echo_fields(0x1234, 0x1)
             .to_bytes()
             .expect("valid ICMPv6 packet"),
         _ => panic!("Source and destination IP version mismatch"),
@@ -102,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .destination(if use_tun {
             MacAddr::zero()
         } else {
-            interface.gateway.clone().unwrap().mac_addr
+            next_hop::destination_mac(&interface, src_ip, target_ip).expect("resolve next hop")
         })
         .ethertype(match target_ip {
             IpAddr::V4(_) => EtherType::Ipv4,
