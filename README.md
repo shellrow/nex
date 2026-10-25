@@ -68,7 +68,10 @@ Please note that in order to send and receive raw packets using `nex-datalink` o
 
 1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
 
-2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
+2. The default datalink backend loads Npcap at runtime and does not require the
+   Npcap SDK to build. If you enable the optional `pcap` feature, download the
+   Npcap SDK and add its `Lib/x64` (or `Lib` for 32-bit builds) folder to your
+   `LIB` environment variable.
 
 ## For macOS Users
 On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary to send and receive raw packets using `nex-datalink`.
