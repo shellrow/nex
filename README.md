@@ -28,7 +28,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.27"
+nex = "0.28"
 ```
 
 ## Using Specific Sub-crates
@@ -57,7 +57,7 @@ To use asynchronous APIs through the facade:
 
 ```toml
 [dependencies]
-nex = { version = "0.27", features = ["async"] }
+nex = { version = "0.28", features = ["async"] }
 ```
 
 ## Privileges
