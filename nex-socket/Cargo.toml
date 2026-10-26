@@ -15,7 +15,7 @@ license = "MIT"
 nex-core = { workspace = true }
 nex-packet = { workspace = true }
 socket2 = { version = "0.6", features = ["all"] }
-tokio = { version = "1", features = ["time", "sync", "net", "rt"], optional = true }
+tokio = { workspace = true, features = ["time", "sync", "net", "rt"], optional = true }
 libc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

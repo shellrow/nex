@@ -2,9 +2,7 @@
 all-features = true
 
 [advisories]
-ignore = [
-    { id = "RUSTSEC-2024-0436", reason = "Transitive dependency of netdev on Linux; no maintained upgrade path is currently available." },
-]
+ignore = []
 
 [licenses]
 allow = [
