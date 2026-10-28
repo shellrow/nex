@@ -171,8 +171,9 @@ impl AsyncUdpSocket {
         Ok(self.inner)
     }
 
-    /// Construct from a standard UDP socket.
+    /// Construct from a standard UDP socket, enabling nonblocking mode.
     pub fn from_std_socket(socket: StdUdpSocket) -> io::Result<Self> {
+        socket.set_nonblocking(true)?;
         Ok(Self {
             inner: UdpSocket::from_std(socket)?,
         })

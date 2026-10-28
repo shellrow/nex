@@ -7,6 +7,9 @@ use std::time::Duration;
 
 mod bindings;
 
+#[cfg(all(windows, feature = "winptap"))]
+pub mod winptap;
+
 #[cfg(feature = "async")]
 pub mod async_io;
 
@@ -128,6 +131,25 @@ pub struct FanoutOption {
     pub defrag: bool,
     /// Whether queue rollover should be enabled.
     pub rollover: bool,
+}
+
+impl FanoutOption {
+    /// Creates a fanout group with defragmentation and rollover disabled.
+    ///
+    /// ```
+    /// use nex_datalink::{Config, FanoutOption, FanoutType};
+    /// let fanout = FanoutOption::new(42, FanoutType::LoadBalance);
+    /// let config = Config::default().with_linux_fanout(Some(fanout));
+    /// assert_eq!(config.linux_fanout.unwrap().group_id, 42);
+    /// ```
+    pub const fn new(group_id: u16, fanout_type: FanoutType) -> Self {
+        Self {
+            group_id,
+            fanout_type,
+            defrag: false,
+            rollover: false,
+        }
+    }
 }
 
 /// A generic configuration type, encapsulating all options supported by each backend.
@@ -358,8 +380,8 @@ pub trait RawSender: Send {
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>>;
 }
 
-/// Structure for receiving packets at the data link layer. Should be constructed using
-/// `channel()`.
+/// Receives packets at the data link layer, from [`channel()`] or an explicit
+/// receive-only backend (such as `winptap::open` on Windows).
 pub trait RawReceiver: Send {
     /// Get the next ethernet frame in the channel.
     fn next(&mut self) -> io::Result<&[u8]>;

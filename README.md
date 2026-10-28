@@ -28,7 +28,7 @@ To use `nex`, add it as a dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-nex = "0.27"
+nex = "0.28"
 ```
 
 ## Using Specific Sub-crates
@@ -49,6 +49,7 @@ because gateway discovery is part of its primary interface functionality.
 | --- | --- | --- |
 | `async` | `nex`, `nex-datalink`, `nex-socket` | Enables asynchronous datalink I/O and Tokio-based socket APIs. |
 | `pcap` | `nex`, `nex-datalink` | Enables the libpcap backend. |
+| `winptap` | `nex`, `nex-datalink` | Enables an explicitly selected receive-only Windows Packet Monitor backend without Npcap; combine with `async` for asynchronous reception. |
 | `serde` | `nex`, `nex-core`, `nex-packet`, `nex-datalink` | Enables serialization support for public data types. |
 | `gateway` | `nex-core` | Enables default gateway discovery through `netdev`. |
 
@@ -56,7 +57,7 @@ To use asynchronous APIs through the facade:
 
 ```toml
 [dependencies]
-nex = { version = "0.27", features = ["async"] }
+nex = { version = "0.28", features = ["async"] }
 ```
 
 ## Privileges
@@ -64,11 +65,22 @@ nex = { version = "0.27", features = ["async"] }
 Execute with administrator privileges if necessary.
 
 ## For Windows Users
+For receive-only Ethernet capture without Npcap, enable `winptap` and call
+`nex::datalink::winptap::open` with its dedicated configuration. This requires
+administrator privileges and does not support transmission or promiscuous mode.
+With both `winptap` and `async`, `winptap::open_async` returns a runtime-independent
+`AsyncRawReceiver`/`Stream` with a bounded handoff and cross-thread cancellation.
+The official backend observes incoming and outgoing traffic; native observes
+incoming traffic only.
+
 Please note that in order to send and receive raw packets using `nex-datalink` on Windows, [Npcap](https://npcap.com/#download) is required.
 
 1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
 
-2. Download the Npcap SDK. Add the SDK's /Lib/x64 (or /Lib) folder to your LIB environment variable.
+2. The default datalink backend loads Npcap at runtime and does not require the
+   Npcap SDK to build. If you enable the optional `pcap` feature, download the
+   Npcap SDK and add its `Lib/x64` (or `Lib` for 32-bit builds) folder to your
+   `LIB` environment variable.
 
 ## For macOS Users
 On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary to send and receive raw packets using `nex-datalink`.

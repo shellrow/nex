@@ -54,15 +54,15 @@ fn main() -> std::io::Result<()> {
         (IpAddr::V4(src), IpAddr::V4(dst)) => IcmpPacketBuilder::new(src, dst)
             .icmp_type(nex_packet::icmp::IcmpType::EchoRequest)
             .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
-            .echo_fields(0x1234, 1)
             .payload(Bytes::from_static(b"hello"))
+            .echo_fields(0x1234, 1)
             .to_bytes()
             .expect("valid ICMP packet"),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Icmpv6PacketBuilder::new(src, dst)
             .icmpv6_type(nex_packet::icmpv6::Icmpv6Type::EchoRequest)
             .icmpv6_code(icmpv6::echo_request::Icmpv6Codes::NoCode)
-            .echo_fields(0x1234, 1)
             .payload(Bytes::from_static(b"hello"))
+            .echo_fields(0x1234, 1)
             .to_bytes()
             .expect("valid ICMPv6 packet"),
         _ => unreachable!(),

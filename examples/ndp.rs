@@ -35,6 +35,20 @@ fn ipv6_multicast_mac(ipv6: &Ipv6Addr) -> MacAddr {
     )
 }
 
+fn solicited_node_multicast(target: Ipv6Addr) -> Ipv6Addr {
+    let octets = target.octets();
+    Ipv6Addr::new(
+        0xff02,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0xff00 | u16::from(octets[13]),
+        u16::from_be_bytes([octets[14], octets[15]]),
+    )
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -61,7 +75,8 @@ fn main() {
     let src_ip: Ipv6Addr = interface.ipv6[0].addr();
 
     let src_mac = interface.mac_addr.expect("No MAC address on interface");
-    let dst_mac = ipv6_multicast_mac(&target_ip);
+    let multicast_ip = solicited_node_multicast(target_ip);
+    let dst_mac = ipv6_multicast_mac(&multicast_ip);
 
     let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
@@ -69,17 +84,17 @@ fn main() {
         Err(e) => panic!("Failed to create datalink channel: {}", e),
     };
 
-    // Build NDP packet
-    //let ndp_payload_len = (NDP_SOL_PACKET_LEN + NDP_OPT_PACKET_LEN + MAC_ADDR_LEN) as u16;
-
     let ipv6 = Ipv6PacketBuilder::new()
         .source(src_ip)
-        .destination(target_ip)
+        .destination(multicast_ip)
         .next_header(IpNextProtocol::Icmpv6)
         .hop_limit(255);
 
     let ndp = NdpPacketBuilder::new(src_mac, src_ip, target_ip);
-    let ndp_packet = ndp.build().expect("valid NDP packet");
+    let mut ndp_packet = ndp.build().expect("valid NDP packet");
+    // The target remains the unicast neighbor, but the checksum uses the
+    // solicited-node multicast address carried by the IPv6 header.
+    ndp_packet.header.checksum = nex_packet::icmpv6::checksum(&ndp_packet, &src_ip, &multicast_ip);
     let ipv6_packet = ipv6
         .payload(ndp_packet.to_bytes())
         .build()
@@ -94,11 +109,12 @@ fn main() {
     // Send NDP Neighbor Solicitation
     let packet = ethernet.build().to_bytes();
 
-    if tx.send(&packet).is_some() {
-        println!("NDP Neighbor Solicitation sent to {}", target_ip);
-    } else {
-        eprintln!("Failed to send NDP packet");
-        return;
+    match tx.send(&packet) {
+        Some(Ok(())) => println!("NDP Neighbor Solicitation sent to {}", target_ip),
+        result => {
+            eprintln!("Failed to send NDP packet: {result:?}");
+            process::exit(1);
+        }
     }
 
     println!("Waiting for Neighbor Advertisement...");
@@ -116,6 +132,7 @@ fn main() {
                     && let Some(ip_layer) = &frame.ip
                     && let Some(icmpv6) = &ip_layer.icmpv6
                     && icmpv6.icmpv6_type == Icmpv6Type::NeighborAdvertisement
+                    && frame.payload.get(4..20) == Some(target_ip.octets().as_slice())
                     && let Some(ipv6_hdr) = &ip_layer.ipv6
                 {
                     println!("Received Neighbor Advertisement from {}", ipv6_hdr.source);
@@ -135,5 +152,21 @@ fn main() {
             }
             Err(e) => eprintln!("Receive failed: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn neighbor_discovery_uses_solicited_node_multicast() {
+        let target = "2001:db8::1234:5678".parse().unwrap();
+        let multicast = solicited_node_multicast(target);
+        assert_eq!(multicast, "ff02::1:ff34:5678".parse::<Ipv6Addr>().unwrap());
+        assert_eq!(
+            ipv6_multicast_mac(&multicast),
+            MacAddr::new(0x33, 0x33, 0xff, 0x34, 0x56, 0x78)
+        );
     }
 }

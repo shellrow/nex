@@ -16,13 +16,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 const ETHERNET_HEADER_SIZE: usize = 14;
-const ETHERNET_NULL_HEADER_SIZE: usize = 4;
+use crate::bpf::{LinkType, parse_records};
 
 #[derive(Debug)]
 struct Inner {
     fd: nex_sys::FileDesc,
     loopback: bool,
-    buffer_offset: usize,
+    link_type: LinkType,
 }
 
 /// Sender half of an asynchronous BPF socket.
@@ -86,13 +86,8 @@ impl Stream for AsyncBpfSocketReceiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let me = self.get_mut();
-        let header_size = if me.inner.loopback {
-            ETHERNET_NULL_HEADER_SIZE
-        } else {
-            0
-        };
         if me.packets.is_empty() {
-            let buffer = &mut me.read_buffer[me.inner.buffer_offset..];
+            let buffer = &mut me.read_buffer[..];
             // SAFETY: The descriptor is open and `buffer` is writable for its
             // full reported length.
             let ret = unsafe {
@@ -103,51 +98,10 @@ impl Stream for AsyncBpfSocketReceiver {
                 )
             };
             if ret >= 0 {
-                let buflen = ret as usize;
-                let mut cursor = 0usize;
-                while cursor < buflen {
-                    let remaining = buflen - cursor;
-                    if remaining < mem::size_of::<bpf::bpf_hdr>() {
-                        return Poll::Ready(Some(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "truncated BPF record header",
-                        ))));
-                    }
-                    // SAFETY: The size check proves the complete header is
-                    // in-bounds. `read_unaligned` handles Vec<u8>'s alignment.
-                    let packet = unsafe {
-                        std::ptr::read_unaligned(buffer.as_ptr().add(cursor) as *const bpf::bpf_hdr)
-                    };
-                    let header_len = packet.bh_hdrlen as usize;
-                    let captured_len = packet.bh_caplen as usize;
-                    let record_len = match crate::bpf::validate_record_lengths(
-                        header_len,
-                        captured_len,
-                        remaining,
-                        header_size,
-                    ) {
-                        Ok(record_len) => record_len,
-                        Err(err) => return Poll::Ready(Some(Err(err))),
-                    };
-                    me.packets.push_back((
-                        cursor + header_len + header_size,
-                        captured_len - header_size,
-                    ));
-                    let Ok(record_len) = isize::try_from(record_len) else {
-                        return Poll::Ready(Some(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "BPF record exceeds platform pointer range",
-                        ))));
-                    };
-                    let Some(next) = cursor.checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
-                    else {
-                        return Poll::Ready(Some(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "BPF record offset overflow",
-                        ))));
-                    };
-                    cursor = next;
-                }
+                me.packets = match parse_records(&buffer[..ret as usize]) {
+                    Ok(packets) => packets,
+                    Err(err) => return Poll::Ready(Some(Err(err))),
+                };
             } else {
                 let err = io::Error::last_os_error();
                 if err.kind() == io::ErrorKind::WouldBlock {
@@ -165,17 +119,13 @@ impl Stream for AsyncBpfSocketReceiver {
                 }
             }
         }
-        if let Some((mut start, mut len)) = me.packets.pop_front() {
-            len += me.inner.buffer_offset;
-            if me.inner.loopback {
-                let padding = ETHERNET_HEADER_SIZE - me.inner.buffer_offset;
-                start -= padding;
+        if let Some((start, len)) = me.packets.pop_front() {
+            let packet = &me.read_buffer[start..start + len];
+            let mut output = Vec::new();
+            match me.inner.link_type.normalize(packet, &mut output) {
+                Ok(()) => Poll::Ready(Some(Ok(output))),
+                Err(err) => Poll::Ready(Some(Err(err))),
             }
-            for i in me.read_buffer[start..start + me.inner.buffer_offset].iter_mut() {
-                *i = 0;
-            }
-            let pkt = me.read_buffer[start..start + len].to_vec();
-            Poll::Ready(Some(Ok(pkt)))
         } else {
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -231,10 +181,10 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         iface.ifr_name[i] = c as libc::c_char;
     }
 
-    let buflen = config.read_buffer_size as libc::c_uint;
+    let mut buflen = config.read_buffer_size as libc::c_uint;
     // SAFETY: The descriptor is open and `buflen` has the exact argument type
     // expected by BIOCSBLEN.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &buflen) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &mut buflen) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
@@ -255,17 +205,11 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         return Err(io::Error::last_os_error());
     }
 
-    let mut loopback = false;
-    let mut buffer_offset = 0usize;
-    let mut read_buffer_size = config.read_buffer_size;
-    if dlt == bpf::DLT_NULL {
-        loopback = true;
-        let align = mem::align_of::<bpf::bpf_hdr>();
-        buffer_offset = (ETHERNET_HEADER_SIZE - ETHERNET_NULL_HEADER_SIZE).next_multiple_of(align);
-        read_buffer_size += buffer_offset;
-    } else {
-        // SAFETY: The descriptor is open and the integer argument is valid for
-        // BIOCSHDRCMPLT.
+    let link_type = LinkType::from_dlt(dlt)?;
+    let loopback = link_type.is_ip();
+    let read_buffer_size = buflen as usize;
+    if !loopback {
+        // SAFETY: The descriptor is open and the ioctl reads an integer.
         if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
             return Err(io::Error::last_os_error());
         }
@@ -281,7 +225,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     let inner = Arc::new(Inner {
         fd,
         loopback,
-        buffer_offset,
+        link_type,
     });
     let tx = AsyncBpfSocketSender {
         inner: inner.clone(),

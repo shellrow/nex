@@ -34,9 +34,16 @@ features = [
 
 [features]
 default = []
+winptap = ["dep:winptap"]
 async = ["dep:futures-core"]
 serde = ["dep:serde", "nex-core/serde"]
 pcap = ["dep:pcap"]
 
 [dev-dependencies]
 futures = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+winptap = { version = "0.2.0", optional = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+winptap-core = "0.2.0"

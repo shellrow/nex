@@ -123,6 +123,14 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
     // Resolve Packet.dll first: without Npcap there is nothing to configure.
     let api = windows::packet_api()?;
 
+    channel_with_api(network_interface, config, api)
+}
+
+fn channel_with_api(
+    network_interface: &Interface,
+    config: Config,
+    api: &'static windows::PacketApi,
+) -> io::Result<super::Channel> {
     // Reject an out-of-range timeout before any OS handle is opened.
     let read_timeout_ms = read_timeout_millis(config.read_timeout)?;
 
@@ -430,6 +438,14 @@ impl RawReceiver for RawReceiverImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires NEX_TEST_INTERFACE and Npcap; run with --test-threads=1"]
+    fn post_allocation_failure_closes_adapter() {
+        windows::failure_tests::assert_cleanup(|interface, api| {
+            channel_with_api(interface, Config::default(), api).is_err()
+        });
+    }
 
     #[test]
     fn config_from_preserves_explicit_read_buffer() {

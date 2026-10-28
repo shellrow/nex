@@ -12,7 +12,7 @@ use std::mem;
 use std::pin::Pin;
 use std::slice;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, TryLockError};
 use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -31,6 +31,8 @@ struct WinPcapAdapter {
     api: &'static windows::PacketApi,
     adapter: windows::LPADAPTER,
     operation_lock: Mutex<()>,
+    send_pending: AtomicBool,
+    send_progress: Condvar,
 }
 
 impl Drop for WinPcapAdapter {
@@ -144,6 +146,10 @@ impl AsyncRawSender for AsyncWpcapSocketSender {
         let _operation = match self.inner.adapter.operation_lock.try_lock() {
             Ok(lock) => lock,
             Err(TryLockError::WouldBlock) => {
+                self.inner
+                    .adapter
+                    .send_pending
+                    .store(true, Ordering::Release);
                 match self.inner.send_waker.lock() {
                     Ok(mut waker) => *waker = Some(cx.waker().clone()),
                     Err(_) => {
@@ -170,6 +176,12 @@ impl AsyncRawSender for AsyncWpcapSocketSender {
                 )));
             }
         };
+
+        self.inner
+            .adapter
+            .send_pending
+            .store(false, Ordering::Release);
+        self.inner.adapter.send_progress.notify_one();
 
         let api = self.inner.adapter.api;
         let len = packet.len();
@@ -234,6 +246,14 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     // Resolve Packet.dll first: without Npcap there is nothing to configure.
     let api = windows::packet_api()?;
 
+    channel_with_api(network_interface, config, api)
+}
+
+fn channel_with_api(
+    network_interface: &Interface,
+    config: Config,
+    api: &'static windows::PacketApi,
+) -> io::Result<AsyncChannel> {
     let read_buffer_size = config.read_buffer_size;
     let mut write_buffer = vec![0u8; config.write_buffer_size];
 
@@ -253,6 +273,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         api,
         adapter,
         operation_lock: Mutex::new(()),
+        send_pending: AtomicBool::new(false),
+        send_progress: Condvar::new(),
     });
 
     // SAFETY: The adapter is open and the filter is an Npcap constant.
@@ -341,6 +363,19 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
                     Ok(lock) => lock,
                     Err(poisoned) => poisoned.into_inner(),
                 };
+                // A woken executor must get a chance to acquire the adapter
+                // before this worker starts another blocking receive. Mutexes
+                // do not guarantee fairness. Bound the handoff so cancellation
+                // of a pending send cannot stop receive progress or shutdown.
+                let (_operation, _) = adapter
+                    .send_progress
+                    .wait_timeout_while(
+                        _operation,
+                        Duration::from_millis(RECEIVE_TIMEOUT_MS as u64),
+                        |_| adapter.send_pending.load(Ordering::Acquire),
+                    )
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                adapter.send_pending.store(false, Ordering::Release);
                 // SAFETY: The operation is serialized and both handles remain
                 // live for the duration of the bounded receive.
                 let ret =
@@ -465,6 +500,14 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 mod tests {
     use super::*;
     use futures::future::poll_fn;
+
+    #[test]
+    #[ignore = "requires NEX_TEST_INTERFACE and Npcap; run with --test-threads=1"]
+    fn post_allocation_failure_closes_adapter() {
+        windows::failure_tests::assert_cleanup(|interface, api| {
+            channel_with_api(interface, Config::default(), api).is_err()
+        });
+    }
 
     #[test]
     #[ignore]

@@ -7,6 +7,9 @@
 //!   IPv4: udp_ping 1.1.1.1 eth0
 //!   IPv6: udp_ping "2606:4700:4700::1111" eth0
 
+#[path = "support/next_hop.rs"]
+mod next_hop;
+
 use bytes::Bytes;
 use nex::datalink;
 use nex::datalink::Channel::Ethernet;
@@ -99,7 +102,7 @@ fn main() {
         .destination(if use_tun {
             MacAddr::zero()
         } else {
-            interface.gateway.clone().unwrap().mac_addr
+            next_hop::destination_mac(&interface, src_ip, target_ip).expect("resolve next hop")
         })
         .ethertype(match target_ip {
             IpAddr::V4(_) => EtherType::Ipv4,

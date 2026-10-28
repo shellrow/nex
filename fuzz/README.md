@@ -10,6 +10,7 @@ cargo +nightly fuzz run ipv4_parse
 cargo +nightly fuzz run ipv6_parse
 cargo +nightly fuzz run tcp_options
 cargo +nightly fuzz run dns_name
+cargo +nightly fuzz run quic
 ```
 
 Targets focus on parser totality and malformed-input robustness. Panics and unbounded traversal are considered bugs.

@@ -426,7 +426,8 @@ impl<'a> MutableIcmpv6Packet<'a> {
             _ => None,
         };
 
-        if self.checksum.automatic() && self.checksum.is_dirty() {
+        self.checksum.mark_dirty();
+        if self.checksum.automatic() {
             let _ = self.recompute_checksum();
         }
     }

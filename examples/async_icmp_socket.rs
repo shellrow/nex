@@ -11,7 +11,6 @@ use nex_packet::icmp::{self, IcmpPacket, IcmpType};
 use nex_packet::ipv4::Ipv4Packet;
 use nex_packet::packet::Packet;
 use nex_socket::icmp::{AsyncIcmpSocket, IcmpConfig, IcmpKind};
-use rand::{RngExt, rng};
 use std::collections::HashMap;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -43,37 +42,42 @@ async fn main() -> std::io::Result<()> {
     let config = IcmpConfig::new(IcmpKind::V4);
     let socket = Arc::new(AsyncIcmpSocket::new(&config).await.unwrap());
 
-    // map from (id, seq) to target IP
+    // Datagram ICMP sockets may rewrite identifiers. Match the source and
+    // sequence instead, registering each request before it is sent.
     let replies = Arc::new(Mutex::new(HashMap::new()));
 
     // Receiver task
     let socket_clone = socket.clone();
+    let received = replies.clone();
 
-    tokio::spawn(async move {
+    let receiver = tokio::spawn(async move {
         let mut buf = [0u8; 512];
         loop {
             if let Ok((n, from)) = socket_clone.recv_from(&mut buf).await {
                 println!("Received {} bytes from {}", n, from.ip());
-                if let Ok(ipv4_packet) = Ipv4Packet::try_from_buf(&buf[..n])
-                    && ipv4_packet.header.next_level_protocol
-                        == nex_packet::ip::IpNextProtocol::Icmp
-                    && let Ok(icmp_packet) = IcmpPacket::try_from_bytes(ipv4_packet.payload())
+                let payload = if buf.first().is_some_and(|byte| byte >> 4 == 4) {
+                    let Ok(ipv4) = Ipv4Packet::try_from_buf(&buf[..n]) else {
+                        continue;
+                    };
+                    ipv4.payload()
+                } else {
+                    Bytes::copy_from_slice(&buf[..n])
+                };
+                if let Ok(packet) = IcmpPacket::try_from_bytes(payload)
+                    && let Ok(reply) = EchoReplyPacket::try_from(packet)
+                    && reply.payload.as_ref() == b"ping"
+                    && received
+                        .lock()
+                        .await
+                        .remove(&(from.ip(), reply.sequence_number))
+                        .is_some()
                 {
                     println!(
-                        "\t{:?} from: {:?} to {:?}, TTL: {}",
-                        icmp_packet.header.icmp_type,
-                        ipv4_packet.header.source,
-                        ipv4_packet.header.destination,
-                        ipv4_packet.header.ttl
+                        "EchoReply from {}: ID: {}, Seq: {}",
+                        from.ip(),
+                        reply.identifier,
+                        reply.sequence_number
                     );
-                    match EchoReplyPacket::try_from(icmp_packet) {
-                        Ok(reply) => {
-                            println!("\tID: {}, Seq: {}", reply.identifier, reply.sequence_number);
-                        }
-                        Err(_) => {
-                            println!("\tReceived non-echo-reply ICMP packet");
-                        }
-                    }
                 }
             }
         }
@@ -82,8 +86,8 @@ async fn main() -> std::io::Result<()> {
     let mut handles = Vec::new();
     for i in 1u8..=254 {
         let addr = Ipv4Addr::new(parts[0], parts[1], parts[2], i);
-        let id: u16 = rng().random();
-        let seq: u16 = 1;
+        let id = std::process::id() as u16;
+        let seq = u16::from(i);
         let socket = socket.clone();
         let replies = replies.clone();
 
@@ -91,28 +95,31 @@ async fn main() -> std::io::Result<()> {
             let pkt = IcmpPacketBuilder::new(src_ip, addr)
                 .icmp_type(IcmpType::EchoRequest)
                 .icmp_code(icmp::echo_request::IcmpCodes::NoCode)
-                .echo_fields(id, seq)
                 .payload(Bytes::from_static(b"ping"))
+                .echo_fields(id, seq)
                 .to_bytes()
                 .expect("valid ICMP packet");
             let target = SocketAddr::new(IpAddr::V4(addr), 0);
-            let _ = socket.send_to(&pkt, target).await;
             {
                 let mut lock = replies.lock().await;
-                lock.insert((id, seq), addr);
+                lock.insert((target.ip(), seq), addr);
+            }
+            if let Err(error) = socket.send_to(&pkt, target).await {
+                replies.lock().await.remove(&(target.ip(), seq));
+                eprintln!("Failed to send to {addr}: {error}");
+                return;
             }
             time::sleep(Duration::from_millis(500)).await;
             let mut lock = replies.lock().await;
-            if lock.remove(&(id, seq)).is_some() {
-                // already handled in receiver
-            } else {
+            if lock.remove(&(target.ip(), seq)).is_some() {
                 println!("{} is not responding", addr);
             }
         }));
     }
 
     for h in handles {
-        let _ = h.await;
+        h.await?;
     }
+    receiver.abort();
     Ok(())
 }
