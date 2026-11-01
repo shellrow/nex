@@ -15,13 +15,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-const ETHERNET_HEADER_SIZE: usize = 14;
-use crate::bpf::{LinkType, parse_records};
+use crate::bpf::{LinkType, parse_records, write_packet};
 
 #[derive(Debug)]
 struct Inner {
     fd: nex_sys::FileDesc,
-    loopback: bool,
     link_type: LinkType,
 }
 
@@ -33,30 +31,25 @@ pub struct AsyncBpfSocketSender {
 
 impl AsyncRawSender for AsyncBpfSocketSender {
     fn poll_send(&mut self, cx: &mut Context<'_>, packet: &[u8]) -> Poll<io::Result<()>> {
-        let offset = if self.inner.loopback {
-            ETHERNET_HEADER_SIZE
-        } else {
-            0
+        self.poll_send_with(cx, packet, write_packet)
+    }
+}
+
+impl AsyncBpfSocketSender {
+    fn poll_send_with(
+        &self,
+        cx: &mut Context<'_>,
+        packet: &[u8],
+        write: impl FnOnce(libc::c_int, &[u8]) -> io::Result<()>,
+    ) -> Poll<io::Result<()>> {
+        let prepared = match self.inner.link_type.prepare_send(packet) {
+            Ok(prepared) => prepared,
+            Err(error) => return Poll::Ready(Err(error)),
         };
-        if packet.len() < offset {
-            return Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "loopback packets must include an Ethernet header",
-            )));
-        }
-        // SAFETY: The descriptor is owned by `inner`; the packet slice remains
-        // readable for the duration of `write`.
-        let ret = unsafe {
-            libc::write(
-                self.inner.fd.as_raw(),
-                packet[offset..].as_ptr() as *const libc::c_void,
-                (packet.len() - offset) as libc::size_t,
-            )
+        let err = match write(self.inner.fd.as_raw(), &prepared) {
+            Ok(()) => return Poll::Ready(Ok(())),
+            Err(error) => error,
         };
-        if ret >= 0 {
-            return Poll::Ready(Ok(()));
-        }
-        let err = io::Error::last_os_error();
         if err.kind() == io::ErrorKind::WouldBlock {
             let mut pfd = libc::pollfd {
                 fd: self.inner.fd.as_raw(),
@@ -206,9 +199,8 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     }
 
     let link_type = LinkType::from_dlt(dlt)?;
-    let loopback = link_type.is_ip();
     let read_buffer_size = buflen as usize;
-    if !loopback {
+    if link_type.header_complete() {
         // SAFETY: The descriptor is open and the ioctl reads an integer.
         if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
             return Err(io::Error::last_os_error());
@@ -222,11 +214,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 
     let read_buffer = vec![0u8; read_buffer_size];
 
-    let inner = Arc::new(Inner {
-        fd,
-        loopback,
-        link_type,
-    });
+    let inner = Arc::new(Inner { fd, link_type });
     let tx = AsyncBpfSocketSender {
         inner: inner.clone(),
     };
@@ -242,6 +230,81 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 mod tests {
     use super::*;
     use futures::future::poll_fn;
+
+    #[test]
+    fn async_send_uses_link_framing_and_retries_whole_packet_after_would_block() {
+        use crate::bpf::test_ip_frame;
+        use std::os::{fd::IntoRawFd, unix::net::UnixDatagram};
+        let (writer, reader) = UnixDatagram::pair().unwrap();
+        writer.set_nonblocking(true).unwrap();
+        reader.set_nonblocking(true).unwrap();
+        // SAFETY: into_raw_fd transfers exclusive descriptor ownership.
+        let fd = unsafe { nex_sys::FileDesc::from_raw(writer.into_raw_fd()) };
+        let mut sender = AsyncBpfSocketSender {
+            inner: Arc::new(Inner {
+                fd,
+                link_type: LinkType::Null,
+            }),
+        };
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let mut buffer = [0; 128];
+        for version in [4, 6] {
+            let packet = test_ip_frame(version);
+            assert!(matches!(
+                sender.poll_send(&mut cx, &packet),
+                Poll::Ready(Ok(()))
+            ));
+            let n = reader.recv(&mut buffer).unwrap();
+            assert_eq!(
+                &buffer[..n],
+                &*LinkType::Null.prepare_send(&packet).unwrap()
+            );
+        }
+        assert!(
+            matches!(sender.poll_send(&mut cx, &[0; 13]), Poll::Ready(Err(error)) if error.kind() == io::ErrorKind::InvalidInput)
+        );
+        assert_eq!(
+            reader.recv(&mut buffer).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
+        let packet = test_ip_frame(6);
+        #[derive(Default)]
+        struct WakeCount(std::sync::atomic::AtomicUsize);
+        impl futures::task::ArcWake for WakeCount {
+            fn wake_by_ref(this: &Arc<Self>) {
+                this.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let wakes = Arc::new(WakeCount::default());
+        let waker = futures::task::waker(wakes.clone());
+        let mut cx = Context::from_waker(&waker);
+        assert!(
+            sender
+                .poll_send_with(&mut cx, &packet, |_, bytes| {
+                    assert_eq!(bytes, &*LinkType::Null.prepare_send(&packet).unwrap());
+                    Err(io::Error::from_raw_os_error(libc::EWOULDBLOCK))
+                })
+                .is_pending()
+        );
+        assert_eq!(wakes.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(matches!(sender.poll_send_with(&mut cx, &packet, |_, _| {
+            Err(io::Error::from_raw_os_error(libc::EINTR))
+        }), Poll::Ready(Err(error)) if error.kind() == io::ErrorKind::Interrupted));
+        assert!(matches!(
+            sender.poll_send(&mut cx, &packet),
+            Poll::Ready(Ok(()))
+        ));
+        let n = reader.recv(&mut buffer).unwrap();
+        assert_eq!(
+            &buffer[..n],
+            &*LinkType::Null.prepare_send(&packet).unwrap()
+        );
+        assert_eq!(
+            reader.recv(&mut buffer).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
+    }
 
     #[test]
     #[ignore]

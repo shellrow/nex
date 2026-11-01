@@ -166,7 +166,10 @@ impl FanoutOption {
 ///   kernel.
 /// - macOS and BSD use BPF devices. `bpf_fd_attempts` bounds `/dev/bpf*`
 ///   discovery, read buffering follows the BPF buffer size, and timeouts bound
-///   readiness waits.
+///   readiness waits. On macOS DLT_NULL, senders accept Ethernet-framed IPv4
+///   or IPv6 and replace the Ethernet header with a native-endian address
+///   family header. This applies to `send`, `build_and_send`, and async sending;
+///   malformed or truncated Ethernet/IP input returns `InvalidInput`.
 /// - Windows uses Npcap. Buffer sizes configure Npcap packet buffers,
 ///   `read_timeout` bounds each receive via `PacketSetReadTimeout` (an elapsed
 ///   timeout surfaces as [`io::ErrorKind::TimedOut`]), and `promiscuous`
