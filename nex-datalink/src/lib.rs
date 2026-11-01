@@ -203,6 +203,13 @@ pub struct Config {
     /// Linux only: optional packet fanout group and distribution settings.
     pub linux_fanout: Option<FanoutOption>,
 
+    /// Linux AF_PACKET only: suppress outgoing copies on loopback interfaces.
+    /// Defaults to false, preserving raw capture behavior. When enabled, both
+    /// synchronous and asynchronous receivers discard only PACKET_OUTGOING
+    /// matching the bound loopback interface; incoming copies and outgoing
+    /// traffic on other interfaces are retained. Packet bytes are unchanged.
+    pub linux_suppress_loopback_duplicates: bool,
+
     /// Whether the backend should request promiscuous packet capture.
     pub promiscuous: bool,
 }
@@ -258,6 +265,7 @@ impl Default for Config {
             channel_type: ChannelType::Layer2,
             bpf_fd_attempts: 1000,
             linux_fanout: None,
+            linux_suppress_loopback_duplicates: false,
             promiscuous: true,
         }
     }
@@ -319,6 +327,16 @@ impl Config {
 
     pub fn with_linux_fanout(mut self, linux_fanout: Option<FanoutOption>) -> Self {
         self.linux_fanout = linux_fanout;
+        self
+    }
+
+    /// Enables Linux loopback duplicate suppression for synchronous and
+    /// asynchronous AF_PACKET receivers. Disabled by default; ignored by
+    /// other backends. Synchronous read timeouts cover the entire receive
+    /// call, including discarded copies. Async stream deadlines remain the
+    /// caller's responsibility.
+    pub fn with_linux_suppress_loopback_duplicates(mut self, enabled: bool) -> Self {
+        self.linux_suppress_loopback_duplicates = enabled;
         self
     }
 

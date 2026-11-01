@@ -2,6 +2,7 @@
 
 use crate::async_io::{AsyncChannel, AsyncRawSender};
 use crate::bindings::linux;
+use crate::linux::{LoopbackFilter, receive_packet};
 use crate::{ChannelType, Config};
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
@@ -84,6 +85,7 @@ impl AsyncRawSender for AsyncRawSocketSender {
 pub struct AsyncRawSocketReceiver {
     inner: Arc<Inner>,
     read_buffer: Vec<u8>,
+    filter: LoopbackFilter,
 }
 
 impl Stream for AsyncRawSocketReceiver {
@@ -91,35 +93,35 @@ impl Stream for AsyncRawSocketReceiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let me = self.get_mut();
-        // SAFETY: The descriptor is open and `read_buffer` is writable for its
-        // entire length.
-        let ret = unsafe {
-            libc::recv(
-                me.inner.fd.as_raw(),
-                me.read_buffer.as_mut_ptr() as *mut libc::c_void,
-                me.read_buffer.len(),
-                libc::MSG_DONTWAIT,
-            )
-        };
-        if ret >= 0 {
-            let n = ret as usize;
-            let pkt = me.read_buffer[..n].to_vec();
-            return Poll::Ready(Some(Ok(pkt)));
-        }
-        let err = io::Error::last_os_error();
-        if err.kind() == io::ErrorKind::WouldBlock {
-            // SAFETY: `events` provides writable storage for one epoll event
-            // and the epoll descriptor is open.
-            unsafe {
-                let mut events = [mem::zeroed::<libc::epoll_event>()];
-                libc::epoll_wait(me.inner.epfd.as_raw(), events.as_mut_ptr(), 1, 0);
-            }
-            cx.waker().wake_by_ref();
-            Poll::Pending
-        } else {
-            Poll::Ready(Some(Err(err)))
+        match poll_receive_filtered(cx, || {
+            receive_packet(me.inner.fd.as_raw(), &mut me.read_buffer, me.filter)
+        }) {
+            Poll::Ready(Ok(length)) => Poll::Ready(Some(Ok(me.read_buffer[..length].to_vec()))),
+            Poll::Ready(Err(error)) => Poll::Ready(Some(Err(error))),
+            Poll::Pending => Poll::Pending,
         }
     }
+}
+
+// Bound the work of a single poll even if the socket never becomes empty.
+const RECEIVE_BUDGET: usize = 64;
+
+fn poll_receive_filtered(
+    cx: &mut Context<'_>,
+    mut receive: impl FnMut() -> io::Result<(usize, bool)>,
+) -> Poll<io::Result<usize>> {
+    for _ in 0..RECEIVE_BUDGET {
+        match receive() {
+            Ok((_, true)) => continue,
+            Ok((length, false)) => return Poll::Ready(Ok(length)),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+            Err(error) => return Poll::Ready(Err(error)),
+        }
+    }
+    // This backend already self-wakes on WouldBlock. Also self-wake after
+    // exhausting the budget: queued packets need not generate a new event.
+    cx.waker().wake_by_ref();
+    Poll::Pending
 }
 
 /// Create a new asynchronous raw socket channel.
@@ -243,6 +245,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     let rx = AsyncRawSocketReceiver {
         inner,
         read_buffer: vec![0u8; config.read_buffer_size],
+        filter: LoopbackFilter::new(network_interface, config.linux_suppress_loopback_duplicates),
     };
     Ok(AsyncChannel::Ethernet(Box::new(tx), Box::new(rx)))
 }
@@ -251,6 +254,75 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
 mod tests {
     use super::*;
     use futures::future::poll_fn;
+
+    #[derive(Default)]
+    struct WakeCount(std::sync::atomic::AtomicUsize);
+
+    impl futures::task::ArcWake for WakeCount {
+        fn wake_by_ref(this: &Arc<Self>) {
+            this.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn filtered_receive_yields_and_guarantees_repoll() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let wakes = Arc::new(WakeCount::default());
+        let waker = futures::task::waker(wakes.clone());
+        let mut cx = Context::from_waker(&waker);
+        let mut calls = 0;
+        assert!(
+            poll_receive_filtered(&mut cx, || {
+                calls += 1;
+                assert!(calls <= RECEIVE_BUDGET);
+                Ok((52, true))
+            })
+            .is_pending()
+        );
+        assert_eq!(calls, RECEIVE_BUDGET);
+        assert_eq!(wakes.0.load(SeqCst), 1);
+        assert!(matches!(
+            poll_receive_filtered(&mut cx, || Ok((17, false))),
+            Poll::Ready(Ok(17))
+        ));
+        assert!(
+            poll_receive_filtered(&mut cx, || Err(io::ErrorKind::WouldBlock.into())).is_pending()
+        );
+        assert_eq!(wakes.0.load(SeqCst), 2);
+        for code in [libc::EBADF, libc::EINTR] {
+            let Poll::Ready(Err(error)) =
+                poll_receive_filtered(&mut cx, || Err(io::Error::from_raw_os_error(code)))
+            else {
+                panic!("expected error")
+            };
+            assert_eq!(error.raw_os_error(), Some(code));
+        }
+    }
+
+    #[test]
+    fn continuous_suppression_allows_other_future_and_cancellation() {
+        use futures::future::{Either, select};
+        use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+        let calls = AtomicUsize::new(0);
+        let progress = AtomicUsize::new(0);
+        futures::executor::block_on(async {
+            let receive = Box::pin(poll_fn(|cx| {
+                poll_receive_filtered(cx, || {
+                    calls.fetch_add(1, SeqCst);
+                    Ok((52, true))
+                })
+            }));
+            let other = Box::pin(async {
+                progress.fetch_add(1, SeqCst);
+            });
+            let Either::Right(((), pending_receive)) = select(receive, other).await else {
+                panic!("suppressed copy escaped")
+            };
+            drop(pending_receive);
+        });
+        assert_eq!(progress.load(SeqCst), 1);
+        assert!(calls.load(SeqCst) <= RECEIVE_BUDGET);
+    }
 
     #[test]
     #[ignore]
