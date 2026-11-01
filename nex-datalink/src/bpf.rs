@@ -12,9 +12,10 @@ use std::ptr;
 use std::sync::Arc;
 use std::time::Duration;
 
-static ETHERNET_HEADER_SIZE: usize = 14;
 mod records;
-pub(crate) use records::{LinkType, parse_records};
+#[cfg(test)]
+pub(crate) use records::test_ip_frame;
+pub(crate) use records::{LinkType, parse_records, write_packet};
 
 /// The BPF-specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -186,10 +187,10 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
     }
 
     let link_type = LinkType::from_dlt(dlt)?;
-    let loopback = link_type.is_ip();
-    if loopback {
+    if link_type.is_ip() {
         set_feedback(fd.as_raw())?;
-    } else {
+    }
+    if link_type.header_complete() {
         // SAFETY: The descriptor is open and the ioctl reads an integer.
         if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
             return Err(io::Error::last_os_error());
@@ -210,7 +211,7 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         // SAFETY: A zero bit pattern is a valid empty `fd_set`.
         fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
-        loopback,
+        link_type,
         timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
     });
     // SAFETY: `fd_set` is initialized and `fd` is an open descriptor that fits
@@ -244,8 +245,41 @@ struct RawSenderImpl {
     fd: Arc<nex_sys::FileDesc>,
     fd_set: libc::fd_set,
     write_buffer: Vec<u8>,
-    loopback: bool,
+    link_type: LinkType,
     timeout: Option<libc::timespec>,
+}
+
+fn send_frame(
+    fd: libc::c_int,
+    fd_set: &mut libc::fd_set,
+    timeout: Option<libc::timespec>,
+    link_type: LinkType,
+    packet: &[u8],
+) -> io::Result<()> {
+    let prepared = link_type.prepare_send(packet)?;
+    // SAFETY: fd_set and the optional timeout are initialized and remain live
+    // throughout pselect. The caller owns the open descriptor.
+    let ret = unsafe {
+        libc::FD_SET(fd, fd_set);
+        libc::pselect(
+            fd + 1,
+            ptr::null_mut(),
+            fd_set,
+            ptr::null_mut(),
+            timeout
+                .as_ref()
+                .map(|to| to as *const libc::timespec)
+                .unwrap_or(ptr::null()),
+            ptr::null(),
+        )
+    };
+    if ret == -1 {
+        Err(io::Error::last_os_error())
+    } else if ret == 0 {
+        Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"))
+    } else {
+        write_packet(fd, &prepared)
+    }
 }
 
 impl RawSender for RawSenderImpl {
@@ -264,110 +298,32 @@ impl RawSender for RawSenderImpl {
         }
         let len = num_packets.checked_mul(packet_size)?;
         if len > self.write_buffer.len() {
-            None
-        } else {
-            // If we're sending on the loopback device, discard the ethernet header.
-            // The OS will prepend the packet with 4 bytes set to AF_INET.
-            let offset = if self.loopback {
-                ETHERNET_HEADER_SIZE
-            } else {
-                0
-            };
-            if packet_size < offset {
-                return Some(Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "loopback packets must include an Ethernet header",
-                )));
-            }
-            for chunk in self.write_buffer[..len].chunks_mut(packet_size) {
-                func(chunk);
-                // SAFETY: `fd_set` and the optional timeout are initialized and
-                // remain live throughout pselect.
-                let ret = unsafe {
-                    libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
-                    libc::pselect(
-                        self.fd.as_raw() + 1,
-                        ptr::null_mut(),
-                        &mut self.fd_set as *mut libc::fd_set,
-                        ptr::null_mut(),
-                        self.timeout
-                            .as_ref()
-                            .map(|to| to as *const libc::timespec)
-                            .unwrap_or(ptr::null()),
-                        ptr::null(),
-                    )
-                };
-                if ret == -1 {
-                    // Error occurred!
-                    return Some(Err(io::Error::last_os_error()));
-                } else if ret == 0 {
-                    return Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")));
-                // SAFETY: `offset` is checked against `chunk.len()` above; the
-                // descriptor is open and `write` retains no buffer pointer.
-                } else if unsafe {
-                    libc::write(
-                        self.fd.as_raw(),
-                        chunk.as_ptr().add(offset) as *const libc::c_void,
-                        (chunk.len() - offset) as libc::size_t,
-                    )
-                } == -1
-                {
-                    return Some(Err(io::Error::last_os_error()));
-                }
-            }
-            Some(Ok(()))
+            return None;
         }
+        for chunk in self.write_buffer[..len].chunks_mut(packet_size) {
+            func(chunk);
+            if let Err(error) = send_frame(
+                self.fd.as_raw(),
+                &mut self.fd_set,
+                self.timeout,
+                self.link_type,
+                chunk,
+            ) {
+                return Some(Err(error));
+            }
+        }
+        Some(Ok(()))
     }
 
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
-        // If we're sending on the loopback device, discard the ethernet header.
-        // The OS will prepend the packet with 4 bytes set to AF_INET.
-        let offset = if self.loopback {
-            ETHERNET_HEADER_SIZE
-        } else {
-            0
-        };
-        if packet.len() < offset {
-            return Some(Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "loopback packets must include an Ethernet header",
-            )));
-        }
-        // SAFETY: `fd_set` and the optional timeout are initialized and remain
-        // live throughout pselect.
-        let ret = unsafe {
-            libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
-            libc::pselect(
-                self.fd.as_raw() + 1,
-                ptr::null_mut(),
-                &mut self.fd_set as *mut libc::fd_set,
-                ptr::null_mut(),
-                self.timeout
-                    .as_ref()
-                    .map(|to| to as *const libc::timespec)
-                    .unwrap_or(ptr::null()),
-                ptr::null(),
-            )
-        };
-        if ret == -1 {
-            Some(Err(io::Error::last_os_error()))
-        } else if ret == 0 {
-            Some(Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out")))
-        } else {
-            // SAFETY: `offset` is checked against `packet.len()` above; the
-            // descriptor is open and `write` retains no buffer pointer.
-            match unsafe {
-                libc::write(
-                    self.fd.as_raw(),
-                    packet.as_ptr().add(offset) as *const libc::c_void,
-                    (packet.len() - offset) as libc::size_t,
-                )
-            } {
-                -1 => Some(Err(io::Error::last_os_error())),
-                _ => Some(Ok(())),
-            }
-        }
+        Some(send_frame(
+            self.fd.as_raw(),
+            &mut self.fd_set,
+            self.timeout,
+            self.link_type,
+            packet,
+        ))
     }
 }
 
@@ -439,6 +395,58 @@ impl RawReceiver for RawReceiverImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn send_and_build_use_link_framing() {
+        use std::os::{fd::IntoRawFd, unix::net::UnixDatagram};
+        let (writer, reader) = UnixDatagram::pair().unwrap();
+        reader
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        // SAFETY: into_raw_fd transfers exclusive descriptor ownership.
+        let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(writer.into_raw_fd()) });
+        let mut sender = RawSenderImpl {
+            fd,
+            // SAFETY: Zero initializes an empty fd_set.
+            fd_set: unsafe { mem::zeroed() },
+            write_buffer: vec![0; 108],
+            link_type: LinkType::Null,
+            timeout: Some(nex_sys::duration_to_timespec(Duration::from_secs(1))),
+        };
+        let mut buffer = [0; 128];
+        for version in [4, 6] {
+            let packet = test_ip_frame(version);
+            let expected = LinkType::Null.prepare_send(&packet).unwrap();
+            sender.send(&packet).unwrap().unwrap();
+            let n = reader.recv(&mut buffer).unwrap();
+            assert_eq!(&buffer[..n], &*expected);
+            sender
+                .build_and_send(2, packet.len(), &mut |out| out.copy_from_slice(&packet))
+                .unwrap()
+                .unwrap();
+            for _ in 0..2 {
+                let n = reader.recv(&mut buffer).unwrap();
+                assert_eq!(&buffer[..n], &*expected);
+            }
+        }
+        reader.set_nonblocking(true).unwrap();
+        assert_eq!(
+            sender.send(&[0; 13]).unwrap().unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            sender
+                .build_and_send(1, 13, &mut |_| {})
+                .unwrap()
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            reader.recv(&mut buffer).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
+    }
 
     #[test]
     fn accepts_header_without_repr_c_trailing_padding() {
