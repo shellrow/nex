@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -20,7 +23,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install libpcap
         run: |
           sudo apt-get update
@@ -42,7 +45,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
       - name: Check workspace with Rust 1.88
@@ -58,28 +61,20 @@ jobs:
         os: [macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Check workspace
         run: cargo check --workspace --all-targets --all-features
 
   cross-target-check:
-    name: Check (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+    name: Check (NetBSD and Android)
+    runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-netbsd
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-netbsd,aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
-      - name: Check cross-platform library
-        run: cargo check -p nex --lib --features async,serde --target ${{ matrix.target }}
+      - run: cargo check -p nex --lib --features async,serde --target x86_64-unknown-netbsd --target aarch64-linux-android
