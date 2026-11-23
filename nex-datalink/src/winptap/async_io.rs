@@ -145,15 +145,16 @@ impl AsyncReceiver {
     }
 
     /// Cancel delivery and synchronously join the workers. This discards pending
-    /// frames, unlike the synchronous receiver's draining `stop` operation.
+    /// frames. If a waker calls this method on the receive worker itself, the
+    /// worker exits after that waker returns.
     /// The stream yields one `Interrupted` error then ends unless already ended.
     pub fn close(&mut self) -> io::Result<()> {
         self.cancellation.cancel();
         match self.worker.take() {
-            Some(worker) => worker
+            Some(worker) if worker.thread().id() != thread::current().id() => worker
                 .join()
                 .map_err(|_| io::Error::other("winptap receive worker panicked"))?,
-            None => Ok(()),
+            _ => Ok(()),
         }
     }
 }

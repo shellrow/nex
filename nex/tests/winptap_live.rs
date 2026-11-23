@@ -26,7 +26,7 @@ fn config(backend: winptap::Backend) -> winptap::Config {
 }
 
 #[test]
-#[ignore = "requires administrator, NEX_TEST_INTERFACE, and incoming UDP fixture; see docs/WINPTAP.md"]
+#[ignore = "requires administrator, NEX_TEST_INTERFACE, and incoming UDP fixture; see docs/PRIVILEGED_TESTING.md"]
 fn receive_controlled_ethernet_through_facade() {
     let interface = interface();
     // Keep the destination port open without changing firewall/network settings.
@@ -71,10 +71,6 @@ fn receive_controlled_ethernet_through_facade() {
                 }
             }
             assert!(drained <= 8);
-            println!(
-                "{backend:?}: fixture received, drained {drained}, {:?}",
-                receiver.statistics()
-            );
             receiver.stop().unwrap();
         })
         .join()
@@ -115,7 +111,7 @@ fn repeated_stop_cancel_drop() {
 
 #[cfg(feature = "async")]
 #[test]
-#[ignore = "requires administrator, NEX_TEST_INTERFACE, and incoming UDP fixture; see docs/WINPTAP.md"]
+#[ignore = "requires administrator, NEX_TEST_INTERFACE, and incoming UDP fixture; see docs/PRIVILEGED_TESTING.md"]
 fn async_receive_cancel_and_drop_without_tokio() {
     use futures::{StreamExt, executor::block_on};
     let interface = interface();
@@ -166,8 +162,5 @@ fn async_receive_cancel_and_drop_without_tokio() {
             }
             drop(receiver);
         }
-        println!(
-            "{backend:?}: runtime-independent async receive, cancellation, and 12 close/drop cycles passed"
-        );
     }
 }
