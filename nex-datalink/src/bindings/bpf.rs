@@ -2,9 +2,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
-extern crate libc;
-
-use nex_sys;
+use std::{collections::VecDeque, io, mem::offset_of};
 
 pub const AF_LINK: libc::c_int = 18;
 
@@ -17,7 +15,7 @@ const IOCPARM_SHIFT: libc::c_ulong = 13;
 const IOCPARM_MASK: libc::c_ulong = (1 << (IOCPARM_SHIFT as usize)) - 1;
 
 const SIZEOF_TIMEVAL: libc::c_ulong = 16;
-const SIZEOF_IFREQ: libc::c_ulong = 32;
+const SIZEOF_IFREQ: libc::c_ulong = size_of::<ifreq>() as _;
 const SIZEOF_C_UINT: libc::c_ulong = 4;
 #[cfg(any(
     target_os = "freebsd",
@@ -25,7 +23,7 @@ const SIZEOF_C_UINT: libc::c_ulong = 4;
     target_os = "illumos",
     target_os = "solaris"
 ))]
-const SIZEOF_C_LONG: libc::c_int = 8;
+const SIZEOF_C_LONG: libc::c_int = size_of::<libc::c_long>() as _;
 
 pub const BIOCSETIF: libc::c_ulong =
     IOC_IN | ((SIZEOF_IFREQ & IOCPARM_MASK) << 16usize) | (('B' as libc::c_ulong) << 8usize) | 108;
@@ -63,16 +61,18 @@ const BPF_ALIGNMENT: libc::c_int = SIZEOF_C_LONG;
 #[cfg(any(target_os = "openbsd", target_os = "macos", target_os = "ios", windows))]
 const BPF_ALIGNMENT: libc::c_int = 4;
 
-pub fn BPF_WORDALIGN(x: isize) -> isize {
-    let bpf_alignment = BPF_ALIGNMENT as isize;
-    (x + (bpf_alignment - 1)) & !(bpf_alignment - 1)
+pub fn BPF_WORDALIGN(len: usize) -> usize {
+    len.next_multiple_of(BPF_ALIGNMENT as usize)
 }
 
 // See /usr/include/net/if.h
 #[repr(C)]
 pub struct ifreq {
     pub ifr_name: [libc::c_char; IFNAMSIZ],
-    pub ifru_addr: nex_sys::SockAddr, // NOTE Should be a union
+    #[cfg(target_os = "netbsd")]
+    pub ifru_space: libc::sockaddr_storage,
+    #[cfg(not(target_os = "netbsd"))]
+    pub ifru_addr: nex_sys::SockAddr,
 }
 
 // See /usr/include/net/if_dl.h
@@ -153,4 +153,53 @@ pub struct bpf_hdr {
 #[cfg(not(windows))]
 unsafe extern "C" {
     pub fn ioctl(d: libc::c_int, request: libc::c_ulong, ...) -> libc::c_int;
+}
+
+pub(crate) fn validate_record_lengths(
+    header_len: usize,
+    captured_len: usize,
+    remaining: usize,
+) -> io::Result<usize> {
+    let record_len = header_len
+        .checked_add(captured_len)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "BPF record length overflow"))?;
+    if header_len < BPF_HDR_FIELD_LEN || record_len > remaining {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid BPF record lengths",
+        ));
+    }
+    Ok(record_len)
+}
+
+pub(crate) fn parse_records(buffer: &[u8]) -> io::Result<VecDeque<(usize, usize)>> {
+    let mut packets = VecDeque::new();
+    let mut cursor = 0;
+    while cursor < buffer.len() {
+        let remaining = buffer.len() - cursor;
+        if remaining < BPF_HDR_FIELD_LEN {
+            return Err(invalid_record());
+        }
+        let record = &buffer[cursor..];
+        let header_len = u16::from_ne_bytes(
+            *record[offset_of!(bpf_hdr, bh_hdrlen)..]
+                .first_chunk()
+                .ok_or_else(invalid_record)?,
+        ) as usize;
+        let captured_len = u32::from_ne_bytes(
+            *record[offset_of!(bpf_hdr, bh_caplen)..]
+                .first_chunk()
+                .ok_or_else(invalid_record)?,
+        ) as usize;
+        let record_len = validate_record_lengths(header_len, captured_len, remaining)?;
+        packets.push_back((cursor + header_len, captured_len));
+        cursor = cursor
+            .checked_add(BPF_WORDALIGN(record_len))
+            .ok_or_else(invalid_record)?;
+    }
+    Ok(packets)
+}
+
+fn invalid_record() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "invalid BPF record")
 }

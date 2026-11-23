@@ -2,13 +2,16 @@ use crate::SocketFamily;
 use crate::icmp::{IcmpConfig, IcmpKind, IcmpSocketType};
 use socket2::{Domain, Protocol, Socket, Type as SockType};
 use std::io;
-use std::net::{SocketAddr, UdpSocket as StdUdpSocket};
+use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 
 /// Asynchronous ICMP socket built on Tokio.
+/// Configured I/O timeouts require a Tokio runtime with time enabled.
 #[derive(Debug)]
 pub struct AsyncIcmpSocket {
     inner: UdpSocket,
+    read_timeout: Option<std::time::Duration>,
+    write_timeout: Option<std::time::Duration>,
     socket_type: IcmpSocketType,
     socket_family: SocketFamily,
 }
@@ -69,29 +72,12 @@ impl AsyncIcmpSocket {
 
         let sock_type = socket.r#type()?;
 
-        // Convert socket2::Socket into std::net::UdpSocket
-        #[cfg(windows)]
-        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
-
-            StdUdpSocket::from_raw_socket(socket.into_raw_socket())
-        };
-        #[cfg(unix)]
-        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::fd::{FromRawFd, IntoRawFd};
-
-            StdUdpSocket::from_raw_fd(socket.into_raw_fd())
-        };
-
-        // std -> tokio::net::UdpSocket
-        let inner = UdpSocket::from_std(std_socket)?;
+        let inner = UdpSocket::from_std(socket.into())?;
 
         Ok(Self {
             inner,
+            read_timeout: config.read_timeout,
+            write_timeout: config.write_timeout,
             socket_type: IcmpSocketType::try_from_sock_type(sock_type)?,
             socket_family: config.socket_family,
         })
@@ -99,12 +85,12 @@ impl AsyncIcmpSocket {
 
     /// Send a packet asynchronously.
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
-        self.inner.send_to(buf, target).await
+        crate::with_timeout(self.write_timeout, self.inner.send_to(buf, target)).await
     }
 
     /// Receive a packet asynchronously.
     pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.inner.recv_from(buf).await
+        crate::with_timeout(self.read_timeout, self.inner.recv_from(buf)).await
     }
 
     /// Retrieve the local address.

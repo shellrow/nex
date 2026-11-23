@@ -250,6 +250,9 @@ fn idle_timeout_cancellation_and_release() {
     #[cfg(feature = "async")]
     {
         use futures::{FutureExt, StreamExt};
+        // Initialize the process-wide readiness reactor before measuring channel FDs.
+        drop(nex_datalink::async_io::async_channel(&iface, settings).unwrap());
+        let before = descriptors();
         let nex_datalink::async_io::AsyncChannel::Ethernet(tx, mut rx) =
             nex_datalink::async_io::async_channel(&iface, settings).unwrap()
         else {

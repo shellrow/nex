@@ -12,14 +12,13 @@ use pcap::{Activated, Active, State};
 use crate::Channel::Ethernet;
 use crate::{RawReceiver, RawSender};
 use nex_core::interface::Interface;
-use nex_core::interface::InterfaceType;
+use nex_core::interface::{IFF_LOOPBACK, IFF_UP, OperState, get_interfaces};
 
 /// Configuration for the pcap datalink backend.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub struct Config {
-    /// The size of buffer to use when reading packets. Must be at least
-    /// 65516 with pcap.
+    /// Kernel capture buffer size in bytes. Zero selects the libpcap default.
     pub read_buffer_size: usize,
 
     /// The read timeout. Defaults to None.
@@ -36,9 +35,8 @@ impl From<&super::Config> for Config {
             read_timeout: config.read_timeout,
             promiscuous: config.promiscuous,
         };
-        // pcap is unique in that the buffer size must be greater or equal to
-        // MAXIMUM_SNAPLEN, which is currently hard-coded to 65536
-        // So, just reset it to the default.
+        // Small per-read buffers translate poorly to kernel capture buffers.
+        // Preserve the libpcap default for these channel configurations.
         if c.read_buffer_size < 65536 {
             c.read_buffer_size = Config::default().read_buffer_size;
         }
@@ -61,18 +59,21 @@ impl Default for Config {
 #[inline]
 pub fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
     let device_name = capture_device_name(&network_interface.name);
-    let cap = match pcap::Capture::from_device(device_name.as_ref()) {
-        Ok(cap) => cap,
-        Err(e) => return Err(io::Error::other(e)),
+    let size = i32::try_from(config.read_buffer_size)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "pcap buffer size exceeds i32"))?;
+    let mut cap = pcap::Capture::from_device(device_name.as_ref())
+        .map_err(io::Error::other)?
+        .buffer_size(size);
+    if let Some(timeout) = config.read_timeout {
+        let millis =
+            i32::try_from(timeout.as_nanos().div_ceil(1_000_000).max(1)).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "pcap timeout exceeds i32 milliseconds",
+                )
+            })?;
+        cap = cap.timeout(millis);
     }
-    .buffer_size(config.read_buffer_size as i32);
-    // Set pcap timeout (in milliseconds).
-    // For conversion .as_millis() method could be used as well, but might have
-    // a small performance impact as it uses u128 as return type
-    let cap = match config.read_timeout {
-        Some(to) => cap.timeout((to.as_secs() as u32 * 1000 + to.subsec_millis()) as i32),
-        None => cap,
-    };
     // Enable promiscuous capture
     let cap = cap.promisc(config.promiscuous);
     let cap = match cap.open() {
@@ -82,11 +83,12 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<supe
     let cap = Arc::new(Mutex::new(cap));
     Ok(Ethernet(
         Box::new(RawSenderImpl {
+            device_name: device_name.into_owned(),
             capture: cap.clone(),
         }),
         Box::new(RawReceiverImpl {
             capture: cap.clone(),
-            read_buffer: vec![0; config.read_buffer_size],
+            read_buffer: Vec::new(),
         }),
     ))
 }
@@ -103,7 +105,7 @@ fn capture_device_name(name: &str) -> std::borrow::Cow<'_, str> {
 
 /// Create a datalink channel from a pcap file.
 #[inline]
-pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::Channel> {
+pub fn from_file<P: AsRef<Path>>(path: P, _config: Config) -> io::Result<super::Channel> {
     let cap = match pcap::Capture::from_file(path) {
         Ok(cap) => cap,
         Err(e) => return Err(io::Error::other(e)),
@@ -113,12 +115,13 @@ pub fn from_file<P: AsRef<Path>>(path: P, config: Config) -> io::Result<super::C
         Box::new(InvalidRawSenderImpl {}),
         Box::new(RawReceiverImpl {
             capture: cap.clone(),
-            read_buffer: vec![0; config.read_buffer_size],
+            read_buffer: Vec::new(),
         }),
     ))
 }
 
 struct RawSenderImpl {
+    device_name: String,
     capture: Arc<Mutex<pcap::Capture<Active>>>,
 }
 
@@ -138,15 +141,15 @@ impl RawSender for RawSenderImpl {
         packet_size: usize,
         func: &mut dyn FnMut(&mut [u8]),
     ) -> Option<io::Result<()>> {
+        if num_packets == 0 {
+            return Some(Ok(()));
+        }
+        let mut data = vec![0; packet_size];
         for _ in 0..num_packets {
-            let mut data = vec![0; packet_size];
+            data.fill(0);
             func(&mut data);
-            let mut cap = match lock_capture(&self.capture) {
-                Ok(cap) => cap,
-                Err(err) => return Some(Err(err)),
-            };
-            if let Err(e) = cap.sendpacket(data) {
-                return Some(Err(io::Error::other(e)));
+            if let Err(error) = self.send_packet(&data) {
+                return Some(Err(error));
             }
         }
         Some(Ok(()))
@@ -154,14 +157,26 @@ impl RawSender for RawSenderImpl {
 
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
-        let mut cap = match lock_capture(&self.capture) {
+        Some(self.send_packet(packet))
+    }
+}
+
+impl RawSenderImpl {
+    fn send_packet(&mut self, packet: &[u8]) -> io::Result<()> {
+        let capture = self.capture.clone();
+        let mut cap = match capture.try_lock() {
             Ok(cap) => cap,
-            Err(err) => return Some(Err(err)),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // Keep injection independent of an outstanding blocking capture.
+                let tx = pcap::Capture::from_device(self.device_name.as_str())
+                    .and_then(|cap| cap.snaplen(1).open())
+                    .map_err(io::Error::other)?;
+                self.capture = Arc::new(Mutex::new(tx));
+                lock_capture(&self.capture)?
+            }
+            Err(_) => return Err(io::Error::other("pcap capture mutex poisoned")),
         };
-        Some(match cap.sendpacket(packet) {
-            Ok(()) => Ok(()),
-            Err(e) => Err(io::Error::other(e)),
-        })
+        cap.sendpacket(packet).map_err(io::Error::other)
     }
 }
 
@@ -197,38 +212,83 @@ impl<T: Activated + State + Send + Sync> RawReceiver for RawReceiverImpl<T> {
                 self.read_buffer.clear();
                 self.read_buffer.extend(pkt.data);
             }
+            Err(pcap::Error::TimeoutExpired) => return Err(io::ErrorKind::TimedOut.into()),
+            Err(pcap::Error::NoMorePackets) => return Err(io::ErrorKind::UnexpectedEof.into()),
             Err(e) => return Err(io::Error::other(e)),
         };
         Ok(&self.read_buffer)
     }
 }
 
-/// Get a list of available network interfaces for the current machine.
+/// List libpcap capture devices. Matched interfaces carry their operating-system
+/// index. Capture-only devices, such as Linux `any`, have index zero.
 pub fn interfaces() -> Vec<Interface> {
-    if let Ok(devices) = pcap::Device::list() {
-        devices
-            .iter()
-            .enumerate()
-            .map(|(i, dev)| {
-                let mut interface = Interface::dummy();
-                interface.name = dev.name.clone();
-                interface.index = i as u32;
-                interface.description = dev.desc.clone();
-                interface.if_type = InterfaceType::Unknown;
-                interface.flags = dev.flags.if_flags.bits();
-                interface.oper_state =
-                    nex_core::interface::OperState::from_if_flags(dev.flags.if_flags.bits());
-                interface
-            })
-            .collect()
-    } else {
-        vec![]
+    let Ok(devices) = pcap::Device::list() else {
+        return Vec::new();
+    };
+    let mut system_interfaces: std::collections::HashMap<_, _> = get_interfaces()
+        .into_iter()
+        .map(|iface| (device_key(&capture_device_name(&iface.name)), iface))
+        .collect();
+    devices
+        .into_iter()
+        .map(|dev| {
+            let mut interface = system_interfaces
+                .remove(&device_key(&dev.name))
+                .unwrap_or_else(|| {
+                    let mut iface = Interface::dummy();
+                    if dev.flags.is_up() {
+                        iface.flags |= IFF_UP;
+                    }
+                    if dev.flags.is_loopback() {
+                        iface.flags |= IFF_LOOPBACK;
+                    }
+                    #[cfg(unix)]
+                    if dev.flags.is_running() {
+                        iface.flags |= nex_core::interface::IFF_RUNNING;
+                    }
+                    iface.oper_state = OperState::from_if_flags(iface.flags);
+                    iface
+                });
+            interface.name = dev.name;
+            if dev.desc.is_some() {
+                interface.description = dev.desc;
+            }
+            interface
+        })
+        .collect()
+}
+
+fn device_key(name: &str) -> String {
+    #[cfg(windows)]
+    {
+        name.to_ascii_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        name.to_owned()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::capture_device_name;
+
+    #[test]
+    fn empty_capture_reports_end_of_file() {
+        let dir = std::env::temp_dir().join(format!("nex-pcap-test-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("empty.pcap");
+        let cap = pcap::Capture::dead(pcap::Linktype::ETHERNET).unwrap();
+        drop(cap.savefile(&path).unwrap());
+        let crate::Channel::Ethernet(_, mut rx) =
+            super::from_file(&path, super::Config::default()).unwrap();
+        let result = rx.next().unwrap_err().kind();
+        drop(rx);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+        assert_eq!(result, std::io::ErrorKind::UnexpectedEof);
+    }
 
     #[test]
     fn capture_names_are_preserved() {

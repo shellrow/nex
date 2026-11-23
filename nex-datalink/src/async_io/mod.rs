@@ -6,6 +6,7 @@ mod linux;
 #[cfg(any(
     target_os = "freebsd",
     target_os = "netbsd",
+    target_os = "openbsd",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "macos",
@@ -70,6 +71,7 @@ pub fn async_channel(
     #[cfg(any(
         target_os = "freebsd",
         target_os = "netbsd",
+        target_os = "openbsd",
         target_os = "illumos",
         target_os = "solaris",
         target_os = "macos",
@@ -81,5 +83,17 @@ pub fn async_channel(
     #[cfg(windows)]
     {
         wpcap::channel(network_interface, configuration).map_err(DatalinkError::Io)
+    }
+}
+
+#[cfg(unix)]
+fn retry_when_ready<T>(cx: &Context<'_>, readiness: Poll<io::Result<()>>) -> Poll<io::Result<T>> {
+    match readiness {
+        Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+        Poll::Ready(Ok(())) => {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+        Poll::Pending => Poll::Pending,
     }
 }

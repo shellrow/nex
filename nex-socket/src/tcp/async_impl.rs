@@ -120,7 +120,7 @@ impl AsyncTcpSocket {
 
     /// Connect to the target asynchronously.
     pub async fn connect(self, target: SocketAddr) -> io::Result<TcpStream> {
-        // call connect
+        self.socket.set_nonblocking(true)?;
         match self.socket.connect(&target.into()) {
             Ok(_) => {
                 // connection completed immediately (rare case)
@@ -164,6 +164,7 @@ impl AsyncTcpSocket {
 
     /// Start listening for incoming connections.
     pub fn listen(self, backlog: i32) -> io::Result<TcpListener> {
+        self.socket.set_nonblocking(true)?;
         self.socket.listen(backlog)?;
 
         let std_listener: StdTcpListener = self.socket.into();
@@ -387,11 +388,13 @@ impl AsyncTcpSocket {
 
     /// Convert the internal socket into a Tokio `TcpStream`.
     pub fn into_tokio_stream(self) -> io::Result<TcpStream> {
+        self.socket.set_nonblocking(true)?;
         let std_stream: StdTcpStream = self.socket.into();
         TcpStream::from_std(std_stream)
     }
 
-    /// Construct from a raw `socket2::Socket`.
+    /// Wrap a `socket2::Socket`. Connecting, listening, and converting to a Tokio
+    /// stream enable nonblocking mode. Raw send and receive retain the socket mode.
     pub fn from_socket(socket: Socket) -> Self {
         Self { socket }
     }
@@ -418,5 +421,37 @@ impl AsyncTcpSocket {
     pub fn as_raw_socket(&self) -> std::os::windows::io::RawSocket {
         use std::os::windows::io::AsRawSocket;
         self.socket.as_raw_socket()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocking_sockets_can_be_used_with_tokio() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+            let target = listener.local_addr().unwrap();
+            let listener = AsyncTcpSocket::from_socket(listener.into())
+                .listen(8)
+                .unwrap();
+            let client = Socket::new(Domain::IPV4, SockType::STREAM, Some(Protocol::TCP)).unwrap();
+            let client = AsyncTcpSocket::from_socket(client)
+                .connect(target)
+                .await
+                .unwrap();
+            let (server, _) = listener.accept().await.unwrap();
+            let server = server.into_std().unwrap();
+            server.set_nonblocking(false).unwrap();
+            let server = AsyncTcpSocket::from_socket(server.into())
+                .into_tokio_stream()
+                .unwrap();
+            assert_eq!(server.peer_addr().unwrap(), client.local_addr().unwrap());
+        });
     }
 }

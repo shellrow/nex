@@ -1,19 +1,9 @@
-//! Cross-platform low-level networking library.
+//! Network interfaces, packet parsing and construction, raw datalink I/O,
+//! and TCP, UDP, and ICMP sockets.
 //!
-//! `nex` is composed of four core modules (sub-crates), providing a unified interface
-//! for packet parsing, manipulation, data link access, and transport layer sockets.
-//! By depending on the top-level `nex` crate, applications can access all of these capabilities
-//! through a convenient facade.
-//!
-//! - `net` (`nex-core`): Provides core networking types and utilities.
-//! - `datalink` (`nex-datalink`): Interfaces with the data link layer; supports raw packet send/receive.
-//! - `packet` (`nex-packet`): Enables parsing and building of packets at multiple protocol layers.
-//! - `socket` (`nex-socket`): Provides sockets for working with transport protocols such as TCP, UDP, and ICMP (but L3).
-//!
-//! On Windows, the optional `winptap` feature exposes the explicitly selected
-//! `datalink::winptap::open` receive-only backend without Npcap. Enabling `async`
-//! also exposes `datalink::winptap::open_async`, a runtime-independent Stream.
-//! Neither endpoint supports packet injection or promiscuous mode.
+//! Enable `async` for asynchronous datalink and socket APIs. The `pcap`
+//! feature adds libpcap capture, and `winptap` enables receive-only Windows
+//! Packet Monitor capture.
 
 /// Provides core networking types and utilities.
 pub mod net {
@@ -30,7 +20,7 @@ pub mod packet {
     pub use nex_packet::*;
 }
 
-/// Provides sockets for working with transport protocols such as TCP, UDP, and ICMP (but L3).
+/// TCP, UDP, and ICMP sockets.
 pub mod socket {
     pub use nex_socket::*;
 }

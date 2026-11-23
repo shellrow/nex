@@ -85,7 +85,7 @@ pub unsafe fn send_to(
         retry(&mut || unsafe { sendto(socket, buffer.as_ptr() as Buf, buffer_len, 0, dst, slen) });
 
     if send_len < 0 {
-        Err(std::io::Error::last_os_error())
+        Err(last_socket_error())
     } else {
         Ok(send_len as usize)
     }
@@ -118,63 +118,40 @@ pub unsafe fn recv_from(
     });
 
     if len < 0 {
-        Err(std::io::Error::last_os_error())
+        Err(last_socket_error())
     } else {
         Ok(len as usize)
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
-    #[cfg(not(target_os = "windows"))]
-    use super::*;
+    use super::FileDesc;
+    use std::io::{self, Read};
+    use std::os::{fd::IntoRawFd, unix::net::UnixStream};
 
-    #[cfg(not(target_os = "windows"))]
-    #[test]
-    fn file_desc_closes_owned_descriptor_on_drop() {
-        let mut pipe_fds = [-1; 2];
-        // SAFETY: `pipe_fds` provides writable storage for both descriptors.
-        assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
-
-        // SAFETY: The read descriptor is open and ownership is transferred
-        // exclusively to the wrapper.
-        let owned = unsafe { FileDesc::from_raw(pipe_fds[0]) };
-        drop(owned);
-
-        // SAFETY: `fcntl` only inspects the integer descriptor value.
-        assert_eq!(unsafe { libc::fcntl(pipe_fds[0], libc::F_GETFD) }, -1);
-        assert_eq!(
-            std::io::Error::last_os_error().raw_os_error(),
-            Some(libc::EBADF)
-        );
-
-        // SAFETY: The write descriptor remains open and owned by this test.
-        assert_eq!(unsafe { libc::close(pipe_fds[1]) }, 0);
+    fn socket_pair() -> (FileDesc, UnixStream) {
+        let (socket, peer) = UnixStream::pair().unwrap();
+        peer.set_nonblocking(true).unwrap();
+        // SAFETY: into_raw_fd transfers exclusive ownership of the open socket.
+        (unsafe { FileDesc::from_raw(socket.into_raw_fd()) }, peer)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn file_desc_closes_owned_descriptor_on_drop() {
+        let (owned, mut peer) = socket_pair();
+        drop(owned);
+        assert_eq!(peer.read(&mut [0]).unwrap(), 0);
+    }
+
     #[test]
     fn file_desc_closes_owned_descriptor_on_early_error() {
-        fn fail_after_ownership_transfer(fd: CSocket) -> std::io::Result<()> {
-            // SAFETY: The caller transfers one live, exclusively owned
-            // descriptor to this function.
-            let _owned = unsafe { FileDesc::from_raw(fd) };
-            Err(std::io::Error::other("injected setup failure"))
+        fn fail_after_ownership_transfer(_owned: FileDesc) -> io::Result<()> {
+            Err(io::Error::other("injected setup failure"))
         }
 
-        let mut pipe_fds = [-1; 2];
-        // SAFETY: `pipe_fds` provides writable storage for both descriptors.
-        assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
-        assert!(fail_after_ownership_transfer(pipe_fds[0]).is_err());
-
-        // SAFETY: `fcntl` only inspects the descriptor number.
-        assert_eq!(unsafe { libc::fcntl(pipe_fds[0], libc::F_GETFD) }, -1);
-        assert_eq!(
-            std::io::Error::last_os_error().raw_os_error(),
-            Some(libc::EBADF)
-        );
-
-        // SAFETY: The write descriptor remains open and owned by this test.
-        assert_eq!(unsafe { libc::close(pipe_fds[1]) }, 0);
+        let (owned, mut peer) = socket_pair();
+        assert!(fail_after_ownership_transfer(owned).is_err());
+        assert_eq!(peer.read(&mut [0]).unwrap(), 0);
     }
 }

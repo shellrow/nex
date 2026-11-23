@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "nex", 
     "nex-core", 
@@ -10,22 +10,21 @@ members = [
 ]
 
 [workspace.package]
-version = "0.28.1"
+version = "0.29.0"
 edition = "2024"
 rust-version = "1.88"
 authors = ["shellrow <shellrow@foctal.com>"]
 
 [workspace.dependencies]
-nex-core = { version = "0.28.1", path = "nex-core" }
-nex-datalink = { version = "0.28.1", path = "nex-datalink" }
-nex-packet = { version = "0.28.1", path = "nex-packet" }
-nex-sys = { version = "0.28.1", path = "nex-sys" }
-nex-socket = { version = "0.28.1", path = "nex-socket" }
+nex-core = { version = "0.29.0", path = "nex-core" }
+nex-datalink = { version = "0.29.0", path = "nex-datalink" }
+nex-packet = { version = "0.29.0", path = "nex-packet" }
+nex-sys = { version = "0.29.0", path = "nex-sys" }
+nex-socket = { version = "0.29.0", path = "nex-socket" }
 serde = { version = "1" }
 libc = "0.2"
-netdev = { version = "0.47.0" }
+netdev = { version = "0.48.0", default-features = false, features = ["android-extra", "apple-system-configuration-extra"] }
 mac-addr = { version = "0.3.0" }
 ipnet = { version = "2.12" }
 bytes = "1"
-tokio = { version = "1.53.3" }
-rand = "0.10"
+tokio = { version = "1.54.1" }

@@ -124,6 +124,16 @@ fn synchronous_frame_send_and_capture() {
             .expect("supported send")
             .expect("send test frame");
         receive_frame(&mut *rx, &frame);
+        let mut marker = 0x54;
+        tx.build_and_send(2, frame.len(), &mut |out| {
+            out.copy_from_slice(&test_frame(&interface, marker));
+            marker += 1;
+        })
+        .unwrap()
+        .unwrap();
+        for marker in [0x54, 0x55] {
+            receive_frame(&mut *rx, &test_frame(&interface, marker));
+        }
     }
 }
 
@@ -160,11 +170,9 @@ fn asynchronous_frame_send_and_capture() {
     let result = futures::executor::block_on(async {
         let operation = async {
             let sent = test_frame(&interface, 0x52);
-            let send_start = std::time::Instant::now();
             poll_fn(|cx| async_tx.poll_send(cx, &sent))
                 .await
                 .expect("async send");
-            eprintln!("async send elapsed: {:?}", send_start.elapsed());
             receive_frame(&mut *rx, &sent);
             let received = test_frame(&interface, 0x53);
             tx.send(&received).unwrap().unwrap();
@@ -205,8 +213,10 @@ fn repeated_channel_lifecycle() {
         drop(nex_datalink::async_io::async_channel(&interface, test_config()).unwrap());
     }
     let after = resource_count();
-    eprintln!("resource count before={before}, after={after}");
-    assert!(after <= before, "channel lifecycle leaked OS resources");
+    assert!(
+        after <= before,
+        "channel lifecycle leaked OS resources: before={before}, after={after}"
+    );
 }
 
 #[cfg(target_os = "linux")]

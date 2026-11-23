@@ -100,3 +100,16 @@ impl SocketFamily {
         }
     }
 }
+
+#[cfg(feature = "async")]
+async fn with_timeout<T>(
+    timeout: Option<std::time::Duration>,
+    operation: impl Future<Output = std::io::Result<T>>,
+) -> std::io::Result<T> {
+    match timeout {
+        Some(duration) => tokio::time::timeout(duration, operation)
+            .await
+            .map_err(|_| std::io::ErrorKind::TimedOut)?,
+        None => operation.await,
+    }
+}

@@ -5,26 +5,8 @@
 //! Parsers that support alternate validation behavior accept [`ParseMode`]
 //! through a `*_with_mode` method instead of adding more method-name suffixes.
 //!
-//! # Parsing API migration
-//!
-//! | Previous API | v1 API |
-//! | --- | --- |
-//! | `Packet::from_buf(input)` | `Type::try_from_buf(input)` |
-//! | `Packet::from_bytes(input)` | `Type::try_from_bytes(input)` |
-//! | `try_from_buf_strict(input)` | `try_from_buf_with_mode(input, ParseMode::Strict)` |
-//! | `try_from_bytes_strict(input)` | `try_from_bytes_with_mode(input, ParseMode::Strict)` |
-//! | `from_buf_strict(input)` | `try_from_buf_with_mode(input, ParseMode::Strict).ok()` |
-//! | `from_bytes_strict(input)` | `try_from_bytes_with_mode(input, ParseMode::Strict).ok()` |
-//! | `EthernetHeader::from_bytes(input)` | `EthernetHeader::try_from_bytes(input)` |
-//! | `DnsName::from_bytes(input)` | `DnsName::try_from_bytes(input)` |
-//! | `DnsQueryPacket::get_qname_parsed()` | `DnsQueryPacket::qname_parsed()` |
-//! | `DnsQueryPacket::try_get_qname_parsed()` | `DnsQueryPacket::qname_parsed()` |
-//! | DNS section `from_buf_mut(cursor)` helpers | `DnsPacket::try_from_buf(input)` |
-//!
-//! The `Option`-returning methods on [`crate::packet::Packet`] are deprecated
-//! compatibility shims. Every `Packet` implementor also receives the canonical
-//! `try_from_buf` and `try_from_bytes` methods through the trait. Protocols with
-//! richer validation override these with more specific error contexts.
+//! The deprecated [`crate::packet::Packet::from_buf`] and
+//! [`crate::packet::Packet::from_bytes`] methods discard parse errors.
 
 use core::fmt;
 

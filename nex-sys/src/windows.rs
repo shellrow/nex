@@ -87,5 +87,10 @@ where
 }
 
 fn errno() -> i32 {
-    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
+    // SAFETY: WSAGetLastError reads the calling thread's Winsock error.
+    unsafe { ws::WSAGetLastError() }
+}
+
+pub(crate) fn last_socket_error() -> std::io::Error {
+    std::io::Error::from_raw_os_error(errno())
 }

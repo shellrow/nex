@@ -1,88 +1,54 @@
 # nex
 
-Cross-platform low-level networking library in Rust
+Packet parsing, raw datalink I/O, and TCP, UDP, and ICMP sockets for Rust.
 
 [![Crates.io](https://img.shields.io/crates/v/nex.svg)](https://crates.io/crates/nex)
 [![Documentation](https://docs.rs/nex/badge.svg)](https://docs.rs/nex)
 [![License](https://img.shields.io/crates/l/nex.svg)](https://github.com/shellrow/nex/blob/main/LICENSE)
 
-## Overview
+## Getting started
 
-`nex` is a Rust library that provides cross-platform low-level networking capabilities.   
-It includes sub-crates with responsibilities:
+Install with `cargo add nex`. The minimum supported Rust version is 1.88.
 
-- `nex-packet`: Low-level packet parsing and serialization.
-- `nex-datalink`: Raw datalink send/receive backends across platforms.
-- `nex-socket`: Low-level socket operations with cross-platform option handling.
+```rust
+use nex::packet::ipv4::Ipv4Packet;
+use std::net::Ipv4Addr;
 
-The project aims to expose portable low-level primitives.  
-
-## Minimum Supported Rust Version
-
-`nex` requires Rust 1.88.0 or later. MSRV changes are treated as compatibility
-changes and are verified in CI.
-
-## Usage
-
-To use `nex`, add it as a dependency in your `Cargo.toml`:
-
-```toml
-[dependencies]
-nex = "0.28"
+fn source_address(packet: &[u8]) -> Option<Ipv4Addr> {
+    Ipv4Packet::try_from_buf(packet).ok().map(|ip| ip.header.source)
+}
 ```
 
-## Using Specific Sub-crates
-You can also directly use specific sub-crates by importing them individually.
-- `nex-datalink`
-- `nex-packet`
-- `nex-socket`
+| Module | Standalone crate | Purpose |
+| --- | --- | --- |
+| `nex::net` | `nex-core` | Interfaces, addresses, and gateway discovery |
+| `nex::packet` | `nex-packet` | Packet parsing, in-place editing, and construction |
+| `nex::datalink` | `nex-datalink` | Link-layer capture and transmission |
+| `nex::socket` | `nex-socket` | Socket configuration and I/O |
 
-If you want to focus on network interfaces, you can use the [netdev](https://github.com/shellrow/netdev).
+See the [examples](https://github.com/shellrow/nex/tree/main/examples) for packet capture and socket usage. The [packet guide](https://github.com/shellrow/nex/blob/main/docs/PACKET_MODEL.md) covers parsing, buffer ownership, and migrating DNS records to 0.29.
+
+Applications using conversions between `nex-core` and `netdev` interface types should use `netdev` 0.48 with nex 0.29.
 
 ## Features
 
-All optional features are disabled by default in `nex`, `nex-packet`,
-`nex-datalink`, and `nex-socket`. `nex-core` keeps `gateway` enabled by default
-because gateway discovery is part of its primary interface functionality.
+The top-level crate has no default features. Enable features with, for example, `cargo add nex --features async`.
 
-| Feature | Crate | Purpose |
+| Feature | Available on | Effect |
 | --- | --- | --- |
-| `async` | `nex`, `nex-datalink`, `nex-socket` | Enables asynchronous datalink I/O and Tokio-based socket APIs. |
-| `pcap` | `nex`, `nex-datalink` | Enables the libpcap backend. |
-| `winptap` | `nex`, `nex-datalink` | Enables an explicitly selected receive-only Windows Packet Monitor backend without Npcap; combine with `async` for asynchronous reception. |
-| `serde` | `nex`, `nex-core`, `nex-packet`, `nex-datalink` | Enables serialization support for public data types. |
-| `gateway` | `nex-core` | Enables default gateway discovery through `netdev`. |
+| `async` | `nex`, `nex-datalink`, `nex-socket` | Runtime-independent datalink streams and Tokio socket APIs |
+| `pcap` | `nex`, `nex-datalink` | Live capture and injection through libpcap, and offline capture-file reading |
+| `winptap` | `nex`, `nex-datalink` | Receive-only Windows Packet Monitor capture |
+| `serde` | `nex`, `nex-core`, `nex-packet`, `nex-datalink` | Serialization for supported networking types |
+| `gateway` | `nex-core` | Default interface and gateway discovery, enabled by default on this crate |
 
-To use asynchronous APIs through the facade:
+## Platform requirements
 
-```toml
-[dependencies]
-nex = { version = "0.28", features = ["async"] }
-```
+Packet parsing works without capture privileges. Raw socket and datalink access depend on the platform.
 
-## Privileges
-`nex-datalink` uses a raw socket which may require elevated privileges depending on your system's configuration.  
-Execute with administrator privileges if necessary.
+- **Linux** uses packet sockets. Grant the capturing process `CAP_NET_RAW` or run it as root.
+- **macOS and BSD** use BPF devices. The process needs read/write access to a `/dev/bpf*` device.
+- **Windows** loads [Npcap](https://npcap.com/#download) at runtime for Ethernet capture and transmission. The default backend works with the standard Npcap installation. The optional `pcap` feature also needs the Npcap SDK import library for the target architecture.
+- **Windows Packet Monitor** requires administrator privileges. Enable `winptap` and call `nex::datalink::winptap::open`, or enable both `winptap` and `async` and call `open_async`. The Pktmon backend observes incoming and outgoing traffic. The native IOCTL backend observes incoming traffic. Both provide receive-only capture without Npcap.
 
-## For Windows Users
-For receive-only Ethernet capture without Npcap, enable `winptap` and call
-`nex::datalink::winptap::open` with its dedicated configuration. This requires
-administrator privileges and does not support transmission or promiscuous mode.
-With both `winptap` and `async`, `winptap::open_async` returns a runtime-independent
-`AsyncRawReceiver`/`Stream` with a bounded handoff and cross-thread cancellation.
-The official backend observes incoming and outgoing traffic; native observes
-incoming traffic only.
-
-Please note that in order to send and receive raw packets using `nex-datalink` on Windows, [Npcap](https://npcap.com/#download) is required.
-
-1. Install Npcap, making sure to check Install Npcap in WinPcap API-compatible Mode during the installation.
-
-2. The default datalink backend loads Npcap at runtime and does not require the
-   Npcap SDK to build. If you enable the optional `pcap` feature, download the
-   Npcap SDK and add its `Lib/x64` (or `Lib` for 32-bit builds) folder to your
-   `LIB` environment variable.
-
-## For macOS Users
-On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary to send and receive raw packets using `nex-datalink`.
-You can use [chmod-bpf](https://github.com/shellrow/chmod-bpf) to automatically manage permissions for BPF devices.
-Alternatively, of course, you can also use `sudo` to temporarily grant the necessary permissions.
+On Unix, install the platform's libpcap development files to build with `pcap` (for example, `libpcap-dev` on Ubuntu).

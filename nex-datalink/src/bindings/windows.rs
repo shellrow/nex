@@ -9,9 +9,11 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::sync::OnceLock;
-use windows_sys::Win32::Foundation::{HANDLE, HMODULE};
+use windows_sys::Win32::Foundation::{FreeLibrary, HANDLE, HMODULE};
 use windows_sys::Win32::System::IO::OVERLAPPED;
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExA,
+};
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryA;
 use windows_sys::core::PCWSTR;
 
@@ -181,7 +183,7 @@ fn packet_dll_candidates() -> Vec<Vec<u8>> {
         }
     }
 
-    // Falls back to the standard search order for WinPcap-compatible installs.
+    // The loader restricts this fallback to the system directory.
     candidates.push(b"Packet.dll\0".to_vec());
     candidates
 }
@@ -189,20 +191,23 @@ fn packet_dll_candidates() -> Vec<Vec<u8>> {
 fn load_packet_api() -> Result<PacketApi, String> {
     let mut last_error = None;
     for candidate in packet_dll_candidates() {
-        // SAFETY: `candidate` is a NUL-terminated path built above.
-        let module = unsafe { LoadLibraryA(candidate.as_ptr()) };
+        let flags = if candidate == b"Packet.dll\0" {
+            LOAD_LIBRARY_SEARCH_SYSTEM32
+        } else {
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32
+        };
+        // SAFETY: candidate is NUL-terminated. Dependencies must come from
+        // the selected system directory or the installed Npcap directory.
+        let module = unsafe { LoadLibraryExA(candidate.as_ptr(), ptr::null_mut(), flags) };
         if module.is_null() {
             last_error = Some(io::Error::last_os_error());
             continue;
         }
-        // The module is deliberately never freed: the resolved function
-        // pointers are cached for the lifetime of the process, so unloading
-        // would dangle them. One leaked module handle is the intended
-        // trade-off for a process-lifetime lazy load.
-        //
-        // SAFETY: `module` is a live handle just returned by LoadLibraryA.
+        // SAFETY: The module remains loaded while the cached functions are in use.
         return unsafe { PacketApi::resolve(module) }.map_err(|symbol| {
-            format!("Packet.dll is missing the required symbol `{symbol}`; it is likely too old")
+            // SAFETY: Resolution failed, so no function pointers escaped.
+            unsafe { FreeLibrary(module) };
+            format!("Packet.dll is missing the required symbol `{symbol}`")
         });
     }
 
@@ -272,7 +277,6 @@ pub(crate) mod failure_tests {
             assert_eq!(handles(), baseline, "leak after failure {iteration}");
         }
         assert_eq!(FAILURES.load(Ordering::Relaxed) - failures, 1_000);
-        eprintln!("1,000 post-allocation failures: handles={baseline}");
     }
 }
 

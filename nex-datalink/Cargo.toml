@@ -13,12 +13,14 @@ license = "MIT"
 
 [dependencies]
 libc = { workspace = true }
-bytes = { workspace = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 pcap = { version = "2.0", optional = true }
 nex-core = { workspace = true }
 nex-sys = { workspace = true }
 futures-core = { version = "0.3", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+async-io = { version = "2.6", optional = true }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.61"
@@ -35,7 +37,7 @@ features = [
 [features]
 default = []
 winptap = ["dep:winptap"]
-async = ["dep:futures-core"]
+async = ["dep:futures-core", "dep:async-io"]
 serde = ["dep:serde", "nex-core/serde"]
 pcap = ["dep:pcap"]
 

@@ -62,13 +62,13 @@ pub(crate) struct Config {
 }
 
 #[inline]
-fn poll_timeout_ms(timeout: Option<libc::timespec>) -> libc::c_int {
-    timeout
-        .map(|to| {
-            let ms = i128::from(to.tv_sec) * 1000 + i128::from(to.tv_nsec) / 1_000_000;
-            ms.clamp(i128::from(libc::c_int::MIN), i128::from(libc::c_int::MAX)) as libc::c_int
-        })
-        .unwrap_or(-1)
+fn poll_timeout_ms(timeout: Option<Duration>) -> libc::c_int {
+    timeout.map_or(-1, |duration| {
+        duration
+            .as_nanos()
+            .div_ceil(1_000_000)
+            .min(i32::MAX as u128) as i32
+    })
 }
 
 impl From<&super::Config> for Config {
@@ -111,7 +111,13 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
     };
     // SAFETY: `socket` receives only valid AF_PACKET domain/type/protocol
     // integer values and retains no borrowed pointers.
-    let raw_socket = unsafe { libc::socket(libc::AF_PACKET, typ, proto.to_be() as i32) };
+    let raw_socket = unsafe {
+        libc::socket(
+            libc::AF_PACKET,
+            typ | libc::SOCK_CLOEXEC,
+            proto.to_be() as i32,
+        )
+    };
     if raw_socket == -1 {
         return Err(io::Error::last_os_error());
     }
@@ -210,7 +216,7 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         // live while this same-sized value is copied.
         send_addr: unsafe { *(send_addr as *const libc::sockaddr_ll) },
         send_addr_len: len,
-        timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
+        timeout: config.write_timeout,
     });
     let receiver = Box::new(RawReceiverImpl {
         socket: fd.clone(),
@@ -227,7 +233,7 @@ struct RawSenderImpl {
     write_buffer: Vec<u8>,
     send_addr: libc::sockaddr_ll,
     send_addr_len: usize,
-    timeout: Option<libc::timespec>,
+    timeout: Option<Duration>,
 }
 
 impl RawSender for RawSenderImpl {
@@ -375,7 +381,7 @@ impl LoopbackFilter {
         length as usize == mem::size_of::<libc::sockaddr_ll>()
             && address.sll_family == libc::AF_PACKET as libc::sa_family_t
             && self.index == Some(address.sll_ifindex)
-            && address.sll_pkttype == libc::PACKET_OUTGOING
+            && address.sll_pkttype == linux::PACKET_OUTGOING
     }
 }
 
@@ -450,7 +456,7 @@ impl RawReceiver for RawReceiverImpl {
                 events: libc::POLLIN,
                 revents: 0,
             };
-            let timeout_ms = poll_timeout_ms(remaining.map(nex_sys::duration_to_timespec));
+            let timeout_ms = poll_timeout_ms(remaining);
             // SAFETY: pollfd is writable storage for one initialized descriptor.
             let ret = unsafe { libc::poll(&mut pollfd, 1, timeout_ms) };
             if ret == -1 {
@@ -490,13 +496,8 @@ mod tests {
                 assert_eq!(config.suppress_loopback_duplicates, enabled);
                 let filter = LoopbackFilter::new(&interface, config.suppress_loopback_duplicates);
                 for index in [0, 1, 73, 74, -1] {
-                    for packet_type in [
-                        libc::PACKET_OUTGOING,
-                        libc::PACKET_HOST,
-                        libc::PACKET_BROADCAST,
-                        libc::PACKET_MULTICAST,
-                        libc::PACKET_OTHERHOST,
-                    ] {
+                    // HOST, BROADCAST, MULTICAST, OTHERHOST, OUTGOING.
+                    for packet_type in 0..=linux::PACKET_OUTGOING {
                         // SAFETY: Zero is valid for every sockaddr_ll field.
                         let mut address: libc::sockaddr_ll = unsafe { mem::zeroed() };
                         address.sll_family = libc::AF_PACKET as _;
@@ -506,7 +507,7 @@ mod tests {
                         let expected = enabled
                             && loopback
                             && index == 73
-                            && packet_type == libc::PACKET_OUTGOING;
+                            && packet_type == linux::PACKET_OUTGOING;
                         assert_eq!(filter.suppress(&address, size), expected);
                         for length in [0, size - 1, size + 1, libc::socklen_t::MAX] {
                             assert!(!filter.suppress(&address, length));

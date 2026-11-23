@@ -5,16 +5,14 @@ use std::time::Duration;
 
 use crate::tcp::TcpConfig;
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 use std::os::fd::AsRawFd;
-
-#[cfg(unix)]
-use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
 /// Low level synchronous TCP socket.
 #[derive(Debug)]
 pub struct TcpSocket {
     socket: Socket,
+    #[cfg(windows)]
     nonblocking: bool,
 }
 
@@ -100,6 +98,7 @@ impl TcpSocket {
 
         Ok(Self {
             socket,
+            #[cfg(windows)]
             nonblocking: config.nonblocking,
         })
     }
@@ -110,6 +109,7 @@ impl TcpSocket {
         socket.set_nonblocking(false)?;
         Ok(Self {
             socket,
+            #[cfg(windows)]
             nonblocking: false,
         })
     }
@@ -147,122 +147,17 @@ impl TcpSocket {
     /// Connect to the target address with a timeout and return the connected stream.
     ///
     /// The returned `TcpStream` must be used for subsequent I/O.
-    #[cfg(unix)]
     pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
-        let socket = self.socket.try_clone()?;
-        socket.set_nonblocking(true)?;
-        let raw_fd = socket.as_raw_fd();
+        #[cfg(unix)]
+        let nonblocking = self.socket.nonblocking()?;
+        #[cfg(windows)]
+        let nonblocking = self.nonblocking;
 
-        // Try to connect first
-        match socket.connect(&target.into()) {
-            Ok(_) => { /* succeeded immediately */ }
-            Err(err)
-                if err.kind() == io::ErrorKind::WouldBlock
-                    || err.raw_os_error() == Some(libc::EINPROGRESS) =>
-            {
-                // Continue waiting
-            }
-            Err(e) => return Err(e),
-        }
-
-        // Wait for the connection using poll
-        use std::os::unix::io::BorrowedFd;
-        // SAFETY: `raw_fd` belongs to `socket` and remains valid for this scope;
-        // BorrowedFd does not take ownership.
-        let mut fds = [PollFd::new(
-            unsafe { BorrowedFd::borrow_raw(raw_fd) },
-            PollFlags::POLLOUT,
-        )];
-        let poll_timeout = PollTimeout::try_from(timeout).unwrap_or(PollTimeout::MAX);
-        let n = poll(&mut fds, poll_timeout)?;
-
-        if n == 0 {
-            return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out"));
-        }
-
-        // Check the result with `SO_ERROR`
-        let err: i32 = socket
-            .take_error()?
-            .map(|e| e.raw_os_error().unwrap_or(0))
-            .unwrap_or(0);
-        if err != 0 {
-            return Err(io::Error::from_raw_os_error(err));
-        }
-
-        socket.set_nonblocking(self.nonblocking)?;
-
-        match socket.try_clone() {
-            Ok(cloned_socket) => {
-                // Convert the socket into a `std::net::TcpStream`
-                let std_stream: TcpStream = cloned_socket.into();
-                Ok(std_stream)
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Connect to the target address with a timeout and return the connected stream.
-    ///
-    /// The returned `TcpStream` must be used for subsequent I/O.
-    #[cfg(windows)]
-    pub fn connect_timeout(&self, target: SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
-        use std::mem::size_of;
-        use std::os::windows::io::AsRawSocket;
-        use windows_sys::Win32::Networking::WinSock::{
-            POLLWRNORM, SO_ERROR, SOCKET, SOCKET_ERROR, SOL_SOCKET, WSAPOLLFD, WSAPoll, getsockopt,
-        };
-
-        let socket = self.socket.try_clone()?;
-        socket.set_nonblocking(true)?;
-        let sock = socket.as_raw_socket() as SOCKET;
-
-        // Start connect
-        match socket.connect(&target.into()) {
-            Ok(_) => { /* connection succeeded immediately */ }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.raw_os_error() == Some(10035) /* WSAEWOULDBLOCK */ => {}
-            Err(e) => return Err(e),
-        }
-
-        // Wait using WSAPoll until writable
-        let mut fds = [WSAPOLLFD {
-            fd: sock,
-            events: POLLWRNORM,
-            revents: 0,
-        }];
-
-        let timeout_ms = timeout.as_millis().clamp(0, i32::MAX as u128) as i32;
-        // SAFETY: `fds` is writable for the supplied element count and remains
-        // live throughout WSAPoll.
-        let result = unsafe { WSAPoll(fds.as_mut_ptr(), fds.len() as u32, timeout_ms) };
-        if result == SOCKET_ERROR {
-            return Err(io::Error::last_os_error());
-        } else if result == 0 {
-            return Err(io::Error::new(io::ErrorKind::TimedOut, "connect timed out"));
-        }
-
-        // Check for errors via `SO_ERROR`
-        let mut so_error: i32 = 0;
-        let mut optlen = size_of::<i32>() as i32;
-        // SAFETY: `so_error` and `optlen` are writable for the duration of
-        // getsockopt and `sock` is open.
-        let ret = unsafe {
-            getsockopt(
-                sock,
-                SOL_SOCKET,
-                SO_ERROR,
-                &mut so_error as *mut _ as *mut _,
-                &mut optlen,
-            )
-        };
-
-        if ret == SOCKET_ERROR || so_error != 0 {
-            return Err(io::Error::from_raw_os_error(so_error));
-        }
-
-        socket.set_nonblocking(self.nonblocking)?;
-
-        let std_stream: TcpStream = socket.into();
-        Ok(std_stream)
+        let result = self.socket.connect_timeout(&target.into(), timeout);
+        // Cloned handles share the socket mode. Restore it on failure as well.
+        self.socket.set_nonblocking(nonblocking)?;
+        result?;
+        Ok(self.socket.try_clone()?.into())
     }
 
     /// Start listening for incoming connections.
@@ -521,13 +416,15 @@ impl TcpSocket {
         self.socket.as_raw_socket()
     }
 
-    /// Construct from a raw `socket2::Socket`.
+    /// Construct from a raw `socket2::Socket`. On Windows, `connect_timeout`
+    /// restores blocking mode for externally supplied sockets.
     pub fn from_socket(socket: Socket) -> Self {
         Self {
             socket,
             // `socket2::Socket` does not expose a portable getter for the current
             // blocking mode, so externally supplied sockets default to blocking
             // expectations in this synchronous wrapper.
+            #[cfg(windows)]
             nonblocking: false,
         }
     }
@@ -565,6 +462,12 @@ mod tests {
     #[test]
     fn connect_timeout_does_not_mutate_original_nonblocking_state_after_invalid_input() {
         let sock = TcpSocket::v4_stream().expect("socket");
+        let target = "[::1]:80".parse().unwrap();
+        assert!(
+            sock.connect_timeout(target, Duration::from_secs(1))
+                .is_err()
+        );
+        assert!(!socket_is_nonblocking(&sock.socket));
         sock.socket.set_nonblocking(true).expect("set nonblocking");
 
         let result = sock.connect_timeout("[::1]:80".parse().unwrap(), Duration::from_secs(1));

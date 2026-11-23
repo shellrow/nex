@@ -8,14 +8,17 @@ use std::collections::VecDeque;
 use std::ffi::CString;
 use std::io;
 use std::mem;
-use std::ptr;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::Arc;
 use std::time::Duration;
 
 mod records;
+pub(crate) use bpf::parse_records;
+#[cfg(test)]
+use bpf::validate_record_lengths;
 #[cfg(test)]
 pub(crate) use records::test_ip_frame;
-pub(crate) use records::{LinkType, parse_records, write_packet};
+pub(crate) use records::{LinkType, write_packet};
 
 /// The BPF-specific configuration.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -65,30 +68,10 @@ impl Default for Config {
     }
 }
 
-pub(crate) fn validate_record_lengths(
-    header_len: usize,
-    captured_len: usize,
-    remaining: usize,
-    minimum_payload_len: usize,
-) -> io::Result<usize> {
-    let record_len = header_len
-        .checked_add(captured_len)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "BPF record length overflow"))?;
-    if header_len < bpf::BPF_HDR_FIELD_LEN
-        || captured_len < minimum_payload_len
-        || record_len > remaining
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid BPF record lengths",
-        ));
-    }
-    Ok(record_len)
-}
-
-/// Create a datalink channel using the /dev/bpf device
-#[inline]
-pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
+pub(crate) fn open_device(
+    network_interface: &Interface,
+    config: Config,
+) -> io::Result<(OwnedFd, LinkType, usize)> {
     #[cfg(any(
         target_os = "freebsd",
         target_os = "netbsd",
@@ -100,7 +83,13 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bpf device path"))?;
         // SAFETY: `c_file_name` is a live, NUL-terminated path and the flags
         // require no variadic mode argument.
-        let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
+        let fd = unsafe {
+            libc::open(
+                c_file_name.as_ptr(),
+                libc::O_RDWR | libc::O_CLOEXEC | libc::O_NONBLOCK,
+                0,
+            )
+        };
         if fd == -1 {
             Err(io::Error::last_os_error())
         } else {
@@ -117,7 +106,13 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
             })?;
             // SAFETY: `c_file_name` is a live, NUL-terminated path and the flags
             // require no variadic mode argument.
-            let fd = unsafe { libc::open(c_file_name.as_ptr(), libc::O_RDWR, 0) };
+            let fd = unsafe {
+                libc::open(
+                    c_file_name.as_ptr(),
+                    libc::O_RDWR | libc::O_CLOEXEC | libc::O_NONBLOCK,
+                    0,
+                )
+            };
             if fd != -1 {
                 return Ok(fd);
             }
@@ -145,29 +140,35 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
         Ok(())
     }
 
-    let raw_fd = get_fd(config.bpf_fd_attempts)?;
-    // SAFETY: `raw_fd` was just opened successfully and ownership is
-    // transferred exactly once to this guard.
-    let fd = unsafe { nex_sys::FileDesc::from_raw(raw_fd) };
-    // SAFETY: A zero bit pattern is a valid initial value for `ifreq`.
+    // Zero termination is required by BIOCSETIF.
+    let name = network_interface.name.as_bytes();
     let mut iface: bpf::ifreq = unsafe { mem::zeroed() };
-    for (i, c) in network_interface.name.bytes().enumerate() {
-        iface.ifr_name[i] = c as libc::c_char;
+    if name.len() >= iface.ifr_name.len() || name.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid BPF interface name",
+        ));
     }
-
-    let mut buflen = config.read_buffer_size as libc::c_uint;
+    for (dest, &byte) in iface.ifr_name.iter_mut().zip(name) {
+        *dest = byte as libc::c_char;
+    }
+    let mut buflen = u32::try_from(config.read_buffer_size)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "BPF buffer size exceeds u32"))?;
+    let raw_fd = get_fd(config.bpf_fd_attempts)?;
+    // SAFETY: get_fd transfers ownership of a newly opened descriptor.
+    let fd = unsafe { OwnedFd::from_raw_fd(raw_fd) };
     // NOTE Buffer length must be set before binding to an interface
     //      otherwise this will return Invalid Argument
     // SAFETY: The descriptor is open and `buflen` has the exact argument type
     // expected by BIOCSBLEN.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSBLEN, &mut buflen) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw_fd(), bpf::BIOCSBLEN, &mut buflen) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
     // Set the interface to use
     // SAFETY: The descriptor is open and `iface` remains readable throughout
     // the ioctl call.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSETIF, &iface) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw_fd(), bpf::BIOCSETIF, &iface) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
@@ -175,110 +176,85 @@ pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Resu
     // buffer
     // SAFETY: The descriptor is open and the integer argument is valid for
     // BIOCIMMEDIATE.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCIMMEDIATE, &1) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw_fd(), bpf::BIOCIMMEDIATE, &1) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
     // Get the device type
     let mut dlt: libc::c_uint = 0;
     // SAFETY: `dlt` is writable for the result and the descriptor is open.
-    if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCGDLT, &mut dlt) } == -1 {
+    if unsafe { bpf::ioctl(fd.as_raw_fd(), bpf::BIOCGDLT, &mut dlt) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
     let link_type = LinkType::from_dlt(dlt)?;
     if link_type.is_ip() {
-        set_feedback(fd.as_raw())?;
+        set_feedback(fd.as_raw_fd())?;
     }
     if link_type.header_complete() {
         // SAFETY: The descriptor is open and the ioctl reads an integer.
-        if unsafe { bpf::ioctl(fd.as_raw(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
+        if unsafe { bpf::ioctl(fd.as_raw_fd(), bpf::BIOCSHDRCMPLT, &1) } == -1 {
             return Err(io::Error::last_os_error());
         }
     }
-    let allocated_read_buffer_size = buflen as usize;
+    Ok((fd, link_type, buflen as usize))
+}
 
-    // Enable nonblocking
-    // SAFETY: The descriptor is open and F_SETFL consumes the integer flag
-    // value without retaining any pointers.
-    if unsafe { libc::fcntl(fd.as_raw(), libc::F_SETFL, libc::O_NONBLOCK) } == -1 {
-        return Err(io::Error::last_os_error());
-    }
-
+pub(crate) fn channel(network_interface: &Interface, config: Config) -> io::Result<super::Channel> {
+    let (fd, link_type, read_size) = open_device(network_interface, config)?;
     let fd = Arc::new(fd);
-    let mut sender = Box::new(RawSenderImpl {
+    let sender = Box::new(RawSenderImpl {
         fd: fd.clone(),
-        // SAFETY: A zero bit pattern is a valid empty `fd_set`.
-        fd_set: unsafe { mem::zeroed() },
         write_buffer: vec![0; config.write_buffer_size],
         link_type,
-        timeout: config.write_timeout.map(nex_sys::duration_to_timespec),
+        timeout: config.write_timeout,
     });
-    // SAFETY: `fd_set` is initialized and `fd` is an open descriptor that fits
-    // in the platform fd-set representation.
-    unsafe {
-        libc::FD_ZERO(&mut sender.fd_set as *mut libc::fd_set);
-        libc::FD_SET(fd.as_raw(), &mut sender.fd_set as *mut libc::fd_set);
-    }
-    let mut receiver = Box::new(RawReceiverImpl {
-        fd: fd.clone(),
-        // SAFETY: A zero bit pattern is a valid empty `fd_set`.
-        fd_set: unsafe { mem::zeroed() },
-        read_buffer: vec![0; allocated_read_buffer_size],
+    let receiver = Box::new(RawReceiverImpl {
+        fd,
+        read_buffer: vec![0; read_size],
         link_type,
         normalized: Vec::new(),
-        timeout: config.read_timeout.map(nex_sys::duration_to_timespec),
-        // Enough room for minimally sized packets without reallocating
-        packets: VecDeque::with_capacity(allocated_read_buffer_size / 64),
+        timeout: config.read_timeout,
+        packets: VecDeque::with_capacity(read_size / 64),
     });
-    // SAFETY: `fd_set` is initialized and `fd` is an open descriptor that fits
-    // in the platform fd-set representation.
-    unsafe {
-        libc::FD_ZERO(&mut receiver.fd_set as *mut libc::fd_set);
-        libc::FD_SET(fd.as_raw(), &mut receiver.fd_set as *mut libc::fd_set);
-    }
-
     Ok(super::Channel::Ethernet(sender, receiver))
 }
 
 struct RawSenderImpl {
-    fd: Arc<nex_sys::FileDesc>,
-    fd_set: libc::fd_set,
+    fd: Arc<OwnedFd>,
     write_buffer: Vec<u8>,
     link_type: LinkType,
-    timeout: Option<libc::timespec>,
+    timeout: Option<Duration>,
 }
 
 fn send_frame(
     fd: libc::c_int,
-    fd_set: &mut libc::fd_set,
-    timeout: Option<libc::timespec>,
+    timeout: Option<Duration>,
     link_type: LinkType,
     packet: &[u8],
 ) -> io::Result<()> {
     let prepared = link_type.prepare_send(packet)?;
-    // SAFETY: fd_set and the optional timeout are initialized and remain live
-    // throughout pselect. The caller owns the open descriptor.
-    let ret = unsafe {
-        libc::FD_SET(fd, fd_set);
-        libc::pselect(
-            fd + 1,
-            ptr::null_mut(),
-            fd_set,
-            ptr::null_mut(),
-            timeout
-                .as_ref()
-                .map(|to| to as *const libc::timespec)
-                .unwrap_or(ptr::null()),
-            ptr::null(),
-        )
+    wait_for(fd, libc::POLLOUT, timeout)?;
+    write_packet(fd, &prepared)
+}
+
+fn wait_for(fd: libc::c_int, events: libc::c_short, timeout: Option<Duration>) -> io::Result<()> {
+    let mut pfd = libc::pollfd {
+        fd,
+        events,
+        revents: 0,
     };
-    if ret == -1 {
-        Err(io::Error::last_os_error())
-    } else if ret == 0 {
-        Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"))
-    } else {
-        write_packet(fd, &prepared)
+    let millis = timeout.map_or(-1, |duration| {
+        duration
+            .as_nanos()
+            .div_ceil(1_000_000)
+            .min(i32::MAX as u128) as i32
+    });
+    // SAFETY: poll receives one initialized pollfd for the duration of the call.
+    match unsafe { libc::poll(&mut pfd, 1, millis) } {
+        -1 => Err(io::Error::last_os_error()),
+        0 => Err(io::ErrorKind::TimedOut.into()),
+        _ => Ok(()),
     }
 }
 
@@ -302,13 +278,8 @@ impl RawSender for RawSenderImpl {
         }
         for chunk in self.write_buffer[..len].chunks_mut(packet_size) {
             func(chunk);
-            if let Err(error) = send_frame(
-                self.fd.as_raw(),
-                &mut self.fd_set,
-                self.timeout,
-                self.link_type,
-                chunk,
-            ) {
+            if let Err(error) = send_frame(self.fd.as_raw_fd(), self.timeout, self.link_type, chunk)
+            {
                 return Some(Err(error));
             }
         }
@@ -318,8 +289,7 @@ impl RawSender for RawSenderImpl {
     #[inline]
     fn send(&mut self, packet: &[u8]) -> Option<io::Result<()>> {
         Some(send_frame(
-            self.fd.as_raw(),
-            &mut self.fd_set,
+            self.fd.as_raw_fd(),
             self.timeout,
             self.link_type,
             packet,
@@ -328,12 +298,11 @@ impl RawSender for RawSenderImpl {
 }
 
 struct RawReceiverImpl {
-    fd: Arc<nex_sys::FileDesc>,
-    fd_set: libc::fd_set,
+    fd: Arc<OwnedFd>,
     read_buffer: Vec<u8>,
     link_type: LinkType,
     normalized: Vec<u8>,
-    timeout: Option<libc::timespec>,
+    timeout: Option<Duration>,
     packets: VecDeque<(usize, usize)>,
 }
 
@@ -341,41 +310,19 @@ impl RawReceiver for RawReceiverImpl {
     fn next(&mut self) -> io::Result<&[u8]> {
         if self.packets.is_empty() {
             let buffer = &mut self.read_buffer[..];
-            // SAFETY: `fd_set` and the optional timeout are initialized and
-            // remain live throughout pselect.
-            let ret = unsafe {
-                libc::FD_SET(self.fd.as_raw(), &mut self.fd_set as *mut libc::fd_set);
-                libc::pselect(
-                    self.fd.as_raw() + 1,
-                    &mut self.fd_set as *mut libc::fd_set,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    self.timeout
-                        .as_ref()
-                        .map(|to| to as *const libc::timespec)
-                        .unwrap_or(ptr::null()),
-                    ptr::null(),
+            wait_for(self.fd.as_raw_fd(), libc::POLLIN, self.timeout)?;
+            // SAFETY: buffer is writable for its full length and the descriptor is open.
+            let len = unsafe {
+                libc::read(
+                    self.fd.as_raw_fd(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
                 )
             };
-            if ret == -1 {
+            if len < 0 {
                 return Err(io::Error::last_os_error());
-            } else if ret == 0 {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "Timed out"));
-            } else {
-                // SAFETY: `buffer` is writable for its full length and the
-                // descriptor is open.
-                let buflen = match unsafe {
-                    libc::read(
-                        self.fd.as_raw(),
-                        buffer.as_ptr() as *mut libc::c_void,
-                        buffer.len() as libc::size_t,
-                    )
-                } {
-                    len if len > 0 => len,
-                    _ => return Err(io::Error::last_os_error()),
-                };
-                self.packets = parse_records(&buffer[..buflen as usize])?;
             }
+            self.packets = parse_records(&buffer[..len as usize])?;
         }
         let (start, len) = self.packets.pop_front().ok_or_else(|| {
             io::Error::new(
@@ -398,20 +345,17 @@ mod tests {
 
     #[test]
     fn send_and_build_use_link_framing() {
-        use std::os::{fd::IntoRawFd, unix::net::UnixDatagram};
+        use std::os::unix::net::UnixDatagram;
         let (writer, reader) = UnixDatagram::pair().unwrap();
         reader
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap();
-        // SAFETY: into_raw_fd transfers exclusive descriptor ownership.
-        let fd = Arc::new(unsafe { nex_sys::FileDesc::from_raw(writer.into_raw_fd()) });
+        let fd = Arc::new(writer.into());
         let mut sender = RawSenderImpl {
             fd,
-            // SAFETY: Zero initializes an empty fd_set.
-            fd_set: unsafe { mem::zeroed() },
             write_buffer: vec![0; 108],
             link_type: LinkType::Null,
-            timeout: Some(nex_sys::duration_to_timespec(Duration::from_secs(1))),
+            timeout: Some(Duration::from_secs(1)),
         };
         let mut buffer = [0; 128];
         for version in [4, 6] {
@@ -454,8 +398,7 @@ mod tests {
         let captured_len = 86;
 
         assert_eq!(
-            validate_record_lengths(header_len, captured_len, header_len + captured_len, 0,)
-                .unwrap(),
+            validate_record_lengths(header_len, captured_len, header_len + captured_len).unwrap(),
             header_len + captured_len
         );
     }
@@ -463,7 +406,7 @@ mod tests {
     #[test]
     fn rejects_header_that_cannot_contain_all_fields() {
         let header_len = bpf::BPF_HDR_FIELD_LEN - 1;
-        let err = validate_record_lengths(header_len, 86, header_len + 86, 0).unwrap_err();
+        let err = validate_record_lengths(header_len, 86, header_len + 86).unwrap_err();
 
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }

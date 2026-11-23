@@ -30,3 +30,24 @@ fn converts_blocking_std_socket_and_receives_without_blocking_runtime() {
         send.await.unwrap();
     });
 }
+
+#[test]
+fn receive_honors_configured_timeout() {
+    use nex_socket::udp::UdpConfig;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let config = UdpConfig::new()
+            .with_bind("127.0.0.1:0".parse().unwrap())
+            .with_read_timeout(Duration::from_millis(20));
+        let socket = AsyncUdpSocket::from_config(&config).unwrap();
+        let mut buffer = [0; 1];
+        let error = tokio::time::timeout(Duration::from_secs(2), socket.recv_from(&mut buffer))
+            .await
+            .expect("socket deadline")
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    });
+}

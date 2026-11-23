@@ -1,58 +1,15 @@
-# Manual Privileged Test Matrix
+# Testing raw network I/O
 
-Run this matrix before a release on dedicated hosts or disposable virtual
-machines. Do not run it on an untrusted shared network. Record the OS version,
-Rust version, interface name, command, and result in the release checklist.
-
-Set the dedicated interface name and run the ignored datalink integration tests:
+Use an isolated test network. Set `NEX_TEST_INTERFACE` to the interface name on Unix or the adapter GUID on Windows. Run the tests with raw socket privileges and access to the platform capture driver.
 
 ```sh
-NEX_TEST_INTERFACE=eth0 cargo test -p nex-datalink --test privileged_channel -- --ignored
-NEX_TEST_INTERFACE=eth0 cargo test -p nex-datalink --features async --test privileged_channel -- --ignored
-NEX_TEST_INTERFACE=eth0 cargo test -p nex-socket --test privileged_socket -- --ignored
+cargo test -p nex-socket --test privileged_socket -- --ignored --test-threads=1
+cargo test -p nex-datalink --all-features --test privileged_channel -- --ignored --test-threads=1
 ```
 
-Use the platform's actual interface name instead of `eth0`. The tests open and
-close synchronous and asynchronous channels; Linux additionally checks Layer3
-channel creation.
+The channel tests include a 1,000-cycle lifecycle check and a 60-second bidirectional capture on Linux and Windows. Allow several minutes for the suite. The capture tests transmit experimental Ethernet frames.
 
-| Platform | Prerequisites | Synchronous checks | Asynchronous checks | Expected result |
-| --- | --- | --- | --- | --- |
-| Linux | Root or `CAP_NET_RAW`; loopback plus a veth pair | `dump`, `arp`, `icmp_ping`, `tcp_ping`, `udp_ping`; Layer2 and Layer3 channels; promiscuous off/on; fanout with two receivers | `async_datalink`, `async_dump`, async ICMP/TCP/UDP socket examples | Packets transmit and receive, timeouts are honored, and all processes exit without leaked descriptors. |
-| macOS | Root; one Ethernet or Wi-Fi interface plus loopback; available `/dev/bpf*` devices | `dump`, `arp`, `icmp_ping`, `tcp_ping`, `udp_ping`; loopback and non-loopback BPF; repeated open/close beyond one BPF descriptor | `async_datalink`, `async_dump`, async socket examples | BPF headers are decoded, loopback header translation is correct, and descriptors return to the pre-test count. |
-| FreeBSD/OpenBSD/NetBSD | Root; BPF enabled; loopback plus one test interface | Same BPF examples as macOS, including immediate mode and configured timeouts | `async_datalink` and `async_dump` | Device selection and BPF alignment work without truncated frames or descriptor leaks. |
-| Windows | Administrator; current Npcap in WinPcap-compatible mode | `dump`, `arp`, `icmp_ping`, `tcp_ping`, `udp_ping`; repeated channel creation; concurrent sender and receiver | `async_datalink`, `async_dump`, async socket examples; repeatedly create and drop channels | Adapter names resolve, send/receive operations remain serialized, worker threads stop on drop, and Npcap handles are freed once. |
-
-## Error-path leak check
-
-For each backend, capture the process handle count before the test, repeatedly
-open a channel with a deliberately invalid interface or configuration after the
-first resource allocation point, and capture the count again. Linux and BSD
-hosts should inspect `/proc/<pid>/fd` or `lsof -p <pid>` as available. Windows
-hosts should use Process Explorer or `Get-Process`.
-
-The count must return to baseline after every iteration. Run at least 1,000
-iterations. Any monotonically increasing handle count, double-close diagnostic,
-sanitizer report, or worker thread surviving channel drop is a release blocker.
-
-## Sanitizers and Miri
-
-Run pure logic under Miri:
-
-```sh
-cargo +nightly miri test -p nex-core --lib
-cargo +nightly miri test -p nex-packet --lib
-```
-
-Run Linux parsing and datalink tests under AddressSanitizer and LeakSanitizer on
-a nightly toolchain:
-
-```sh
-RUSTFLAGS="-Zsanitizer=address" cargo +nightly test -p nex-packet -p nex-datalink --lib --target x86_64-unknown-linux-gnu
-RUSTFLAGS="-Zsanitizer=leak" cargo +nightly test -p nex-packet -p nex-datalink --lib --target x86_64-unknown-linux-gnu
-```
-
-Rust does not currently expose LLVM UndefinedBehaviorSanitizer through
-`-Zsanitizer`; Miri supplies the pure-Rust undefined-behavior check instead.
-Privileged datalink examples must also be exercised under each available
-sanitizer on the Linux test host.
+- **Linux** uses a veth pair for Layer 2, Layer 3, and fanout tests. Set `NEX_TEST_INTERFACE` and `NEX_TEST_PEER_INTERFACE` to the two ends. In the `linux_loopback` test binary, run the two `loopback_duplicates` tests on `lo` and `non_loopback_outgoing_is_preserved` on the isolated veth.
+- **macOS** requires access to BPF. Run `cargo test -p nex-datalink --features async --test macos_loopback -- --ignored` for IPv4 and IPv6 loopback traffic.
+- **Windows** requires Npcap for the default backend and the Npcap SDK for the libpcap tests. Run `cargo test -p nex-datalink --all-features --lib post_allocation_failure -- --ignored --test-threads=1` to check adapter cleanup after failed setup.
+- **Windows Packet Monitor** uses `cargo test -p nex --features async,winptap --test winptap_live -- --ignored --test-threads=1`. While the test runs, send UDP datagrams containing `nex-winptap-controlled-fixture-v1` to port 48932 on the chosen adapter from another host. Both the Pktmon and native IOCTL backends must observe incoming traffic.
