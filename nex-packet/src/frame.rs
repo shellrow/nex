@@ -129,7 +129,7 @@ impl<'a> FrameSlice<'a> {
         match ethertype {
             EtherType::Ipv4 => view.parse_ipv4(network_bytes)?,
             EtherType::Ipv6 => view.parse_ipv6(network_bytes)?,
-            EtherType::Arp if network_bytes.len() >= 28 => {
+            EtherType::Arp if network_bytes.len() >= 28 && network_bytes[4..6] == [6, 4] => {
                 view.network = Some(&network_bytes[..28]);
                 view.payload = &network_bytes[28..];
             }
@@ -203,7 +203,7 @@ impl<'a> FrameSlice<'a> {
             })?;
         let mut next = bytes[6];
         let mut cursor = 40usize;
-        while cursor < packet_len {
+        loop {
             let extension_len = match next {
                 0 | 43 | 60 => {
                     if cursor + 2 > packet_len {
@@ -401,7 +401,7 @@ impl<'a> FrameView<'a> {
         Some(crate::quic::QuicDatagram::new(self.payload, options))
     }
 
-    /// Parse a frame view without allocating payload storage.
+    /// Decode headers using a temporary input copy and borrow the payload from `packet`.
     pub fn from_buf(packet: &'a [u8], option: ParseOption) -> Option<Self> {
         Self::try_from_buf(packet, option).ok()
     }
@@ -428,12 +428,14 @@ impl<'a> FrameView<'a> {
 }
 
 pub fn create_dummy_ethernet_packet(packet: &[u8], offset: usize) -> Option<EthernetPacket> {
-    if offset >= packet.len() {
-        return None;
-    }
+    let payload = packet.get(offset..)?;
+    Some(EthernetPacket {
+        header: ip_link_header(payload)?,
+        payload: Bytes::copy_from_slice(payload),
+    })
+}
 
-    let payload = &packet[offset..];
-
+fn ip_link_header(payload: &[u8]) -> Option<EthernetHeader> {
     let ethertype = if is_likely_ipv4_packet(payload) {
         EtherType::Ipv4
     } else if is_likely_ipv6_packet(payload) {
@@ -442,15 +444,10 @@ pub fn create_dummy_ethernet_packet(packet: &[u8], offset: usize) -> Option<Ethe
         return None;
     };
 
-    let header = EthernetHeader {
+    Some(EthernetHeader {
         destination: MacAddr::zero(),
         source: MacAddr::zero(),
         ethertype,
-    };
-
-    Some(EthernetPacket {
-        header,
-        payload: Bytes::copy_from_slice(payload),
     })
 }
 
@@ -471,10 +468,11 @@ fn is_likely_ipv6_packet(packet: &[u8]) -> bool {
 }
 
 fn parse_arp_packet(packet: Bytes, frame: &mut Frame) {
-    match ArpPacket::from_buf(&packet) {
+    match ArpPacket::from_bytes(packet.clone()) {
         Some(arp_packet) => {
             if let Some(datalink) = &mut frame.datalink {
                 datalink.arp = Some(arp_packet.header);
+                frame.payload = arp_packet.payload;
             }
         }
         None => {
@@ -488,9 +486,9 @@ fn parse_arp_packet(packet: Bytes, frame: &mut Frame) {
 
 fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(), ParseError> {
     let parsed = if strict {
-        Ipv4Packet::try_from_bytes_with_mode(packet, ParseMode::Strict)
+        Ipv4Packet::try_from_bytes_with_mode(packet.clone(), ParseMode::Strict)
     } else {
-        Ipv4Packet::try_from_bytes(packet)
+        Ipv4Packet::try_from_bytes(packet.clone())
     };
     match parsed {
         Ok(ipv4_packet) => {
@@ -525,6 +523,7 @@ fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
         }
         Err(err) if strict => Err(err),
         Err(_) => {
+            frame.payload = packet;
             frame.ip = Some(IpLayer {
                 ipv4: None,
                 ipv6: None,
@@ -538,9 +537,9 @@ fn parse_ipv4_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
 
 fn parse_ipv6_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(), ParseError> {
     let parsed = if strict {
-        Ipv6Packet::try_from_bytes_with_mode(packet, ParseMode::Strict)
+        Ipv6Packet::try_from_bytes_with_mode(packet.clone(), ParseMode::Strict)
     } else {
-        Ipv6Packet::try_from_bytes(packet)
+        Ipv6Packet::try_from_bytes(packet.clone())
     };
     match parsed {
         Ok(ipv6_packet) => {
@@ -580,6 +579,7 @@ fn parse_ipv6_packet(packet: Bytes, frame: &mut Frame, strict: bool) -> Result<(
         }
         Err(err) if strict => Err(err),
         Err(_) => {
+            frame.payload = packet;
             frame.ip = Some(IpLayer {
                 ipv4: None,
                 ipv6: None,
@@ -645,16 +645,20 @@ fn parse_frame_from_bytes(
         packet_len,
     };
 
-    let ethernet_packet = if option.from_ip_packet {
-        let mut ethernet =
-            create_dummy_ethernet_packet(&packet, option.offset).ok_or(ParseError::Malformed {
-                context: "Frame dummy Ethernet classification",
-            })?;
-        ethernet.payload = packet.slice(option.offset..);
-        ethernet
-    } else {
-        EthernetPacket::try_from_bytes(packet)?
-    };
+    let ethernet_packet =
+        if option.from_ip_packet {
+            let header = packet.get(option.offset..).and_then(ip_link_header).ok_or(
+                ParseError::Malformed {
+                    context: "frame IP header",
+                },
+            )?;
+            EthernetPacket {
+                header,
+                payload: packet.slice(option.offset..),
+            }
+        } else {
+            EthernetPacket::try_from_bytes(packet)?
+        };
 
     let ether_type = ethernet_packet.get_ethertype();
     let (ether_header, ether_payload) = ethernet_packet.into_parts();

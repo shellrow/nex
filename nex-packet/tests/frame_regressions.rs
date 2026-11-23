@@ -112,3 +112,19 @@ fn frame_slice_does_not_decode_incomplete_udp_datagrams() {
     raw[24..26].copy_from_slice(&7u16.to_be_bytes());
     assert!(FrameSlice::try_from_buf(&raw, ip_option()).is_err());
 }
+
+#[test]
+fn arp_padding_and_undecodable_ip_are_preserved_in_borrowed_views() {
+    use nex_packet::frame::FrameView;
+    let mut ethernet = [0u8; 46];
+    ethernet[12..14].copy_from_slice(&0x0806u16.to_be_bytes());
+    ethernet[18..20].copy_from_slice(&[6, 4]);
+    ethernet[42..].copy_from_slice(b"tail");
+    let view = FrameView::try_from_buf(&ethernet, Default::default()).unwrap();
+    assert_eq!(view.payload, b"tail");
+    assert_eq!(view.payload.as_ptr(), ethernet[42..].as_ptr());
+
+    ethernet[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+    let view = FrameView::try_from_buf(&ethernet, Default::default()).unwrap();
+    assert_eq!(view.payload, &ethernet[14..]);
+}

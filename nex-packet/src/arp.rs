@@ -338,47 +338,51 @@ pub struct ArpPacket {
 impl Packet for ArpPacket {
     type Header = ArpHeader;
     fn try_from_buf(bytes: &[u8]) -> Result<Self, crate::parse::ParseError> {
-        (|| -> Option<Self> {
-            if bytes.len() < ARP_HEADER_LEN {
-                return None;
-            }
-            let hardware_type = ArpHardwareType::new(u16::from_be_bytes([bytes[0], bytes[1]]));
-            let protocol_type = EtherType::new(u16::from_be_bytes([bytes[2], bytes[3]]));
-            let hw_addr_len = bytes[4];
-            let proto_addr_len = bytes[5];
-            let operation = ArpOperation::new(u16::from_be_bytes([bytes[6], bytes[7]]));
-            let sender_hw_addr = MacAddr::from_octets([
-                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
-            ]);
-            let sender_proto_addr = Ipv4Addr::new(bytes[14], bytes[15], bytes[16], bytes[17]);
-            let target_hw_addr = MacAddr::from_octets([
-                bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
-            ]);
-            let target_proto_addr = Ipv4Addr::new(bytes[24], bytes[25], bytes[26], bytes[27]);
-            let payload = Bytes::copy_from_slice(&bytes[ARP_HEADER_LEN..]);
-
-            Some(ArpPacket {
-                header: ArpHeader {
-                    hardware_type,
-                    protocol_type,
-                    hw_addr_len,
-                    proto_addr_len,
-                    operation,
-                    sender_hw_addr,
-                    sender_proto_addr,
-                    target_hw_addr,
-                    target_proto_addr,
-                },
-                payload,
-            })
-        })()
-        .ok_or(crate::parse::ParseError::Malformed {
-            context: std::any::type_name::<Self>(),
-        })
+        Self::try_from_bytes(Bytes::copy_from_slice(bytes))
     }
+
     fn try_from_bytes(bytes: Bytes) -> Result<Self, crate::parse::ParseError> {
-        Self::from_buf(&bytes).ok_or(crate::parse::ParseError::Malformed {
-            context: std::any::type_name::<Self>(),
+        use crate::parse::ParseError;
+        if bytes.len() < ARP_HEADER_LEN {
+            return Err(ParseError::BufferTooShort {
+                context: "ARP",
+                minimum: ARP_HEADER_LEN,
+                actual: bytes.len(),
+            });
+        }
+        if bytes[4..6] != [6, 4] {
+            return Err(ParseError::Malformed {
+                context: "ARP address lengths",
+            });
+        }
+        let hardware_type = ArpHardwareType::new(u16::from_be_bytes([bytes[0], bytes[1]]));
+        let protocol_type = EtherType::new(u16::from_be_bytes([bytes[2], bytes[3]]));
+        let hw_addr_len = bytes[4];
+        let proto_addr_len = bytes[5];
+        let operation = ArpOperation::new(u16::from_be_bytes([bytes[6], bytes[7]]));
+        let sender_hw_addr = MacAddr::from_octets([
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
+        ]);
+        let sender_proto_addr = Ipv4Addr::new(bytes[14], bytes[15], bytes[16], bytes[17]);
+        let target_hw_addr = MacAddr::from_octets([
+            bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+        ]);
+        let target_proto_addr = Ipv4Addr::new(bytes[24], bytes[25], bytes[26], bytes[27]);
+        let payload = bytes.slice(ARP_HEADER_LEN..);
+
+        Ok(ArpPacket {
+            header: ArpHeader {
+                hardware_type,
+                protocol_type,
+                hw_addr_len,
+                proto_addr_len,
+                operation,
+                sender_hw_addr,
+                sender_proto_addr,
+                target_hw_addr,
+                target_proto_addr,
+            },
+            payload,
         })
     }
 
@@ -399,7 +403,7 @@ impl Packet for ArpPacket {
     }
 
     fn header(&self) -> Bytes {
-        self.to_bytes()
+        self.to_bytes().slice(..ARP_HEADER_LEN)
     }
 
     fn payload(&self) -> Bytes {
