@@ -1,48 +1,21 @@
-# Packet Model
+# Packet types
 
-`nex-packet` separates packet handling into four categories:
+| Type | Use |
+| --- | --- |
+| `FrameSlice<'a>` | Inspect layer boundaries in the original buffer without allocation. |
+| `FrameView<'a>` | Read decoded headers and borrow the payload. Parsing currently makes a temporary copy of the input. |
+| `Frame` and protocol packet types | Keep decoded fields and owned payloads. Parsers that accept `Bytes` can share its storage. |
+| `MutablePacket` implementations | Edit an existing buffer in place. |
+| Protocol builders | Construct a new packet and validate field sizes before encoding. |
 
-| Category | Ownership | Mutation | Typical types |
-| --- | --- | --- | --- |
-| Borrowed view | Borrows caller bytes | No | `FrameSlice<'a>`, `FrameView<'a>` |
-| Mutable borrowed view | Exclusively borrows caller bytes | In place | `MutableIpv4Packet<'a>`, `GenericMutablePacket<'a, P>` |
-| Owned decoded packet | Owns serialized `Bytes` and decoded fields | By replacing owned fields | `Ipv4Packet`, `TcpPacket`, `DnsPacket` |
-| Builder | Owns construction state | Validated setters/build | Types under `builder` |
+`GenericMutablePacket` caches header and payload boundaries. After changing a length or another structural field through `packet_mut()`, call `refresh_layout()` before using the slices. `freeze()` reparses the bytes to produce an owned packet.
 
-Use allocation-free `FrameSlice` for layer boundaries on a hot path.
-`FrameView` retains decoded header compatibility and may allocate for variable
-options. Use a mutable view when editing an existing buffer, an owned packet
-when data must outlive the input, and a builder when constructing new wire
-data.
+Use `try_from_buf` or `try_from_bytes` for structured parse errors. For IP captures, `ParseMode::Lenient` accepts available payload bytes when a capture ends early. `ParseMode::Strict` checks the declared IP length.
 
-## Mutable layout and freeze
+## DNS wire names in 0.29
 
-Protocol-specific mutable views validate their minimum layout on construction.
-`GenericMutablePacket` additionally caches header and payload boundaries after
-one parse. Ordinary field and payload edits do not cause another parse.
-Changing a structural field through `packet_mut()` does not update the cached
-boundaries; call `refresh_layout()` before requesting slices under the new
-layout.
+`DnsResponsePacket::name` stores the complete encoded owner name. It replaces the two-byte `name_tag` field. To migrate a compression pointer, use `name_tag.to_be_bytes().to_vec()`. A root name is `vec![0]`. Persisted Serde records also need this field conversion.
 
-`freeze()` is the commit point. It parses the current bytes again and returns
-an owned packet only when the complete layout is valid. The parse is deliberate:
-it prevents stale or inconsistent mutable bytes from becoming an owned packet.
+Compression offsets refer to the start of the original DNS message. Use `DnsName::try_from_message(message, offset)` to decode a name at a known offset. Parsed records retain their wire encoding, so an unmodified message can be serialized again. When editing the layout, the caller must update affected pointers, section counts, and RDATA lengths.
 
-The allocation-returning `Packet::to_bytes_mut`, `header_mut`, and
-`payload_mut` compatibility methods are deprecated. Their explicit
-`copy_*_to_bytes_mut` replacements make the allocation visible at call sites.
-
-## Generated representation details
-
-The `nex_core::bitfield` aliases are `#[doc(hidden)]` implementation details
-shared by packet field representations. They are public for cross-crate code
-generation only and carry no independent semantic contract.
-
-## Variable-length protocol data
-
-IPv4 options, IPv6 extension headers, TCP options, DNS compression, and DHCP
-options are length-delimited and reject truncated structural fields. Parsers
-that distinguish capture truncation expose `ParseMode`: lenient mode preserves
-available captured payload where documented, while strict mode rejects data
-shorter than its declared protocol length. Fuzz and property tests exercise
-both arbitrary input and valid parse/serialize round trips.
+For an individual question or resource record, `header()` returns that record and `payload()` returns the bytes that follow it. `to_bytes()` includes both. On a complete `DnsPacket`, the header slice includes all declared sections and the payload contains trailing bytes.
