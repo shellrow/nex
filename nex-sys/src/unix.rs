@@ -100,10 +100,14 @@ pub fn timeval_to_duration(tv: libc::timeval) -> Duration {
     Duration::new(tv.tv_sec as u64, (tv.tv_usec as u32) * 1000)
 }
 
-/// Convert a Duration into a platform specific `timeval`.
+// libc exposes the target ABI through time_t, including on 32-bit musl.
+#[allow(deprecated)]
+type TvSec = libc::time_t;
+
+/// Convert a Duration into a platform specific `timeval`, saturating the seconds field.
 pub fn duration_to_timeval(dur: Duration) -> libc::timeval {
     libc::timeval {
-        tv_sec: dur.as_secs() as libc::time_t,
+        tv_sec: dur.as_secs().try_into().unwrap_or(TvSec::MAX),
         tv_usec: dur.subsec_micros() as TvUsecType,
     }
 }
@@ -113,10 +117,10 @@ pub fn timespec_to_duration(ts: libc::timespec) -> Duration {
     Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
 }
 
-/// Convert a Duration into a platform specific `timespec`.
+/// Convert a Duration into a platform specific `timespec`, saturating the seconds field.
 pub fn duration_to_timespec(dur: Duration) -> libc::timespec {
     libc::timespec {
-        tv_sec: dur.as_secs() as libc::time_t,
+        tv_sec: dur.as_secs().try_into().unwrap_or(TvSec::MAX),
         tv_nsec: dur.subsec_nanos() as _,
     }
 }
@@ -176,10 +180,20 @@ fn errno() -> i32 {
     io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
+pub(crate) fn last_socket_error() -> io::Error {
+    io::Error::last_os_error()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn large_duration_saturates_platform_seconds() {
+        assert_eq!(duration_to_timeval(Duration::MAX).tv_sec, TvSec::MAX);
+        assert_eq!(duration_to_timespec(Duration::MAX).tv_sec, TvSec::MAX);
+    }
 
     #[test]
     fn test_timeval_round_trip() {
