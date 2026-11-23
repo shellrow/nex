@@ -157,7 +157,7 @@ impl UdpSocket {
         target: SocketAddr,
         meta: Option<&UdpSendMeta>,
     ) -> io::Result<usize> {
-        use nix::sys::socket::{ControlMessage, MsgFlags, SockaddrIn, SockaddrIn6, sendmsg};
+        use nix::sys::socket::{MsgFlags, SockaddrIn, SockaddrIn6, sendmsg};
         use std::io::IoSlice;
         use std::os::fd::AsRawFd;
 
@@ -207,7 +207,7 @@ impl UdpSocket {
                                 )
                             })?;
                         }
-                        let cmsgs = [ControlMessage::Ipv4PacketInfo(&pktinfo)];
+                        let cmsgs = [nix::sys::socket::ControlMessage::Ipv4PacketInfo(&pktinfo)];
                         return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
                             .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
@@ -255,7 +255,7 @@ impl UdpSocket {
                                 )
                             })?;
                         }
-                        let cmsgs = [ControlMessage::Ipv6PacketInfo(&pktinfo)];
+                        let cmsgs = [nix::sys::socket::ControlMessage::Ipv6PacketInfo(&pktinfo)];
                         return sendmsg(raw_fd, &iov, &cmsgs, MsgFlags::empty(), Some(&sockaddr))
                             .map_err(|e| io::Error::from_raw_os_error(e as i32));
                     }
@@ -312,7 +312,7 @@ impl UdpSocket {
     /// `set_recv_pktinfo_v4` / `set_recv_pktinfo_v6`.
     #[cfg(unix)]
     pub fn recv_msg(&self, buf: &mut [u8]) -> io::Result<UdpRecvMeta> {
-        use nix::sys::socket::{ControlMessageOwned, MsgFlags, SockaddrStorage, recvmsg};
+        use nix::sys::socket::{MsgFlags, SockaddrStorage, recvmsg};
         use std::io::IoSliceMut;
         use std::os::fd::AsRawFd;
 
@@ -368,62 +368,67 @@ impl UdpSocket {
             })
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid source address"))?;
 
-        let mut destination_addr = None;
-        let mut interface_index = None;
-
-        if let Ok(cmsgs) = msg.cmsgs() {
-            for cmsg in cmsgs {
-                match cmsg {
-                    #[cfg(any(
-                        target_os = "android",
-                        target_os = "fuchsia",
-                        target_os = "linux",
-                        target_vendor = "apple",
-                        target_os = "netbsd"
-                    ))]
-                    ControlMessageOwned::Ipv4PacketInfo(info) => {
-                        destination_addr = Some(IpAddr::V4(std::net::Ipv4Addr::from(
-                            info.ipi_addr.s_addr.to_ne_bytes(),
-                        )));
-                        interface_index = Some(info.ipi_ifindex.try_into().map_err(|_| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                "received invalid interface index",
-                            )
-                        })?);
-                    }
-                    #[cfg(any(
-                        target_os = "android",
-                        target_os = "freebsd",
-                        target_os = "linux",
-                        target_os = "macos",
-                        target_os = "ios",
-                        target_os = "tvos",
-                        target_os = "visionos",
-                        target_os = "watchos",
-                        target_os = "netbsd",
-                        target_os = "openbsd"
-                    ))]
-                    ControlMessageOwned::Ipv6PacketInfo(info) => {
-                        destination_addr =
-                            Some(IpAddr::V6(std::net::Ipv6Addr::from(info.ipi6_addr.s6_addr)));
-                        interface_index = Some(info.ipi6_ifindex.try_into().map_err(|_| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                "received invalid interface index",
-                            )
-                        })?);
-                    }
-                    _ => {}
+        for cmsg in msg.cmsgs().map_err(io::Error::from)? {
+            match cmsg {
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "fuchsia",
+                    target_os = "linux",
+                    target_vendor = "apple",
+                    target_os = "netbsd"
+                ))]
+                nix::sys::socket::ControlMessageOwned::Ipv4PacketInfo(info) => {
+                    let destination =
+                        IpAddr::V4(std::net::Ipv4Addr::from(info.ipi_addr.s_addr.to_ne_bytes()));
+                    let index = info.ipi_ifindex.try_into().map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "received invalid interface index",
+                        )
+                    })?;
+                    return Ok(UdpRecvMeta {
+                        bytes_read: msg.bytes,
+                        source_addr,
+                        destination_addr: Some(destination),
+                        interface_index: Some(index),
+                    });
                 }
+                #[cfg(any(
+                    target_os = "android",
+                    target_os = "freebsd",
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "ios",
+                    target_os = "tvos",
+                    target_os = "visionos",
+                    target_os = "watchos",
+                    target_os = "netbsd",
+                    target_os = "openbsd"
+                ))]
+                nix::sys::socket::ControlMessageOwned::Ipv6PacketInfo(info) => {
+                    let destination = IpAddr::V6(std::net::Ipv6Addr::from(info.ipi6_addr.s6_addr));
+                    let index = info.ipi6_ifindex.try_into().map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "received invalid interface index",
+                        )
+                    })?;
+                    return Ok(UdpRecvMeta {
+                        bytes_read: msg.bytes,
+                        source_addr,
+                        destination_addr: Some(destination),
+                        interface_index: Some(index),
+                    });
+                }
+                _ => {}
             }
         }
 
         Ok(UdpRecvMeta {
             bytes_read: msg.bytes,
             source_addr,
-            destination_addr,
-            interface_index,
+            destination_addr: None,
+            interface_index: None,
         })
     }
 

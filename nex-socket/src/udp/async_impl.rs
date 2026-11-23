@@ -5,9 +5,12 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket as StdUdpSocket};
 use tokio::net::UdpSocket;
 
 /// Asynchronous UDP socket built on top of Tokio.
+/// Configured I/O timeouts require a Tokio runtime with time enabled.
 #[derive(Debug)]
 pub struct AsyncUdpSocket {
     inner: UdpSocket,
+    read_timeout: Option<std::time::Duration>,
+    write_timeout: Option<std::time::Duration>,
 }
 
 impl AsyncUdpSocket {
@@ -87,24 +90,13 @@ impl AsyncUdpSocket {
             socket.bind(&addr.into())?;
         }
 
-        #[cfg(windows)]
-        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
-            StdUdpSocket::from_raw_socket(socket.into_raw_socket())
-        };
-        #[cfg(unix)]
-        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::fd::{FromRawFd, IntoRawFd};
-            StdUdpSocket::from_raw_fd(socket.into_raw_fd())
-        };
+        let inner = UdpSocket::from_std(socket.into())?;
 
-        let inner = UdpSocket::from_std(std_socket)?;
-
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            read_timeout: config.read_timeout,
+            write_timeout: config.write_timeout,
+        })
     }
 
     /// Create a socket of arbitrary type (DGRAM or RAW).
@@ -112,24 +104,13 @@ impl AsyncUdpSocket {
         let socket = Socket::new(domain, sock_type, Some(Protocol::UDP))?;
         socket.set_nonblocking(true)?;
 
-        #[cfg(windows)]
-        // SAFETY: `into_raw_socket` transfers the valid socket exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::windows::io::{FromRawSocket, IntoRawSocket};
-            StdUdpSocket::from_raw_socket(socket.into_raw_socket())
-        };
-        #[cfg(unix)]
-        // SAFETY: `into_raw_fd` transfers the valid descriptor exactly once to
-        // `StdUdpSocket`.
-        let std_socket = unsafe {
-            use std::os::fd::{FromRawFd, IntoRawFd};
-            StdUdpSocket::from_raw_fd(socket.into_raw_fd())
-        };
+        let inner = UdpSocket::from_std(socket.into())?;
 
-        let inner = UdpSocket::from_std(std_socket)?;
-
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            read_timeout: None,
+            write_timeout: None,
+        })
     }
 
     /// Convenience constructor for IPv4 DGRAM.
@@ -154,12 +135,12 @@ impl AsyncUdpSocket {
 
     /// Send data asynchronously.
     pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
-        self.inner.send_to(buf, target).await
+        crate::with_timeout(self.write_timeout, self.inner.send_to(buf, target)).await
     }
 
     /// Receive data asynchronously.
     pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        self.inner.recv_from(buf).await
+        crate::with_timeout(self.read_timeout, self.inner.recv_from(buf)).await
     }
 
     /// Retrieve the local socket address.
@@ -175,6 +156,8 @@ impl AsyncUdpSocket {
     pub fn from_std_socket(socket: StdUdpSocket) -> io::Result<Self> {
         socket.set_nonblocking(true)?;
         Ok(Self {
+            read_timeout: socket.read_timeout()?,
+            write_timeout: socket.write_timeout()?,
             inner: UdpSocket::from_std(socket)?,
         })
     }
