@@ -211,7 +211,6 @@ fn localhost_request_response_all_send_paths() {
                         assert_eq!(&ip[12..16], &[127, 0, 0, 1]);
                         assert_eq!(&ip[16..20], &[127, 0, 0, 1]);
                     }
-                    eprintln!("response verified: IPv6={ipv6}, mode={mode}, protocol={protocol}");
                     break;
                 }
             }

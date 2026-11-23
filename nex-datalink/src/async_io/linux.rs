@@ -4,12 +4,13 @@ use crate::async_io::{AsyncChannel, AsyncRawSender};
 use crate::bindings::linux;
 use crate::linux::{LoopbackFilter, receive_packet};
 use crate::{ChannelType, Config};
+use async_io::Async;
 use futures_core::stream::Stream;
 use nex_core::interface::Interface;
 use nex_core::mac::MacAddr;
-use nex_sys;
 use std::io;
 use std::mem;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -36,9 +37,8 @@ fn network_addr_to_sockaddr(
 
 #[derive(Debug)]
 struct Inner {
-    fd: nex_sys::FileDesc,
+    fd: Async<OwnedFd>,
     send_addr: libc::sockaddr_ll,
-    epfd: nex_sys::FileDesc,
 }
 
 /// Sender half of an asynchronous raw socket.
@@ -53,7 +53,7 @@ impl AsyncRawSender for AsyncRawSocketSender {
         // `send_addr` remains valid throughout sendto.
         let ret = unsafe {
             libc::sendto(
-                self.inner.fd.as_raw(),
+                self.inner.fd.as_raw_fd(),
                 packet.as_ptr() as *const libc::c_void,
                 packet.len(),
                 0,
@@ -66,14 +66,8 @@ impl AsyncRawSender for AsyncRawSocketSender {
         }
         let err = io::Error::last_os_error();
         if err.kind() == io::ErrorKind::WouldBlock {
-            // SAFETY: `events` provides writable storage for one epoll event
-            // and the epoll descriptor is open.
-            unsafe {
-                let mut events = [mem::zeroed::<libc::epoll_event>()];
-                libc::epoll_wait(self.inner.epfd.as_raw(), events.as_mut_ptr(), 1, 0);
-            }
-            cx.waker().wake_by_ref();
-            Poll::Pending
+            let readiness = self.inner.fd.poll_writable(cx);
+            super::retry_when_ready(cx, readiness)
         } else {
             Poll::Ready(Err(err))
         }
@@ -94,9 +88,13 @@ impl Stream for AsyncRawSocketReceiver {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let me = self.get_mut();
         match poll_receive_filtered(cx, || {
-            receive_packet(me.inner.fd.as_raw(), &mut me.read_buffer, me.filter)
+            receive_packet(me.inner.fd.as_raw_fd(), &mut me.read_buffer, me.filter)
         }) {
             Poll::Ready(Ok(length)) => Poll::Ready(Some(Ok(me.read_buffer[..length].to_vec()))),
+            Poll::Ready(Err(error)) if error.kind() == io::ErrorKind::WouldBlock => {
+                let readiness = me.inner.fd.poll_readable(cx);
+                super::retry_when_ready(cx, readiness).map(Some)
+            }
             Poll::Ready(Err(error)) => Poll::Ready(Some(Err(error))),
             Poll::Pending => Poll::Pending,
         }
@@ -114,12 +112,10 @@ fn poll_receive_filtered(
         match receive() {
             Ok((_, true)) => continue,
             Ok((length, false)) => return Poll::Ready(Ok(length)),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
             Err(error) => return Poll::Ready(Err(error)),
         }
     }
-    // This backend already self-wakes on WouldBlock. Also self-wake after
-    // exhausting the budget: queued packets need not generate a new event.
+    // The budget expired with potentially more packets ready.
     cx.waker().wake_by_ref();
     Poll::Pending
 }
@@ -136,7 +132,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     let raw_fd = unsafe {
         libc::socket(
             libc::AF_PACKET,
-            typ | libc::SOCK_NONBLOCK,
+            typ | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
             (proto as u16).to_be() as i32,
         )
     };
@@ -145,7 +141,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     }
     // SAFETY: `raw_fd` was just opened and exclusive ownership transfers to
     // this guard exactly once.
-    let fd = unsafe { nex_sys::FileDesc::from_raw(raw_fd) };
+    let fd = unsafe { OwnedFd::from_raw_fd(raw_fd) };
 
     // SAFETY: A zero bit pattern is a valid initial socket address storage.
     let mut addr: libc::sockaddr_storage = unsafe { mem::zeroed() };
@@ -155,7 +151,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
     let bind_addr = (&addr as *const libc::sockaddr_storage) as *const libc::sockaddr;
 
     // SAFETY: `bind_addr` points into live initialized storage for `len` bytes.
-    if unsafe { libc::bind(fd.as_raw(), bind_addr, len as libc::socklen_t) } == -1 {
+    if unsafe { libc::bind(fd.as_raw_fd(), bind_addr, len as libc::socklen_t) } == -1 {
         return Err(io::Error::last_os_error());
     }
 
@@ -168,7 +164,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         // the exact size supplied to setsockopt.
         if unsafe {
             libc::setsockopt(
-                fd.as_raw(),
+                fd.as_raw_fd(),
                 linux::SOL_PACKET,
                 linux::PACKET_ADD_MEMBERSHIP,
                 (&request as *const linux::packet_mreq).cast(),
@@ -204,7 +200,7 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         // the exact size supplied to setsockopt.
         if unsafe {
             libc::setsockopt(
-                fd.as_raw(),
+                fd.as_raw_fd(),
                 linux::SOL_PACKET,
                 linux::PACKET_FANOUT,
                 (&argument as *const libc::c_uint).cast(),
@@ -216,28 +212,9 @@ pub fn channel(network_interface: &Interface, config: Config) -> io::Result<Asyn
         }
     }
 
-    // SAFETY: `epoll_create1` receives a supported zero flag value.
-    let raw_epfd = unsafe { libc::epoll_create1(0) };
-    if raw_epfd == -1 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: `raw_epfd` was just opened and ownership transfers exactly once.
-    let epfd = unsafe { nex_sys::FileDesc::from_raw(raw_epfd) };
-
-    let mut event = libc::epoll_event {
-        events: (libc::EPOLLIN | libc::EPOLLOUT) as u32,
-        u64: fd.as_raw() as u64,
-    };
-    // SAFETY: Both descriptors are open and `event` is writable for the call.
-    if unsafe { libc::epoll_ctl(epfd.as_raw(), libc::EPOLL_CTL_ADD, fd.as_raw(), &mut event) } == -1
-    {
-        return Err(io::Error::last_os_error());
-    }
-
     let inner = Arc::new(Inner {
-        fd,
+        fd: Async::new_nonblocking(fd)?,
         send_addr,
-        epfd,
     });
     let tx = AsyncRawSocketSender {
         inner: inner.clone(),
@@ -286,9 +263,9 @@ mod tests {
             Poll::Ready(Ok(17))
         ));
         assert!(
-            poll_receive_filtered(&mut cx, || Err(io::ErrorKind::WouldBlock.into())).is_pending()
+            matches!(poll_receive_filtered(&mut cx, || Err(io::ErrorKind::WouldBlock.into())), Poll::Ready(Err(error)) if error.kind() == io::ErrorKind::WouldBlock)
         );
-        assert_eq!(wakes.0.load(SeqCst), 2);
+        assert_eq!(wakes.0.load(SeqCst), 1);
         for code in [libc::EBADF, libc::EINTR] {
             let Poll::Ready(Err(error)) =
                 poll_receive_filtered(&mut cx, || Err(io::Error::from_raw_os_error(code)))
@@ -322,17 +299,5 @@ mod tests {
         });
         assert_eq!(progress.load(SeqCst), 1);
         assert!(calls.load(SeqCst) <= RECEIVE_BUDGET);
-    }
-
-    #[test]
-    #[ignore]
-    fn async_raw_send() {
-        let iface = Interface::default().expect("no default interface");
-        let AsyncChannel::Ethernet(mut tx, _rx) =
-            channel(&iface, Config::default()).expect("socket");
-        let packet = [0u8; 42];
-        futures::executor::block_on(async {
-            let _ = poll_fn(|cx| tx.poll_send(cx, &packet)).await;
-        });
     }
 }

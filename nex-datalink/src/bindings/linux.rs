@@ -3,6 +3,8 @@
 
 extern crate libc;
 
+/// Packet direction from Linux UAPI linux/if_packet.h (also used by Android).
+pub const PACKET_OUTGOING: u8 = 4;
 pub const SOL_PACKET: libc::c_int = 263;
 pub const PACKET_ADD_MEMBERSHIP: libc::c_int = 1;
 pub const PACKET_MR_PROMISC: libc::c_int = 1;

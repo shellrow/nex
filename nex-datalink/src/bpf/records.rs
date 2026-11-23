@@ -1,7 +1,11 @@
 //! Shared BPF record framing and Ethernet presentation for IP-only links.
 
 use crate::bindings::bpf;
-use std::{borrow::Cow, collections::VecDeque, io, mem};
+#[cfg(test)]
+use bpf::parse_records;
+#[cfg(test)]
+use std::collections::VecDeque;
+use std::{borrow::Cow, io};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LinkType {
@@ -166,38 +170,6 @@ fn invalid_packet() -> io::Error {
         io::ErrorKind::InvalidData,
         "invalid or unsupported BPF IP link header",
     )
-}
-
-pub(crate) fn parse_records(buffer: &[u8]) -> io::Result<VecDeque<(usize, usize)>> {
-    let mut packets = VecDeque::new();
-    let mut cursor = 0;
-    while cursor < buffer.len() {
-        let remaining = buffer.len() - cursor;
-        if remaining < bpf::BPF_HDR_FIELD_LEN {
-            return Err(invalid_packet());
-        }
-        // SAFETY: Copy only the actual fields, not repr(C) trailing padding.
-        // The source bounds were checked; the destination is a complete, aligned
-        // zero-initialized header. The BPF header contains integer fields only.
-        let header = unsafe {
-            let mut header: bpf::bpf_hdr = mem::zeroed();
-            std::ptr::copy_nonoverlapping(
-                buffer.as_ptr().add(cursor),
-                (&mut header as *mut bpf::bpf_hdr).cast::<u8>(),
-                bpf::BPF_HDR_FIELD_LEN,
-            );
-            header
-        };
-        let header_len = header.bh_hdrlen as usize;
-        let captured_len = header.bh_caplen as usize;
-        let record_len = super::validate_record_lengths(header_len, captured_len, remaining, 0)?;
-        packets.push_back((cursor + header_len, captured_len));
-        let record_len = isize::try_from(record_len).map_err(|_| invalid_packet())?;
-        cursor = cursor
-            .checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
-            .ok_or_else(invalid_packet)?;
-    }
-    Ok(packets)
 }
 
 #[cfg(test)]
@@ -388,16 +360,14 @@ mod tests {
 
     fn record(payload: &[u8]) -> Vec<u8> {
         let len = bpf::BPF_HDR_FIELD_LEN;
-        // SAFETY: All fields are integer values; zero initializes valid fields.
-        let mut header: bpf::bpf_hdr = unsafe { mem::zeroed() };
-        header.bh_hdrlen = len as _;
-        header.bh_caplen = payload.len() as _;
-        header.bh_datalen = payload.len() as _;
-        // SAFETY: Only initialized header fields are copied, excluding padding.
-        let mut out = unsafe {
-            std::slice::from_raw_parts((&header as *const bpf::bpf_hdr).cast::<u8>(), len)
+        let mut out = vec![0; len];
+        let hdrlen = std::mem::offset_of!(bpf::bpf_hdr, bh_hdrlen);
+        let caplen = std::mem::offset_of!(bpf::bpf_hdr, bh_caplen);
+        let datalen = std::mem::offset_of!(bpf::bpf_hdr, bh_datalen);
+        out[hdrlen..hdrlen + 2].copy_from_slice(&(len as u16).to_ne_bytes());
+        for offset in [caplen, datalen] {
+            out[offset..offset + 4].copy_from_slice(&(payload.len() as u32).to_ne_bytes());
         }
-        .to_vec();
         out.extend_from_slice(payload);
         out
     }
@@ -405,7 +375,7 @@ mod tests {
     #[test]
     fn batches_keep_offsets_and_do_not_require_trailing_struct_padding() {
         let mut first = record(&[1, 2, 3]);
-        first.resize(bpf::BPF_WORDALIGN(first.len() as isize) as usize, 0);
+        first.resize(bpf::BPF_WORDALIGN(first.len()), 0);
         let second_start = first.len();
         first.extend(record(&[]));
         let records = parse_records(&first).unwrap();

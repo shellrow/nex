@@ -188,11 +188,11 @@ pub struct Config {
     /// The size of buffer to use when reading packets. Defaults to 4096.
     pub read_buffer_size: usize,
 
-    /// Linux/BPF/Netmap/Windows only: The read timeout. Defaults to None,
+    /// The synchronous read timeout. Defaults to None,
     /// meaning receives block until a packet arrives.
     pub read_timeout: Option<Duration>,
 
-    /// Linux/BPF/Netmap only: The write timeout. Defaults to None.
+    /// The synchronous write timeout on Linux and BPF. Defaults to None.
     pub write_timeout: Option<Duration>,
 
     /// Linux only: Specifies whether to read packets at the datalink layer or network layer.
@@ -287,6 +287,13 @@ impl Config {
             return Err(DatalinkError::InvalidConfig {
                 field: "read_buffer_size",
                 requirement: "must be greater than zero",
+            });
+        }
+        #[cfg(windows)]
+        if self.read_buffer_size > i32::MAX as usize || self.write_buffer_size > u32::MAX as usize {
+            return Err(DatalinkError::InvalidConfig {
+                field: "buffer size",
+                requirement: "must fit the Npcap buffer length",
             });
         }
         if self.bpf_fd_attempts == 0 {

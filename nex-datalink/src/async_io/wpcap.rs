@@ -8,9 +8,7 @@ use nex_core::interface::Interface;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::io;
-use std::mem;
 use std::pin::Pin;
-use std::slice;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, TryLockError};
 use std::task::{Context, Poll, Waker};
@@ -83,6 +81,7 @@ struct Inner {
     /// the lock contended can retry without blocking the executor.
     send_waker: Arc<Mutex<Option<Waker>>>,
     stop: Arc<AtomicBool>,
+    drained: Arc<Condvar>,
     receive_thread: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -93,7 +92,9 @@ fn wake(slot: &Arc<Mutex<Option<Waker>>>) {
         Ok(slot) => slot,
         Err(poisoned) => poisoned.into_inner(),
     };
-    if let Some(waker) = slot.take() {
+    let waker = slot.take();
+    drop(slot);
+    if let Some(waker) = waker {
         waker.wake();
     }
 }
@@ -111,11 +112,20 @@ fn push_error(queue: &PacketQueue, error: io::Error) {
     queue.push_back(Err(error));
 }
 
+impl Inner {
+    fn stop_receiver(&self) {
+        let _queue = self.packets.lock().unwrap_or_else(|e| e.into_inner());
+        self.stop.store(true, Ordering::Release);
+        self.drained.notify_one();
+    }
+}
+
 impl Drop for Inner {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
+        self.stop_receiver();
         if let Ok(thread) = self.receive_thread.get_mut()
             && let Some(thread) = thread.take()
+            && thread.thread().id() != thread::current().id()
         {
             let _ = thread.join();
         }
@@ -213,6 +223,12 @@ pub struct AsyncWpcapSocketReceiver {
     inner: Arc<Inner>,
 }
 
+impl Drop for AsyncWpcapSocketReceiver {
+    fn drop(&mut self) {
+        self.inner.stop_receiver();
+    }
+}
+
 impl Stream for AsyncWpcapSocketReceiver {
     type Item = io::Result<Vec<u8>>;
 
@@ -226,6 +242,9 @@ impl Stream for AsyncWpcapSocketReceiver {
             }
         };
         if let Some(pkt) = queue.pop_front() {
+            if queue.is_empty() {
+                self.inner.drained.notify_one();
+            }
             Poll::Ready(Some(pkt))
         } else {
             match self.inner.waker.lock() {
@@ -329,36 +348,48 @@ fn channel_with_api(
     let send_waker: Arc<Mutex<Option<Waker>>> = Arc::new(Mutex::new(None));
     let stop = Arc::new(AtomicBool::new(false));
 
+    let mut read_buffer = vec![0u8; read_buffer_size];
+    // SAFETY: PacketAllocatePacket takes no arguments and returns an
+    // owned packet pointer or null.
+    let read_packet = unsafe { (api.PacketAllocatePacket)() };
+    if read_packet.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let read_packet = WinPcapPacket {
+        api,
+        packet: read_packet,
+    };
+    // SAFETY: The packet and backing buffer remain owned by this thread
+    // and live until the receive loop exits.
+    unsafe {
+        (api.PacketInitPacket)(
+            read_packet.packet,
+            read_buffer.as_mut_ptr() as windows::PVOID,
+            read_buffer_size as windows::UINT,
+        );
+    }
+    let drained = Arc::new(Condvar::new());
     let receive_thread = {
         let adapter = adapter.clone();
         let packets = packets.clone();
         let waker = waker.clone();
         let send_waker = send_waker.clone();
         let stop = stop.clone();
-        thread::spawn(move || {
-            let mut read_buffer = vec![0u8; read_buffer_size];
-            // SAFETY: PacketAllocatePacket takes no arguments and returns an
-            // owned packet pointer or null.
-            let read_packet = unsafe { (api.PacketAllocatePacket)() };
-            if read_packet.is_null() {
-                push_error(&packets, io::Error::last_os_error());
-                wake(&waker);
-                return;
-            }
-            let read_packet = WinPcapPacket {
-                api,
-                packet: read_packet,
-            };
-            // SAFETY: The packet and backing buffer remain owned by this thread
-            // and live until the receive loop exits.
-            unsafe {
-                (api.PacketInitPacket)(
-                    read_packet.packet,
-                    read_buffer.as_mut_ptr() as windows::PVOID,
-                    read_buffer_size as windows::UINT,
-                );
-            }
+        let drained = drained.clone();
+        thread::Builder::new().spawn(move || {
+            let packet = read_packet;
             while !stop.load(Ordering::Acquire) {
+                // Only one kernel read batch may be pending in userspace.
+                let queue = packets.lock().unwrap_or_else(|e| e.into_inner());
+                let _queue = drained
+                    .wait_while(queue, |queue| {
+                        !queue.is_empty() && !stop.load(Ordering::Acquire)
+                    })
+                    .unwrap_or_else(|e| e.into_inner());
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
+                drop(_queue);
                 let _operation = match adapter.operation_lock.lock() {
                     Ok(lock) => lock,
                     Err(poisoned) => poisoned.into_inner(),
@@ -378,8 +409,7 @@ fn channel_with_api(
                 adapter.send_pending.store(false, Ordering::Release);
                 // SAFETY: The operation is serialized and both handles remain
                 // live for the duration of the bounded receive.
-                let ret =
-                    unsafe { (api.PacketReceivePacket)(adapter.adapter, read_packet.packet, 1) };
+                let ret = unsafe { (api.PacketReceivePacket)(adapter.adapter, packet.packet, 1) };
                 if ret == 0 {
                     let error = io::Error::last_os_error();
                     // Release the adapter lock before backing off so a pending
@@ -392,91 +422,36 @@ fn channel_with_api(
                     thread::sleep(RECEIVE_ERROR_BACKOFF);
                     continue;
                 }
-                // SAFETY: A successful receive initialized the byte count and
-                // the packet buffer capacity.
-                let (buflen, buffer_capacity, base) = unsafe {
-                    (
-                        (*read_packet.packet).ulBytesReceived as usize,
-                        (*read_packet.packet).Length as usize,
-                        (*read_packet.packet).Buffer as *const u8,
-                    )
-                };
-                if buflen > buffer_capacity {
-                    drop(_operation);
-                    wake(&send_waker);
-                    push_error(
-                        &packets,
+                drop(_operation);
+                wake(&send_waker);
+                // SAFETY: PacketReceivePacket completed synchronously into read_buffer.
+                let len = unsafe { (*packet.packet).ulBytesReceived as usize };
+                if len == 0 {
+                    continue;
+                }
+                let records = read_buffer
+                    .get(..len)
+                    .ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidData,
                             "Npcap reported bytes beyond the receive buffer",
-                        ),
-                    );
-                    wake(&waker);
-                    continue;
+                        )
+                    })
+                    .and_then(bpf::parse_records);
+                match records {
+                    Ok(records) => {
+                        let mut queue = packets.lock().unwrap_or_else(|e| e.into_inner());
+                        queue.extend(
+                            records
+                                .into_iter()
+                                .map(|(start, len)| Ok(read_buffer[start..start + len].to_vec())),
+                        );
+                    }
+                    Err(error) => push_error(&packets, error),
                 }
-                let mut cursor = 0usize;
-                let mut malformed: Option<&'static str> = None;
-                while cursor < buflen {
-                    let remaining = buflen - cursor;
-                    if remaining < mem::size_of::<bpf::bpf_hdr>() {
-                        malformed = Some("truncated Npcap BPF record header");
-                        break;
-                    }
-                    // SAFETY: The size check proves the full header is in the
-                    // buffer. `read_unaligned` handles the backing Vec's alignment.
-                    let hdr = unsafe {
-                        std::ptr::read_unaligned(base.add(cursor) as *const bpf::bpf_hdr)
-                    };
-                    let header_len = hdr.bh_hdrlen as usize;
-                    let captured_len = hdr.bh_caplen as usize;
-                    let Some(record_len) = header_len.checked_add(captured_len) else {
-                        malformed = Some("Npcap record length overflow");
-                        break;
-                    };
-                    if header_len < mem::size_of::<bpf::bpf_hdr>() || record_len > remaining {
-                        malformed = Some("invalid Npcap BPF record lengths");
-                        break;
-                    }
-                    // SAFETY: The validated record lengths prove this packet
-                    // payload is fully in-bounds.
-                    let data = unsafe {
-                        slice::from_raw_parts(base.add(cursor + header_len), captured_len)
-                    }
-                    .to_vec();
-                    {
-                        let mut queue = match packets.lock() {
-                            Ok(queue) => queue,
-                            Err(poisoned) => poisoned.into_inner(),
-                        };
-                        queue.push_back(Ok(data));
-                    }
-                    let Ok(record_len) = isize::try_from(record_len) else {
-                        malformed = Some("Npcap record exceeds platform pointer range");
-                        break;
-                    };
-                    let Some(next) = cursor.checked_add(bpf::BPF_WORDALIGN(record_len) as usize)
-                    else {
-                        malformed = Some("Npcap record offset overflow");
-                        break;
-                    };
-                    cursor = next;
-                }
-
-                // Release the adapter before waking anyone, so a sender woken
-                // here finds the lock free.
-                drop(_operation);
-                wake(&send_waker);
-
-                if let Some(reason) = malformed {
-                    push_error(&packets, io::Error::new(io::ErrorKind::InvalidData, reason));
-                    wake(&waker);
-                } else if cursor > 0 {
-                    // A bare receive timeout queues nothing; waking the consumer
-                    // for it would just cost a poll that returns Pending again.
-                    wake(&waker);
-                }
+                wake(&waker);
             }
-        })
+        })?
     };
 
     let inner = Arc::new(Inner {
@@ -485,6 +460,7 @@ fn channel_with_api(
         waker,
         send_waker,
         stop,
+        drained,
         receive_thread: Mutex::new(Some(receive_thread)),
     });
     let tx = AsyncWpcapSocketSender {
@@ -499,25 +475,12 @@ fn channel_with_api(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future::poll_fn;
 
     #[test]
     #[ignore = "requires NEX_TEST_INTERFACE and Npcap; run with --test-threads=1"]
     fn post_allocation_failure_closes_adapter() {
         windows::failure_tests::assert_cleanup(|interface, api| {
             channel_with_api(interface, Config::default(), api).is_err()
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn async_raw_send() {
-        let iface = Interface::default().expect("no default interface");
-        let AsyncChannel::Ethernet(mut tx, _rx) =
-            channel(&iface, Config::default()).expect("socket");
-        let packet = [0u8; 42];
-        futures::executor::block_on(async {
-            let _ = poll_fn(|cx| tx.poll_send(cx, &packet)).await;
         });
     }
 
