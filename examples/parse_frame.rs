@@ -50,15 +50,11 @@ fn main() {
                     capture_no,
                     packet.len()
                 );
-                let mut parse_option: ParseOption = ParseOption::default();
-                if interface.is_tun()
-                    || (cfg!(any(target_os = "macos", target_os = "ios"))
-                        && interface.is_loopback())
-                {
-                    let payload_offset = if interface.is_loopback() { 14 } else { 0 };
-                    parse_option.from_ip_packet = true;
-                    parse_option.offset = payload_offset;
-                }
+                let parse_option = ParseOption {
+                    from_ip_packet: cfg!(any(target_os = "linux", target_os = "android"))
+                        && interface.is_tun(),
+                    offset: 0,
+                };
                 match Frame::try_from_buf(packet, parse_option) {
                     Ok(frame) => {
                         display_frame(&frame);

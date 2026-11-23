@@ -39,7 +39,7 @@ fn main() {
             .expect("Failed to get interface"),
         None => Interface::default().expect("Failed to get default interface"),
     };
-    let use_tun = interface.is_tun();
+    let use_tun = cfg!(any(target_os = "linux", target_os = "android")) && interface.is_tun();
 
     let target_ip: IpAddr = env::args()
         .nth(1)
@@ -137,12 +137,14 @@ fn main() {
     loop {
         match rx.next() {
             Ok(packet) => {
-                let mut parse_option = ParseOption::default();
-                if interface.is_tun() {
-                    parse_option.from_ip_packet = true;
-                    parse_option.offset = if interface.is_loopback() { 14 } else { 0 };
-                }
-                let frame = Frame::try_from_buf(packet, parse_option).unwrap();
+                let parse_option = ParseOption {
+                    from_ip_packet: cfg!(any(target_os = "linux", target_os = "android"))
+                        && interface.is_tun(),
+                    offset: 0,
+                };
+                let Ok(frame) = Frame::try_from_buf(packet, parse_option) else {
+                    continue;
+                };
 
                 if let Some(ip_layer) = &frame.ip {
                     if let Some(icmp) = &ip_layer.icmp

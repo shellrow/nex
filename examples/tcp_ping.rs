@@ -55,7 +55,7 @@ fn main() {
             }
         }
     };
-    let use_tun: bool = interface.is_tun();
+    let use_tun: bool = cfg!(any(target_os = "linux", target_os = "android")) && interface.is_tun();
     let target_socket: SocketAddr = match env::args().nth(1) {
         Some(target_socket_str) => match target_socket_str.parse() {
             Ok(socket) => socket,
@@ -201,13 +201,14 @@ fn main() {
     loop {
         match rx.next() {
             Ok(packet) => {
-                let mut parse_option: ParseOption = ParseOption::default();
-                if interface.is_tun() {
-                    let payload_offset = if interface.is_loopback() { 14 } else { 0 };
-                    parse_option.from_ip_packet = true;
-                    parse_option.offset = payload_offset;
-                }
-                let frame: Frame = Frame::try_from_buf(packet, parse_option).unwrap();
+                let parse_option = ParseOption {
+                    from_ip_packet: cfg!(any(target_os = "linux", target_os = "android"))
+                        && interface.is_tun(),
+                    offset: 0,
+                };
+                let Ok(frame) = Frame::try_from_buf(packet, parse_option) else {
+                    continue;
+                };
                 // Check each layer. If the packet is TCP SYN+ACK or RST+ACK, print it out
                 if let Some(ip_layer) = &frame.ip
                     && let Some(transport_layer) = &frame.transport
